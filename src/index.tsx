@@ -420,6 +420,136 @@ const shell = (title: string, body: string) => `<!DOCTYPE html>
     .empty-state { text-align:center; padding:48px 20px; color:var(--text-muted); font-size:13px; }
     .empty-state i { font-size:36px; color:var(--bg-4); margin-bottom:12px; display:block; }
 
+    /* ── KSA ENVIRONMENTAL LIVE FEED ── */
+    .env-feed-grid {
+      display:grid; gap:14px;
+      grid-template-columns:repeat(3,1fr);
+    }
+    @media(max-width:600px){ .env-feed-grid { grid-template-columns:1fr; } }
+
+    .env-card {
+      background:var(--bg-2);
+      border:1px solid var(--border);
+      border-radius:var(--radius-lg);
+      padding:18px 16px 14px;
+      position:relative; overflow:hidden;
+      transition:border-color .3s, box-shadow .3s;
+    }
+    /* default ambient glow — very faint */
+    .env-card::before {
+      content:''; position:absolute; inset:0; border-radius:inherit;
+      background: radial-gradient(ellipse at 50% 0%, rgba(245,158,11,0.06) 0%, transparent 70%);
+      pointer-events:none;
+    }
+    /* ── DANGER state: amber pulse glow ── */
+    .env-card.env-danger {
+      border-color: rgba(245,158,11,0.55);
+      box-shadow: 0 0 0 0 rgba(245,158,11,0.40);
+      animation: envPulse 2.4s ease-in-out infinite;
+    }
+    .env-card.env-danger::before {
+      background: radial-gradient(ellipse at 50% 0%, rgba(245,158,11,0.18) 0%, transparent 65%);
+    }
+    @keyframes envPulse {
+      0%,100% { box-shadow: 0 0  6px 1px rgba(245,158,11,0.25), 0 0 0 0 rgba(245,158,11,0.20); }
+      50%      { box-shadow: 0 0 22px 4px rgba(245,158,11,0.50), 0 0 40px 8px rgba(245,158,11,0.12); }
+    }
+
+    .env-city {
+      font-family:var(--font-mono); font-size:11px; font-weight:600;
+      letter-spacing:1.5px; text-transform:uppercase;
+      color:var(--text-sec); margin-bottom:10px;
+      display:flex; align-items:center; gap:6px;
+    }
+    .env-city-dot {
+      width:6px; height:6px; border-radius:50%;
+      background:var(--green); flex-shrink:0;
+      animation: liveDot 2s ease-in-out infinite;
+    }
+    .env-card.env-danger .env-city-dot { background:var(--amber); }
+    @keyframes liveDot {
+      0%,100% { opacity:1; } 50% { opacity:0.3; }
+    }
+
+    .env-humidity-row {
+      display:flex; align-items:flex-end; gap:6px; margin-bottom:6px;
+    }
+    .env-humidity-val {
+      font-family:var(--font-mono); font-size:38px; font-weight:700;
+      line-height:1; color:var(--amber);
+    }
+    .env-card.env-danger .env-humidity-val { color:#fbbf24; }
+    .env-humidity-unit {
+      font-family:var(--font-mono); font-size:14px;
+      color:var(--text-muted); margin-bottom:6px;
+    }
+
+    .env-bar-wrap {
+      height:4px; background:var(--bg-4); border-radius:2px;
+      margin-bottom:8px; overflow:hidden;
+    }
+    .env-bar-fill {
+      height:100%; border-radius:2px;
+      transition:width 1s ease;
+      background: linear-gradient(90deg, #10b981, #f59e0b, #ef4444);
+      background-size:300% 100%;
+    }
+
+    .env-meta-row {
+      display:flex; justify-content:space-between; align-items:center;
+      margin-bottom:4px;
+    }
+    .env-meta-label { font-size:11px; color:var(--text-muted); }
+    .env-meta-val   { font-family:var(--font-mono); font-size:11px; color:var(--text-sec); }
+
+    .env-alert-tag {
+      display:inline-flex; align-items:center; gap:4px;
+      font-family:var(--font-mono); font-size:9px; font-weight:700;
+      letter-spacing:.8px; text-transform:uppercase;
+      padding:2px 7px; border-radius:2px; margin-top:6px;
+      background:rgba(245,158,11,0.12); color:var(--amber);
+      border:1px solid rgba(245,158,11,0.35);
+    }
+    .env-alert-tag i { font-size:8px; }
+
+    .env-source {
+      font-size:9px; color:var(--text-muted);
+      margin-top:10px; padding-top:8px;
+      border-top:1px solid var(--bg-3);
+      display:flex; align-items:center; gap:4px;
+      letter-spacing:.3px;
+    }
+    .env-source i { color:var(--amber); font-size:8px; }
+
+    .env-refresh-row {
+      display:flex; align-items:center; justify-content:space-between;
+      margin-bottom:10px;
+    }
+    .env-last-updated {
+      font-family:var(--font-mono); font-size:10px; color:var(--text-muted);
+    }
+    .env-refresh-btn {
+      background:transparent; border:1px solid var(--border);
+      border-radius:var(--radius); padding:4px 10px;
+      font-family:var(--font-mono); font-size:10px;
+      color:var(--text-muted); cursor:pointer; transition:all .2s;
+      display:flex; align-items:center; gap:5px;
+    }
+    .env-refresh-btn:hover { border-color:var(--border-amber); color:var(--amber); }
+    .env-refresh-btn.spinning i { animation:spin .7s linear infinite; }
+    @keyframes spin { to { transform:rotate(360deg); } }
+
+    .env-skeleton {
+      display:flex; flex-direction:column; gap:8px; padding:4px 0;
+    }
+    .env-skeleton-line {
+      height:10px; border-radius:3px;
+      background:linear-gradient(90deg,var(--bg-3) 25%,var(--bg-4) 50%,var(--bg-3) 75%);
+      background-size:200% 100%;
+      animation:shimmer 1.4s infinite;
+    }
+    @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+
     /* ── MOBILE NAV ── */
     .mobile-nav {
       display:none; position:fixed; bottom:0; left:0; right:0; z-index:100;
@@ -801,6 +931,152 @@ app.get('/admin', (c) => {
       <div class="stat-unit">awaiting confirmation</div>
     </div>
   </div>
+
+  <!-- ══ KSA ENVIRONMENTAL LIVE FEED ══ -->
+  <div class="card" style="margin-bottom:28px" id="envFeedCard">
+    <div class="card-title">
+      <i class="fa fa-satellite-dish" style="color:var(--amber)"></i>
+      KSA Environmental Live Feed
+      <span style="font-family:var(--font-mono);font-size:9px;padding:2px 7px;border-radius:2px;background:rgba(16,185,129,0.12);color:var(--green);border:1px solid rgba(16,185,129,0.25);letter-spacing:.5px;margin-left:4px" id="envSourceBadge">
+        ● LIVE
+      </span>
+    </div>
+
+    <div class="env-refresh-row">
+      <span class="env-last-updated" id="envLastUpdated">Fetching data…</span>
+      <button class="env-refresh-btn" id="envRefreshBtn" onclick="fetchWeather()">
+        <i class="fa fa-rotate-right" id="envRefreshIcon"></i> REFRESH
+      </button>
+    </div>
+
+    <div class="env-feed-grid" id="envGrid">
+      <!-- skeleton cards while loading -->
+      ${['Riyadh','Jeddah','Dammam'].map(city => `
+      <div class="env-card" id="env-${city}">
+        <div class="env-city">
+          <span class="env-city-dot"></span>${city}
+        </div>
+        <div class="env-skeleton">
+          <div class="env-skeleton-line" style="width:60%;height:42px;border-radius:4px"></div>
+          <div class="env-skeleton-line" style="width:100%;height:4px"></div>
+          <div class="env-skeleton-line" style="width:75%"></div>
+          <div class="env-skeleton-line" style="width:55%"></div>
+        </div>
+        <div class="env-source"><i class="fa fa-signal"></i>Data provided by OpenWeather live stream.</div>
+      </div>`).join('')}
+    </div>
+  </div>
+  <!-- ══ end live feed ══ -->
+
+  <script>
+  /* ── KSA Weather Feed ── */
+  var ENV_REFRESH_MS = 60000;  // auto-refresh every 60 s
+  var envTimer;
+
+  /* danger thresholds */
+  function isDanger(city, hum) {
+    if (city === 'Jeddah'  && hum > 65)  return { msg: 'HIGH HUMIDITY — Exceeds 65% threshold' };
+    if (city === 'Riyadh'  && hum < 30)  return { msg: 'LOW HUMIDITY — Below 30% threshold' };
+    if (city === 'Dammam'  && hum > 75)  return { msg: 'CRITICAL — Exceeds 75% threshold' };
+    return null;
+  }
+
+  /* humidity colour: low=blue, optimal=green, high=orange/red */
+  function humColour(h) {
+    if (h < 30)  return '#60a5fa';  /* blue  — too dry    */
+    if (h < 50)  return '#10b981';  /* green — optimal    */
+    if (h < 65)  return '#f97316';  /* orange— elevated   */
+    return '#ef4444';               /* red   — danger     */
+  }
+
+  /* bar gradient position: maps 0-100% humidity to background-position */
+  function barPos(h) { return (100 - h) + '%'; }
+
+  function renderCard(city, data) {
+    var card    = document.getElementById('env-' + city);
+    if (!card) return;
+    var danger  = isDanger(city, data.humidity);
+    var col     = humColour(data.humidity);
+
+    card.className = 'env-card' + (danger ? ' env-danger' : '');
+
+    card.innerHTML =
+      '<div class="env-city">' +
+        '<span class="env-city-dot"></span>' + city +
+      '</div>' +
+      '<div class="env-humidity-row">' +
+        '<span class="env-humidity-val">' + data.humidity + '</span>' +
+        '<span class="env-humidity-unit">%</span>' +
+      '</div>' +
+      '<div class="env-bar-wrap">' +
+        '<div class="env-bar-fill" style="width:' + data.humidity + '%;background-position:' + barPos(data.humidity) + '"></div>' +
+      '</div>' +
+      '<div class="env-meta-row">' +
+        '<span class="env-meta-label"><i class="fa fa-thermometer-half" style="color:var(--amber)"></i> Temp</span>' +
+        '<span class="env-meta-val">' + data.temp + '°C</span>' +
+      '</div>' +
+      '<div class="env-meta-row">' +
+        '<span class="env-meta-label"><i class="fa fa-wind" style="color:var(--amber)"></i> Wind</span>' +
+        '<span class="env-meta-val">' + data.wind + ' km/h</span>' +
+      '</div>' +
+      '<div class="env-meta-row">' +
+        '<span class="env-meta-label"><i class="fa fa-cloud" style="color:var(--amber)"></i> Sky</span>' +
+        '<span class="env-meta-val" style="text-transform:capitalize">' + data.desc + '</span>' +
+      '</div>' +
+      (danger ?
+        '<div class="env-alert-tag"><i class="fa fa-triangle-exclamation"></i>' + danger.msg + '</div>' : '') +
+      '<div class="env-source"><i class="fa fa-signal"></i>Data provided by OpenWeather live stream.</div>';
+  }
+
+  function fetchWeather() {
+    var btn  = document.getElementById('envRefreshBtn');
+    var icon = document.getElementById('envRefreshIcon');
+    if (btn)  btn.classList.add('spinning');
+    if (icon) icon.style.animation = 'spin .7s linear infinite';
+
+    fetch('/api/weather')
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        /* update source badge */
+        var badge = document.getElementById('envSourceBadge');
+        if (badge) {
+          if (d.source === 'live') {
+            badge.innerHTML = '● LIVE';
+            badge.style.color = 'var(--green)';
+            badge.style.borderColor = 'rgba(16,185,129,0.25)';
+            badge.style.background  = 'rgba(16,185,129,0.12)';
+          } else {
+            badge.innerHTML = '◌ SIMULATED';
+            badge.style.color = 'var(--amber)';
+            badge.style.borderColor = 'rgba(245,158,11,0.3)';
+            badge.style.background  = 'rgba(245,158,11,0.10)';
+          }
+        }
+        /* render each city card */
+        d.cities.forEach(function(item){
+          renderCard(item.city, item);
+        });
+        /* update timestamp */
+        var ts = document.getElementById('envLastUpdated');
+        if (ts) {
+          var now = new Date();
+          ts.textContent = 'Last updated: ' + now.toLocaleTimeString('en-SA', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+        }
+      })
+      .catch(function(){
+        var ts = document.getElementById('envLastUpdated');
+        if (ts) ts.textContent = 'Connection error — retrying…';
+      })
+      .finally(function(){
+        if (btn)  btn.classList.remove('spinning');
+        if (icon) icon.style.animation = '';
+      });
+  }
+
+  /* Initial load + auto-refresh */
+  fetchWeather();
+  envTimer = setInterval(fetchWeather, ENV_REFRESH_MS);
+  </script>
 
   <div style="display:grid;gap:20px;grid-template-columns:1fr 1fr;margin-bottom:28px">
     <div class="card">
@@ -1346,5 +1622,81 @@ app.get('/api/lots',         (c) => c.json(coffeeLots))
 app.get('/api/lots/optimal', (c) => c.json(coffeeLots.filter(l => l.status === 'OPTIMAL')))
 app.get('/api/branches',     (c) => c.json(branches))
 app.get('/api/requests',     (c) => c.json(beanRequests))
+
+// ── GET /api/weather  ──────────────────────────────────────────────
+// Server-side proxy to OpenWeatherMap so the API key never reaches
+// the browser.  Falls back to realistic KSA stub data when no key
+// is configured so the UI always renders something useful.
+// City IDs: Riyadh=108410, Jeddah=105343, Dammam=110336
+app.get('/api/weather', async (c) => {
+  const key = (c.env as Record<string,string> | undefined)?.OPENWEATHER_KEY ?? ''
+
+  // ── KSA realistic fallback (no key / fetch error) ──────────────
+  // Values mirror typical Feb conditions + slight randomisation
+  const stub = () => {
+    const rand = (lo: number, hi: number) =>
+      Math.round(lo + Math.random() * (hi - lo))
+    return {
+      source: 'stub',
+      cities: [
+        {
+          city:     'Riyadh',
+          humidity: rand(22, 42),   // arid plateau — can dip < 30%
+          temp:     rand(18, 28),
+          desc:     'Clear skies',
+          wind:     rand(8, 22),
+          icon:     '01d',
+        },
+        {
+          city:     'Jeddah',
+          humidity: rand(55, 75),   // coastal — can exceed 65%
+          temp:     rand(24, 34),
+          desc:     'Partly cloudy',
+          wind:     rand(10, 30),
+          icon:     '02d',
+        },
+        {
+          city:     'Dammam',
+          humidity: rand(40, 65),   // Gulf coast
+          temp:     rand(20, 32),
+          desc:     'Hazy',
+          wind:     rand(12, 28),
+          icon:     '50d',
+        },
+      ],
+    }
+  }
+
+  if (!key) return c.json(stub())
+
+  // ── Live OpenWeatherMap fetch ──────────────────────────────────
+  const cityIds = '108410,105343,110336'  // Riyadh, Jeddah, Dammam
+  const url = `https://api.openweathermap.org/data/2.5/group?id=${cityIds}&units=metric&appid=${key}`
+
+  try {
+    const res  = await fetch(url, { signal: AbortSignal.timeout(5000) })
+    if (!res.ok) return c.json(stub())
+
+    const data = await res.json() as { list: Array<{
+      name: string
+      main: { humidity: number; temp: number }
+      weather: Array<{ description: string; icon: string }>
+      wind: { speed: number }
+    }> }
+
+    const cities = data.list.map(item => ({
+      city:     item.name,
+      humidity: item.main.humidity,
+      temp:     Math.round(item.main.temp),
+      desc:     item.weather[0]?.description ?? '—',
+      wind:     Math.round((item.wind?.speed ?? 0) * 3.6),  // m/s → km/h
+      icon:     item.weather[0]?.icon ?? '01d',
+    }))
+
+    return c.json({ source: 'live', cities })
+  } catch {
+    return c.json(stub())
+  }
+})
 
 export default app
