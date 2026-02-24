@@ -11,11 +11,59 @@ import {
   classifyHumidityRisk,
 } from './data'
 
-// ─── session store (in-memory for edge demo) ──────────────────────────────
-const sessions: Record<string, { role: 'admin' | 'cafe'; cafeId?: string }> = {}
-
 const ADMIN_USER = 'admin'
 const ADMIN_PASS = 'qabban2026'
+// Simple secret for HMAC signing — change in production
+const COOKIE_SECRET = 'qabban-os-secret-2026'
+
+// ─── Stateless signed-cookie session (survives Worker isolate restarts) ───
+// Cookie value format:  base64(payload) + '.' + base64(hmac)
+// payload: JSON { role, cafeId?, iat }
+
+async function signPayload(payload: object): Promise<string> {
+  const data = btoa(JSON.stringify(payload))
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(COOKIE_SECRET),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  )
+  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(data))
+  const sigB64 = btoa(String.fromCharCode(...new Uint8Array(sig)))
+  return data + '.' + sigB64
+}
+
+async function verifyPayload(token: string): Promise<{ role: 'admin' | 'cafe'; cafeId?: string } | null> {
+  try {
+    const [data, sigB64] = token.split('.')
+    if (!data || !sigB64) return null
+    const key = await crypto.subtle.importKey(
+      'raw',
+      new TextEncoder().encode(COOKIE_SECRET),
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['verify']
+    )
+    const sigBytes = Uint8Array.from(atob(sigB64), c => c.charCodeAt(0))
+    const valid = await crypto.subtle.verify('HMAC', key, sigBytes, new TextEncoder().encode(data))
+    if (!valid) return null
+    return JSON.parse(atob(data))
+  } catch {
+    return null
+  
+  }
+}
+
+function cookieOpts(secure: boolean) {
+  return {
+    path: '/',
+    maxAge: 86400,
+    httpOnly: true,
+    sameSite: secure ? ('None' as const) : ('Lax' as const),
+    ...(secure ? { secure: true } : {}),
+  }
+}
 
 const app = new Hono()
 app.use('*', cors())
@@ -542,22 +590,24 @@ ${content}
 //  AUTH HELPERS
 // ══════════════════════════════════════════════════════════════════
 
-function getSession(sessionId: string) {
-  return sessions[sessionId] || null
+async function getSession(c: any): Promise<{ role: 'admin' | 'cafe'; cafeId?: string } | null> {
+  const token = getCookie(c, 'qos_session')
+  if (!token) return null
+  return verifyPayload(token)
 }
 
-function makeSessionId() {
-  return Math.random().toString(36).slice(2) + Date.now().toString(36)
+function isSecure(c: any): boolean {
+  const proto = c.req.header('x-forwarded-proto') || ''
+  return proto === 'https'
 }
 
 // ══════════════════════════════════════════════════════════════════
 //  LOGIN PAGE
 // ══════════════════════════════════════════════════════════════════
 
-app.get('/', (c) => {
-  const sessionId = getCookie(c, 'qos_session')
-  if (sessionId && sessions[sessionId]) {
-    const sess = sessions[sessionId]
+app.get('/', async (c) => {
+  const sess = await getSession(c)
+  if (sess) {
     if (sess.role === 'admin') return c.redirect('/admin')
     if (sess.role === 'cafe') return c.redirect('/cafe')
   }
@@ -584,18 +634,18 @@ function loginPage(error: string, tab: string) {
           <i class="fa fa-mug-hot"></i> Cafe Portal
         </button>
       </div>
-      ${error ? `<div class="login-error"><i class="fa fa-exclamation-circle"></i> ${error}</div>` : ''}
-      <form method="POST" action="/login" id="loginForm">
-        <input type="hidden" name="role" id="roleInput" value="${activeTab}"/>
+      <div class="login-error" id="loginError" style="display:none"><i class="fa fa-exclamation-circle"></i> <span id="loginErrorMsg">Invalid credentials.</span></div>
+      <form id="loginForm">
+        <input type="hidden" id="roleInput" value="${activeTab}"/>
         <div class="form-group">
           <label class="form-label" for="username">Username</label>
-          <input class="form-input" type="text" id="username" name="username" placeholder="${activeTab==='admin'?'admin':'alnokhba'}" autocomplete="username"/>
+          <input class="form-input" type="text" id="username" placeholder="${activeTab==='admin'?'admin':'alnokhba'}" autocomplete="username"/>
         </div>
         <div class="form-group">
           <label class="form-label" for="password">Password</label>
-          <input class="form-input" type="password" id="password" name="password" placeholder="••••••••" autocomplete="current-password"/>
+          <input class="form-input" type="password" id="password" placeholder="••••••••" autocomplete="current-password"/>
         </div>
-        <button type="submit" class="btn-primary">
+        <button type="submit" class="btn-primary" id="submitBtn">
           <i class="fa fa-arrow-right-to-bracket"></i> &nbsp; ACCESS SYSTEM
         </button>
       </form>
@@ -611,6 +661,43 @@ function loginPage(error: string, tab: string) {
       document.getElementById('roleInput').value = tab;
       document.getElementById('username').placeholder = tab==='admin' ? 'admin' : 'alnokhba';
     }
+    document.getElementById('loginForm').addEventListener('submit', async function(e) {
+      e.preventDefault();
+      var btn = document.getElementById('submitBtn');
+      var errEl = document.getElementById('loginError');
+      var errMsg = document.getElementById('loginErrorMsg');
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> &nbsp; AUTHENTICATING...';
+      errEl.style.display = 'none';
+      var role = document.getElementById('roleInput').value;
+      var body = 'role=' + encodeURIComponent(role)
+        + '&username=' + encodeURIComponent(document.getElementById('username').value.trim())
+        + '&password=' + encodeURIComponent(document.getElementById('password').value);
+      try {
+        var res = await fetch('/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: body,
+          redirect: 'manual',
+          credentials: 'same-origin'
+        });
+        // status 0 = opaque redirect (cookie set) or 302
+        if (res.status === 0 || res.status === 302) {
+          window.location.href = role === 'admin' ? '/admin' : '/cafe';
+        } else if (res.status === 200) {
+          // Credentials wrong — server returned the login page again
+          errMsg.textContent = role === 'admin' ? 'Invalid admin credentials.' : 'Invalid cafe credentials.';
+          errEl.style.display = 'flex';
+          btn.disabled = false;
+          btn.innerHTML = '<i class="fa fa-arrow-right-to-bracket"></i> &nbsp; ACCESS SYSTEM';
+        } else {
+          window.location.href = role === 'admin' ? '/admin' : '/cafe';
+        }
+      } catch(err) {
+        // Network error or CORS opaque — cookie likely set, navigate anyway
+        window.location.href = role === 'admin' ? '/admin' : '/cafe';
+      }
+    });
   </script>`
 }
 
@@ -618,14 +705,14 @@ function loginPage(error: string, tab: string) {
 app.post('/login', async (c) => {
   const form = await c.req.formData()
   const role = form.get('role') as string
-  const username = form.get('username') as string
-  const password = form.get('password') as string
+  const username = (form.get('username') as string || '').trim()
+  const password = (form.get('password') as string || '').trim()
+  const secure = isSecure(c)
 
   if (role === 'admin') {
     if (username === ADMIN_USER && password === ADMIN_PASS) {
-      const sid = makeSessionId()
-      sessions[sid] = { role: 'admin' }
-      setCookie(c, 'qos_session', sid, { path: '/', maxAge: 86400 })
+      const token = await signPayload({ role: 'admin', iat: Date.now() })
+      setCookie(c, 'qos_session', token, cookieOpts(secure))
       return c.redirect('/admin')
     }
     return c.html(html(loginPage('Invalid admin credentials.', 'admin'), 'Login'))
@@ -636,9 +723,8 @@ app.post('/login', async (c) => {
       (cl) => cl.username === username && cl.password === password
     )
     if (client) {
-      const sid = makeSessionId()
-      sessions[sid] = { role: 'cafe', cafeId: client.id }
-      setCookie(c, 'qos_session', sid, { path: '/', maxAge: 86400 })
+      const token = await signPayload({ role: 'cafe', cafeId: client.id, iat: Date.now() })
+      setCookie(c, 'qos_session', token, cookieOpts(secure))
       return c.redirect('/cafe')
     }
     return c.html(html(loginPage('Invalid cafe credentials.', 'cafe'), 'Login'))
@@ -649,9 +735,7 @@ app.post('/login', async (c) => {
 
 // ── GET /logout ─────────────────────────────────────────────────
 app.get('/logout', (c) => {
-  const sid = getCookie(c, 'qos_session')
-  if (sid) delete sessions[sid]
-  deleteCookie(c, 'qos_session')
+  deleteCookie(c, 'qos_session', { path: '/' })
   return c.redirect('/')
 })
 
@@ -722,9 +806,9 @@ function adminLayout(pageTitle: string, activeNav: string, content: string, pend
 }
 
 // ── GET /admin ──────────────────────────────────────────────────
-app.get('/admin', (c) => {
-  const sid = getCookie(c, 'qos_session')
-  if (!sid || !sessions[sid] || sessions[sid].role !== 'admin') return c.redirect('/')
+app.get('/admin', async (c) => {
+  const sess = await getSession(c)
+  if (!sess || sess.role !== 'admin') return c.redirect('/')
 
   const pendingCount = beanRequests.filter(r => r.status === 'PENDING').length
   const totalGreenKg  = coffeeLots.reduce((s, l) => s + l.greenWeightKg, 0)
@@ -846,9 +930,9 @@ app.get('/admin', (c) => {
 })
 
 // ── GET /admin/branches ─────────────────────────────────────────
-app.get('/admin/branches', (c) => {
-  const sid = getCookie(c, 'qos_session')
-  if (!sid || !sessions[sid] || sessions[sid].role !== 'admin') return c.redirect('/')
+app.get('/admin/branches', async (c) => {
+  const sess = await getSession(c)
+  if (!sess || sess.role !== 'admin') return c.redirect('/')
   const pendingCount = beanRequests.filter(r => r.status === 'PENDING').length
 
   const content = `
@@ -943,9 +1027,9 @@ app.get('/admin/branches', (c) => {
 })
 
 // ── GET /admin/inventory ────────────────────────────────────────
-app.get('/admin/inventory', (c) => {
-  const sid = getCookie(c, 'qos_session')
-  if (!sid || !sessions[sid] || sessions[sid].role !== 'admin') return c.redirect('/')
+app.get('/admin/inventory', async (c) => {
+  const sess = await getSession(c)
+  if (!sess || sess.role !== 'admin') return c.redirect('/')
   const pendingCount = beanRequests.filter(r => r.status === 'PENDING').length
 
   const totalGreen = coffeeLots.reduce((s,l)=>s+l.greenWeightKg,0)
@@ -1045,9 +1129,9 @@ app.get('/admin/inventory', (c) => {
 })
 
 // ── GET /admin/requests ─────────────────────────────────────────
-app.get('/admin/requests', (c) => {
-  const sid = getCookie(c, 'qos_session')
-  if (!sid || !sessions[sid] || sessions[sid].role !== 'admin') return c.redirect('/')
+app.get('/admin/requests', async (c) => {
+  const sess = await getSession(c)
+  if (!sess || sess.role !== 'admin') return c.redirect('/')
   const pendingCount = beanRequests.filter(r => r.status === 'PENDING').length
 
   const content = `
@@ -1115,18 +1199,18 @@ app.get('/admin/requests', (c) => {
 })
 
 // ── POST /admin/requests/:id/confirm ───────────────────────────
-app.post('/admin/requests/:id/confirm', (c) => {
-  const sid = getCookie(c, 'qos_session')
-  if (!sid || !sessions[sid] || sessions[sid].role !== 'admin') return c.redirect('/')
+app.post('/admin/requests/:id/confirm', async (c) => {
+  const sess = await getSession(c)
+  if (!sess || sess.role !== 'admin') return c.redirect('/')
   const req = beanRequests.find(r => r.id === c.req.param('id'))
   if (req) req.status = 'CONFIRMED'
   return c.redirect('/admin/requests')
 })
 
 // ── POST /admin/requests/:id/dispatch ──────────────────────────
-app.post('/admin/requests/:id/dispatch', (c) => {
-  const sid = getCookie(c, 'qos_session')
-  if (!sid || !sessions[sid] || sessions[sid].role !== 'admin') return c.redirect('/')
+app.post('/admin/requests/:id/dispatch', async (c) => {
+  const sess = await getSession(c)
+  if (!sess || sess.role !== 'admin') return c.redirect('/')
   const req = beanRequests.find(r => r.id === c.req.param('id'))
   if (req) req.status = 'DISPATCHED'
   return c.redirect('/admin/requests')
@@ -1235,10 +1319,10 @@ function cafeLayout(pageTitle: string, activeNav: string, content: string, clien
 }
 
 // ── GET /cafe ────────────────────────────────────────────────────
-app.get('/cafe', (c) => {
-  const sid = getCookie(c, 'qos_session')
-  if (!sid || !sessions[sid] || sessions[sid].role !== 'cafe') return c.redirect('/')
-  const cafeId = sessions[sid].cafeId!
+app.get('/cafe', async (c) => {
+  const sess = await getSession(c)
+  if (!sess || sess.role !== 'cafe') return c.redirect('/')
+  const cafeId = sess.cafeId!
   const client = cafeClients.find(cl => cl.id === cafeId)!
 
   // SECURITY: Show ONLY lots marked OPTIMAL
@@ -1323,9 +1407,9 @@ app.get('/cafe', (c) => {
 
 // ── POST /cafe/request ──────────────────────────────────────────
 app.post('/cafe/request', async (c) => {
-  const sid = getCookie(c, 'qos_session')
-  if (!sid || !sessions[sid] || sessions[sid].role !== 'cafe') return c.redirect('/')
-  const cafeId = sessions[sid].cafeId!
+  const sess = await getSession(c)
+  if (!sess || sess.role !== 'cafe') return c.redirect('/')
+  const cafeId = sess.cafeId!
   const client = cafeClients.find(cl => cl.id === cafeId)!
 
   const form = await c.req.formData()
@@ -1356,10 +1440,10 @@ app.post('/cafe/request', async (c) => {
 })
 
 // ── GET /cafe/orders ─────────────────────────────────────────────
-app.get('/cafe/orders', (c) => {
-  const sid = getCookie(c, 'qos_session')
-  if (!sid || !sessions[sid] || sessions[sid].role !== 'cafe') return c.redirect('/')
-  const cafeId = sessions[sid].cafeId!
+app.get('/cafe/orders', async (c) => {
+  const sess = await getSession(c)
+  if (!sess || sess.role !== 'cafe') return c.redirect('/')
+  const cafeId = sess.cafeId!
   const client = cafeClients.find(cl => cl.id === cafeId)!
   const myOrders = beanRequests.filter(r => r.cafeId === cafeId)
   const success = c.req.query('success')
