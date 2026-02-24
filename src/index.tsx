@@ -913,22 +913,12 @@ app.get('/admin', (c) => {
     <div class="stat-card">
       <div class="stat-label">Live Green Stock</div>
       <div class="stat-value">${bal.liveGreenKg.toLocaleString()}</div>
-      <div class="stat-unit">
-        kg remaining
-        ${bal.dispatchedGreenEquiv > 0
-          ? `<span style="color:var(--red);font-family:var(--font-mono);margin-left:4px">−${bal.dispatchedGreenEquiv} dispatched</span>`
-          : ''}
-      </div>
+      <div class="stat-unit">kg available</div>
     </div>
     <div class="stat-card">
       <div class="stat-label">Live Roasted Balance</div>
       <div class="stat-value">${bal.liveRoastedKg.toLocaleString()}</div>
-      <div class="stat-unit">
-        kg after −18% shrinkage
-        ${bal.dispatchedRoastedKg > 0
-          ? `<span style="color:var(--red);font-family:var(--font-mono);margin-left:4px">−${bal.dispatchedRoastedKg} dispatched</span>`
-          : ''}
-      </div>
+      <div class="stat-unit">kg available</div>
     </div>
     <div class="stat-card">
       <div class="stat-label">OPTIMAL Lots</div>
