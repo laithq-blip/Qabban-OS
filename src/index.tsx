@@ -5,6 +5,7 @@ import {
   cafeClients,
   beanRequests,
   applyRoastShrinkage,
+  calcLiveBalance,
 } from './data'
 
 const app = new Hono()
@@ -894,11 +895,12 @@ function cafeLayout(pageTitle: string, activeNav: string, content: string, clien
 // ══════════════════════════════════════════════════════════════════
 
 app.get('/admin', (c) => {
-  const pendingCount    = beanRequests.filter(r => r.status === 'PENDING').length
-  const totalGreenKg    = coffeeLots.reduce((s, l) => s + l.greenWeightKg, 0)
-  const totalRoastedKg  = coffeeLots.reduce((s, l) => s + l.roastedWeightKg, 0)
-  const optimalLots     = coffeeLots.filter(l => l.status === 'OPTIMAL').length
-  const criticalBranches = branches.filter(b => b.riskStatus === 'CRITICAL' || b.riskStatus === 'HIGH').length
+  const pendingCount      = beanRequests.filter(r => r.status === 'PENDING').length
+  const optimalLots       = coffeeLots.filter(l => l.status === 'OPTIMAL').length
+  const criticalBranches  = branches.filter(b => b.riskStatus === 'CRITICAL' || b.riskStatus === 'HIGH').length
+
+  // ── Live Balance: deduct all DISPATCHED orders from purchased totals ──
+  const bal = calcLiveBalance(coffeeLots, beanRequests)
 
   const content = `
   ${criticalBranches > 0 ? `
@@ -909,14 +911,24 @@ app.get('/admin', (c) => {
 
   <div class="stat-grid" style="margin-bottom:28px">
     <div class="stat-card">
-      <div class="stat-label">Total Green Stock</div>
-      <div class="stat-value">${totalGreenKg.toLocaleString()}</div>
-      <div class="stat-unit">kg green beans</div>
+      <div class="stat-label">Live Green Stock</div>
+      <div class="stat-value">${bal.liveGreenKg.toLocaleString()}</div>
+      <div class="stat-unit">
+        kg remaining
+        ${bal.dispatchedGreenEquiv > 0
+          ? `<span style="color:var(--red);font-family:var(--font-mono);margin-left:4px">−${bal.dispatchedGreenEquiv} dispatched</span>`
+          : ''}
+      </div>
     </div>
     <div class="stat-card">
-      <div class="stat-label">Roasted Yield</div>
-      <div class="stat-value">${totalRoastedKg.toLocaleString()}</div>
-      <div class="stat-unit">kg after −18% shrinkage</div>
+      <div class="stat-label">Live Roasted Balance</div>
+      <div class="stat-value">${bal.liveRoastedKg.toLocaleString()}</div>
+      <div class="stat-unit">
+        kg after −18% shrinkage
+        ${bal.dispatchedRoastedKg > 0
+          ? `<span style="color:var(--red);font-family:var(--font-mono);margin-left:4px">−${bal.dispatchedRoastedKg} dispatched</span>`
+          : ''}
+      </div>
     </div>
     <div class="stat-card">
       <div class="stat-label">OPTIMAL Lots</div>
@@ -929,6 +941,29 @@ app.get('/admin', (c) => {
         ${pendingCount}
       </div>
       <div class="stat-unit">awaiting confirmation</div>
+    </div>
+  </div>
+
+  <!-- Live balance breakdown banner -->
+  <div style="background:var(--bg-2);border:1px solid var(--border);border-left:3px solid var(--amber);border-radius:var(--radius);padding:12px 16px;margin-bottom:24px;display:flex;flex-wrap:wrap;gap:24px;align-items:center">
+    <div style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted);letter-spacing:1px;text-transform:uppercase;flex-shrink:0">
+      <i class="fa fa-scale-balanced" style="color:var(--amber)"></i>&nbsp; Live Balance Formula
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:20px;font-family:var(--font-mono);font-size:12px">
+      <span>
+        <span style="color:var(--text-muted)">Purchased Green: </span>
+        <span style="color:var(--text-pri)">${bal.purchasedGreenKg.toLocaleString()} kg</span>
+      </span>
+      <span style="color:var(--text-muted)">−</span>
+      <span>
+        <span style="color:var(--text-muted)">Dispatched (green equiv.): </span>
+        <span style="color:var(--red)">${bal.dispatchedGreenEquiv.toLocaleString()} kg</span>
+      </span>
+      <span style="color:var(--text-muted)">=</span>
+      <span>
+        <span style="color:var(--text-muted)">Live Balance: </span>
+        <span style="color:var(--amber);font-weight:700">${bal.liveGreenKg.toLocaleString()} kg</span>
+      </span>
     </div>
   </div>
 
@@ -1125,20 +1160,28 @@ app.get('/admin', (c) => {
         <thead>
           <tr>
             <th>Lot ID</th><th>Origin</th><th>Branch</th>
-            <th>Green (kg)</th><th>Roasted (kg)</th><th>Shrinkage</th>
+            <th>Purchased Green</th><th>Purchased Roasted</th>
+            <th>Dispatched</th>
+            <th>Live Green Balance</th><th>Live Roasted Balance</th>
             <th>Status</th><th>Grade</th>
           </tr>
         </thead>
         <tbody>
-          ${coffeeLots.map(l => `
+          ${coffeeLots.map(l => {
+            const lb = bal.byLot.get(l.id)!
+            const hasDispatch = lb.dispatchedRoastedKg > 0
+            return `
           <tr>
             <td class="mono" style="color:var(--amber)">${l.id}</td>
             <td style="font-weight:500">${l.origin}</td>
             <td style="font-size:12px;color:var(--text-sec)">${l.branch}</td>
-            <td class="mono">${l.greenWeightKg} kg</td>
-            <td class="mono" style="color:var(--amber)">${l.roastedWeightKg} kg</td>
-            <td><span style="font-family:var(--font-mono);font-size:11px;color:var(--text-muted)">
-              −${(l.greenWeightKg - l.roastedWeightKg).toFixed(1)} kg (18%)</span></td>
+            <td class="mono" style="color:var(--text-muted)">${lb.purchasedGreenKg} kg</td>
+            <td class="mono" style="color:var(--text-muted)">${lb.purchasedRoastedKg} kg</td>
+            <td class="mono" style="color:${hasDispatch ? 'var(--red)' : 'var(--text-muted)'}">
+              ${hasDispatch ? `−${lb.dispatchedRoastedKg} kg <span style="font-size:10px;color:var(--text-muted)">(≈${lb.dispatchedGreenEquiv} green)</span>` : '—'}
+            </td>
+            <td class="mono" style="color:var(--amber);font-weight:600">${lb.liveGreenKg} kg</td>
+            <td class="mono" style="color:var(--amber)">${lb.liveRoastedKg} kg</td>
             <td><span class="badge badge-${l.status}">${l.status}</span></td>
             <td>
               <div class="score-bar">
@@ -1146,7 +1189,8 @@ app.get('/admin', (c) => {
                 <span class="score-num">${l.gradeScore}</span>
               </div>
             </td>
-          </tr>`).join('')}
+          </tr>`
+          }).join('')}
         </tbody>
       </table>
     </div>
@@ -1258,27 +1302,28 @@ app.get('/admin/branches', (c) => {
 
 // ── GET /admin/inventory ────────────────────────────────────────
 app.get('/admin/inventory', (c) => {
-  const pendingCount  = beanRequests.filter(r => r.status === 'PENDING').length
-  const totalGreen    = coffeeLots.reduce((s, l) => s + l.greenWeightKg, 0)
-  const totalRoasted  = coffeeLots.reduce((s, l) => s + l.roastedWeightKg, 0)
-  const totalShrinkage = totalGreen - totalRoasted
+  const pendingCount = beanRequests.filter(r => r.status === 'PENDING').length
+
+  // ── Live Balance ──────────────────────────────────────────────
+  const bal            = calcLiveBalance(coffeeLots, beanRequests)
+  const totalShrinkage = bal.liveGreenKg - bal.liveRoastedKg   // shrinkage on live stock only
 
   const content = `
   <div class="stat-grid" style="margin-bottom:28px">
     <div class="stat-card">
-      <div class="stat-label">Total Green</div>
-      <div class="stat-value">${totalGreen.toLocaleString()}</div>
-      <div class="stat-unit">kg raw green beans</div>
+      <div class="stat-label">Live Green Balance</div>
+      <div class="stat-value">${bal.liveGreenKg.toLocaleString()}</div>
+      <div class="stat-unit">kg remaining (after dispatches)</div>
     </div>
     <div class="stat-card">
-      <div class="stat-label">Total Roasted</div>
-      <div class="stat-value">${totalRoasted.toLocaleString()}</div>
-      <div class="stat-unit">kg after roasting</div>
+      <div class="stat-label">Live Roasted Balance</div>
+      <div class="stat-value">${bal.liveRoastedKg.toLocaleString()}</div>
+      <div class="stat-unit">kg remaining after −18%</div>
     </div>
     <div class="stat-card">
-      <div class="stat-label">Total Shrinkage</div>
-      <div class="stat-value" style="color:var(--red)">${totalShrinkage.toLocaleString()}</div>
-      <div class="stat-unit">kg lost (18% formula)</div>
+      <div class="stat-label">Total Dispatched</div>
+      <div class="stat-value" style="color:var(--red)">${bal.dispatchedRoastedKg.toLocaleString()}</div>
+      <div class="stat-unit">kg roasted sent out</div>
     </div>
     <div class="stat-card">
       <div class="stat-label">Yield Rate</div>
@@ -1287,31 +1332,45 @@ app.get('/admin/inventory', (c) => {
     </div>
   </div>
 
+  <!-- Balance equation card -->
   <div class="card" style="margin-bottom:20px">
-    <div class="card-title">Shrinkage Formula Reference</div>
-    <div style="padding:16px;background:var(--bg-2);border-radius:var(--radius);font-family:var(--font-mono);font-size:14px;letter-spacing:0.5px">
-      <span style="color:var(--amber)">Roasted_kg</span>
-      <span style="color:var(--text-muted)"> = </span>
-      <span style="color:var(--text-pri)">Green_kg</span>
-      <span style="color:var(--text-muted)"> × </span>
-      <span style="color:var(--green)">0.82</span>
-      <span style="color:var(--text-muted)"> &nbsp;// 18% moisture loss during roasting</span>
+    <div class="card-title">Live Balance Formula</div>
+    <div style="padding:16px;background:var(--bg-2);border-radius:var(--radius);font-family:var(--font-mono);font-size:13px;letter-spacing:0.4px;line-height:2">
+      <div>
+        <span style="color:var(--text-muted)">Purchased Green:    </span>
+        <span style="color:var(--text-pri)">${bal.purchasedGreenKg.toLocaleString()} kg</span>
+      </div>
+      <div>
+        <span style="color:var(--text-muted)">Dispatched (roasted): </span>
+        <span style="color:var(--red)">− ${bal.dispatchedRoastedKg.toLocaleString()} kg roasted</span>
+        <span style="color:var(--text-muted);font-size:11px"> (÷ 0.82 = ${bal.dispatchedGreenEquiv.toLocaleString()} kg green equiv.)</span>
+      </div>
+      <div style="border-top:1px solid var(--border);margin-top:4px;padding-top:4px">
+        <span style="color:var(--amber)">Live Green Balance: </span>
+        <span style="color:var(--amber);font-weight:700">${bal.liveGreenKg.toLocaleString()} kg</span>
+        <span style="color:var(--text-muted);font-size:11px"> × 0.82 = </span>
+        <span style="color:var(--amber)">${bal.liveRoastedKg.toLocaleString()} kg roasted</span>
+      </div>
     </div>
   </div>
 
   <div class="card">
-    <div class="card-title">Full Inventory Ledger</div>
+    <div class="card-title">Full Inventory Ledger — Live Balances</div>
     <div class="table-wrap">
       <table>
         <thead>
           <tr>
             <th>Lot ID</th><th>Origin</th><th>Variety / Process</th><th>Branch</th>
-            <th>Green → Roasted</th><th>Shrinkage</th><th>Roast Date</th><th>Expiry</th>
-            <th>Status</th><th>Grade</th>
+            <th>Purchased</th><th>Dispatched</th>
+            <th>Live Green</th><th>Live Roasted</th>
+            <th>Roast Date</th><th>Expiry</th><th>Status</th><th>Grade</th>
           </tr>
         </thead>
         <tbody>
-          ${coffeeLots.map(l => `
+          ${coffeeLots.map(l => {
+            const lb = bal.byLot.get(l.id)!
+            const hasDispatch = lb.dispatchedRoastedKg > 0
+            return `
           <tr>
             <td class="mono" style="color:var(--amber)">${l.id}</td>
             <td>
@@ -1324,12 +1383,18 @@ app.get('/admin/inventory', (c) => {
             <td style="font-size:12px">${l.branch}</td>
             <td>
               <div class="weight-block">
-                <span class="weight-green">${l.greenWeightKg} kg</span>
+                <span class="weight-green" style="color:var(--text-muted)">${lb.purchasedGreenKg} kg</span>
                 <span class="weight-arrow">→</span>
-                <span class="weight-roast">${l.roastedWeightKg} kg</span>
+                <span class="weight-roast" style="color:var(--text-muted)">${lb.purchasedRoastedKg} kg</span>
               </div>
             </td>
-            <td class="mono" style="color:var(--red);font-size:11px">−${(l.greenWeightKg - l.roastedWeightKg).toFixed(1)} kg</td>
+            <td class="mono" style="font-size:11px;color:${hasDispatch ? 'var(--red)' : 'var(--text-muted)'}">
+              ${hasDispatch
+                ? `−${lb.dispatchedRoastedKg} kg<br/><span style="color:var(--text-muted);font-size:10px">≈${lb.dispatchedGreenEquiv} kg green</span>`
+                : '—'}
+            </td>
+            <td class="mono" style="color:var(--amber);font-weight:700;font-size:14px">${lb.liveGreenKg} kg</td>
+            <td class="mono" style="color:var(--amber)">${lb.liveRoastedKg} kg</td>
             <td class="mono" style="font-size:11px;color:var(--text-muted)">${l.roastDate}</td>
             <td class="mono" style="font-size:11px;color:var(--text-muted)">${l.expiryDate}</td>
             <td><span class="badge badge-${l.status}">${l.status}</span></td>
@@ -1339,7 +1404,8 @@ app.get('/admin/inventory', (c) => {
                 <span class="score-num">${l.gradeScore}</span>
               </div>
             </td>
-          </tr>`).join('')}
+          </tr>`
+          }).join('')}
         </tbody>
       </table>
     </div>

@@ -9,8 +9,8 @@ export interface CoffeeLot {
   origin: string
   variety: string
   process: string
-  greenWeightKg: number     // raw green beans
-  roastedWeightKg: number   // after 18% shrinkage
+  greenWeightKg: number     // PURCHASED green weight — never mutated
+  roastedWeightKg: number   // PURCHASED roasted weight (green × 0.82) — never mutated
   roastDate: string
   expiryDate: string
   status: LotStatus
@@ -45,7 +45,7 @@ export interface BeanRequest {
   cafeName: string
   lotId: string
   lotOrigin: string
-  quantityKg: number
+  quantityKg: number        // roasted kg ordered by the cafe
   requestedAt: string
   status: 'PENDING' | 'CONFIRMED' | 'DISPATCHED'
   notes: string
@@ -55,6 +55,10 @@ export interface BeanRequest {
 export const applyRoastShrinkage = (greenKg: number): number =>
   Math.round(greenKg * 0.82 * 10) / 10
 
+// Reverse: convert a dispatched roasted quantity back to its green equivalent
+export const roastedToGreenEquiv = (roastedKg: number): number =>
+  Math.round((roastedKg / 0.82) * 10) / 10
+
 // ─── Humidity risk classifier ──────────────────────────────────────────────
 export const classifyHumidityRisk = (
   humidity: number
@@ -63,6 +67,92 @@ export const classifyHumidityRisk = (
   if (humidity < 62) return 'MODERATE'
   if (humidity < 75) return 'HIGH'
   return 'CRITICAL'
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Live Balance Calculator
+//
+//  Rule: once a BeanRequest is DISPATCHED, its ordered roasted quantity is
+//  converted back to its green equivalent and deducted from that lot's balance.
+//
+//  dispatchedRoastedKg  = sum of quantityKg for DISPATCHED requests on this lot
+//  dispatchedGreenEquiv = dispatchedRoastedKg / 0.82   (reverse shrinkage)
+//  liveGreenKg          = purchasedGreenKg − dispatchedGreenEquiv
+//  liveRoastedKg        = liveGreenKg × 0.82
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface LotLiveBalance {
+  lotId:                 string
+  purchasedGreenKg:      number   // original purchase weight
+  purchasedRoastedKg:    number   // original roasted weight
+  dispatchedRoastedKg:   number   // total dispatched (roasted kg)
+  dispatchedGreenEquiv:  number   // dispatched converted back to green
+  liveGreenKg:           number   // balance remaining (green)
+  liveRoastedKg:         number   // balance remaining (roasted)
+}
+
+export interface AggregateBalance {
+  purchasedGreenKg:     number
+  purchasedRoastedKg:   number
+  dispatchedRoastedKg:  number
+  dispatchedGreenEquiv: number
+  liveGreenKg:          number
+  liveRoastedKg:        number
+  byLot: Map<string, LotLiveBalance>
+}
+
+export const calcLiveBalance = (
+  lots: CoffeeLot[],
+  requests: BeanRequest[]
+): AggregateBalance => {
+  // Build per-lot dispatched totals from DISPATCHED requests only
+  const dispatchedByLot = new Map<string, number>()
+  for (const r of requests) {
+    if (r.status === 'DISPATCHED') {
+      dispatchedByLot.set(
+        r.lotId,
+        (dispatchedByLot.get(r.lotId) ?? 0) + r.quantityKg
+      )
+    }
+  }
+
+  const byLot = new Map<string, LotLiveBalance>()
+  let totPurchasedGreen   = 0
+  let totPurchasedRoasted = 0
+  let totDispatchedRoasted = 0
+  let totDispatchedGreen  = 0
+
+  for (const lot of lots) {
+    const dispatchedRoasted = Math.round((dispatchedByLot.get(lot.id) ?? 0) * 10) / 10
+    const dispatchedGreen   = roastedToGreenEquiv(dispatchedRoasted)
+    const liveGreen         = Math.round(Math.max(0, lot.greenWeightKg - dispatchedGreen) * 10) / 10
+    const liveRoasted       = applyRoastShrinkage(liveGreen)
+
+    byLot.set(lot.id, {
+      lotId:                lot.id,
+      purchasedGreenKg:     lot.greenWeightKg,
+      purchasedRoastedKg:   lot.roastedWeightKg,
+      dispatchedRoastedKg:  dispatchedRoasted,
+      dispatchedGreenEquiv: dispatchedGreen,
+      liveGreenKg:          liveGreen,
+      liveRoastedKg:        liveRoasted,
+    })
+
+    totPurchasedGreen    += lot.greenWeightKg
+    totPurchasedRoasted  += lot.roastedWeightKg
+    totDispatchedRoasted += dispatchedRoasted
+    totDispatchedGreen   += dispatchedGreen
+  }
+
+  return {
+    purchasedGreenKg:     Math.round(totPurchasedGreen * 10) / 10,
+    purchasedRoastedKg:   Math.round(totPurchasedRoasted * 10) / 10,
+    dispatchedRoastedKg:  Math.round(totDispatchedRoasted * 10) / 10,
+    dispatchedGreenEquiv: Math.round(totDispatchedGreen * 10) / 10,
+    liveGreenKg:          Math.round((totPurchasedGreen  - totDispatchedGreen) * 10) / 10,
+    liveRoastedKg:        Math.round((totPurchasedRoasted - totDispatchedRoasted) * 10) / 10,
+    byLot,
+  }
 }
 
 // ─── Mock coffee lots ──────────────────────────────────────────────────────
@@ -259,7 +349,29 @@ export const beanRequests: BeanRequest[] = [
     lotOrigin: 'Colombia Huila',
     quantityKg: 20,
     requestedAt: '2026-02-23 14:12',
-    status: 'CONFIRMED',
+    status: 'DISPATCHED',       // already dispatched — deducts from LOT-002 live balance
     notes: 'Urgent — weekend event',
+  },
+  {
+    id: 'REQ-002',
+    cafeId: 'CAF-001',
+    cafeName: 'Al Nokhba Specialty',
+    lotId: 'LOT-001',
+    lotOrigin: 'Ethiopia Yirgacheffe',
+    quantityKg: 50,
+    requestedAt: '2026-02-24 09:05',
+    status: 'CONFIRMED',        // confirmed but not dispatched yet — no deduction
+    notes: 'Monthly standing order',
+  },
+  {
+    id: 'REQ-003',
+    cafeId: 'CAF-003',
+    cafeName: 'Pearl Roast Café',
+    lotId: 'LOT-006',
+    lotOrigin: 'Brazil Cerrado',
+    quantityKg: 30,
+    requestedAt: '2026-02-24 11:20',
+    status: 'PENDING',
+    notes: '',
   },
 ]
