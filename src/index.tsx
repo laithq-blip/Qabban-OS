@@ -58,11 +58,14 @@ const shell = (title: string, body: string) => `<!DOCTYPE html>
     }
     .topbar-brand { display:flex; align-items:center; gap:12px; }
     .topbar-logo {
-      width:32px; height:32px; background:var(--amber); border-radius:var(--radius);
+      width:34px; height:34px;
+      background:linear-gradient(135deg,rgba(245,158,11,0.15) 0%,rgba(245,158,11,0.05) 100%);
+      border:1px solid var(--border-amber);
+      border-radius:var(--radius);
       display:flex; align-items:center; justify-content:center;
-      font-family:var(--font-mono); font-weight:700; font-size:14px;
-      color:var(--bg-0); letter-spacing:-1px;
+      flex-shrink:0;
     }
+    .topbar-logo svg { filter: drop-shadow(0 0 3px rgba(245,158,11,0.5)); }
     .topbar-title { font-family:var(--font-mono); font-size:15px; font-weight:700; color:var(--text-pri); letter-spacing:1px; }
     .topbar-title span { color:var(--amber); }
     .topbar-right { display:flex; align-items:center; gap:16px; }
@@ -323,16 +326,50 @@ const shell = (title: string, body: string) => `<!DOCTYPE html>
     }
     .login-box {
       background:var(--bg-1); border:1px solid var(--border);
-      border-radius:var(--radius-lg); padding:40px 36px; width:380px; max-width:95vw;
+      border-radius:var(--radius-lg); padding:40px 36px; width:400px; max-width:95vw;
     }
-    .login-logo { display:flex; align-items:center; gap:14px; margin-bottom:32px; }
-    .login-logo-icon {
-      width:48px; height:48px; background:var(--amber); border-radius:var(--radius-lg);
+
+    /* ── LOGO HEADER — centered scale mark ── */
+    .login-logo-header {
+      display:flex; flex-direction:column; align-items:center;
+      gap:0; margin-bottom:32px; padding-top:4px;
+    }
+    .login-logo-svg-wrap {
+      width:96px; height:96px;
+      position:relative;
       display:flex; align-items:center; justify-content:center;
-      font-family:var(--font-mono); font-weight:700; font-size:20px; color:var(--bg-0);
+      margin-bottom:16px;
     }
-    .login-brand-name { font-family:var(--font-mono); font-size:22px; font-weight:700; color:var(--text-pri); }
-    .login-brand-sub { font-size:12px; color:var(--text-muted); margin-top:2px; }
+    .login-logo-svg-wrap::before {
+      content:'';
+      position:absolute; inset:0;
+      background: radial-gradient(ellipse at 50% 65%, rgba(245,158,11,0.18) 0%, rgba(245,158,11,0.06) 45%, transparent 70%);
+      border-radius:50%;
+    }
+    .login-logo-svg-wrap svg {
+      position:relative; z-index:1;
+      filter: drop-shadow(0 0 8px rgba(245,158,11,0.50)) drop-shadow(0 2px 16px rgba(245,158,11,0.25));
+      animation: logoFloat 4s ease-in-out infinite;
+    }
+    @keyframes logoFloat {
+      0%,100% { transform:translateY(0px); filter: drop-shadow(0 0 8px rgba(245,158,11,0.50)) drop-shadow(0 2px 16px rgba(245,158,11,0.25)); }
+      50%      { transform:translateY(-3px); filter: drop-shadow(0 0 14px rgba(245,158,11,0.70)) drop-shadow(0 6px 20px rgba(245,158,11,0.35)); }
+    }
+    .login-brand-name {
+      font-family:var(--font-mono); font-size:24px; font-weight:700;
+      color:var(--text-pri); letter-spacing:2px; text-align:center;
+      line-height:1;
+    }
+    .login-brand-name span { color:var(--amber); }
+    .login-brand-sub {
+      font-size:10px; color:var(--text-muted); margin-top:6px;
+      letter-spacing:3px; text-transform:uppercase; text-align:center;
+      font-family:var(--font-mono);
+    }
+    .login-brand-rule {
+      width:40px; height:1px; background:linear-gradient(90deg,transparent,var(--border-amber),transparent);
+      margin:10px auto 0;
+    }
     .login-tabs { display:flex; margin-bottom:28px; border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; }
     .login-tab {
       flex:1; padding:8px; font-size:12px; font-family:var(--font-mono);
@@ -422,12 +459,108 @@ app.get('/', (c) => {
   <div class="login-page">
     <div class="login-box">
 
-      <div class="login-logo">
-        <div class="login-logo-icon">QO</div>
-        <div>
-          <div class="login-brand-name">Qabban OS</div>
-          <div class="login-brand-sub">Roast Operations Platform</div>
+      <div class="login-logo-header">
+
+        <!-- Professional Geometric Amber Scale SVG Logo -->
+        <div class="login-logo-svg-wrap">
+          <svg width="80" height="80" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="Qabban OS — Balance Scale Logo">
+            <defs>
+              <!-- Amber gradient for the beam -->
+              <linearGradient id="beamGrad" x1="6" y1="32" x2="74" y2="32" gradientUnits="userSpaceOnUse">
+                <stop offset="0%"   stop-color="#b45309" stop-opacity="0.7"/>
+                <stop offset="30%"  stop-color="#f59e0b"/>
+                <stop offset="50%"  stop-color="#fcd34d"/>
+                <stop offset="70%"  stop-color="#f59e0b"/>
+                <stop offset="100%" stop-color="#b45309" stop-opacity="0.7"/>
+              </linearGradient>
+              <!-- Amber gradient for pillar -->
+              <linearGradient id="pillarGrad" x1="40" y1="35" x2="40" y2="67" gradientUnits="userSpaceOnUse">
+                <stop offset="0%"   stop-color="#f59e0b"/>
+                <stop offset="100%" stop-color="#b45309" stop-opacity="0.8"/>
+              </linearGradient>
+              <!-- Pan fill gradient -->
+              <linearGradient id="panFillL" x1="10" y1="22" x2="10" y2="32" gradientUnits="userSpaceOnUse">
+                <stop offset="0%"  stop-color="#f59e0b" stop-opacity="0.25"/>
+                <stop offset="100%" stop-color="#f59e0b" stop-opacity="0.05"/>
+              </linearGradient>
+              <linearGradient id="panFillR" x1="70" y1="26" x2="70" y2="38" gradientUnits="userSpaceOnUse">
+                <stop offset="0%"  stop-color="#f59e0b" stop-opacity="0.35"/>
+                <stop offset="100%" stop-color="#f59e0b" stop-opacity="0.07"/>
+              </linearGradient>
+              <!-- Glow filter -->
+              <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
+                <feGaussianBlur in="SourceGraphic" stdDeviation="1.2" result="blur"/>
+                <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+              </filter>
+              <!-- Subtle shadow under base -->
+              <filter id="baseShadow" x="-20%" y="-20%" width="140%" height="200%">
+                <feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="#f59e0b" flood-opacity="0.25"/>
+              </filter>
+            </defs>
+
+            <!-- ═══ BASE ═══ -->
+            <!-- Foot platform -->
+            <rect x="28" y="66" width="24" height="3.5" rx="1.75" fill="url(#pillarGrad)" filter="url(#baseShadow)"/>
+            <!-- Pillar -->
+            <rect x="38.5" y="35" width="3" height="31" rx="1.5" fill="url(#pillarGrad)"/>
+
+            <!-- ═══ FULCRUM DIAMOND ═══ -->
+            <!-- Outer ring glow -->
+            <circle cx="40" cy="34" r="7" fill="none" stroke="rgba(245,158,11,0.15)" stroke-width="2.5"/>
+            <!-- Inner ring -->
+            <circle cx="40" cy="34" r="4.5" fill="rgba(245,158,11,0.08)" stroke="rgba(245,158,11,0.4)" stroke-width="1"/>
+            <!-- Diamond pivot point -->
+            <polygon points="40,28.5 43,33 40,36.5 37,33" fill="#f59e0b" filter="url(#glow)"/>
+            <!-- Fulcrum tip dot -->
+            <circle cx="40" cy="33" r="1.2" fill="#fcd34d"/>
+
+            <!-- ═══ BALANCE BEAM ═══ -->
+            <!-- Slight tilt: left end higher (y=31), right end lower (y=33) — shows imbalance realism -->
+            <line x1="6" y1="31" x2="74" y2="33"
+                  stroke="url(#beamGrad)" stroke-width="2.5" stroke-linecap="round"
+                  filter="url(#glow)"/>
+            <!-- Beam tick marks at centre -->
+            <line x1="39" y1="29.5" x2="41" y2="29.5" stroke="#f59e0b" stroke-width="1.5" stroke-linecap="round" opacity="0.5"/>
+
+            <!-- ═══ LEFT CHAIN & PAN ═══ -->
+            <!-- Chain (3 links) -->
+            <line x1="10"  y1="31" x2="10"  y2="22" stroke="#d97706" stroke-width="1.5" stroke-linecap="round" stroke-dasharray="2 1.5"/>
+            <!-- Pan arc shape -->
+            <path d="M4 22 Q10 30 16 22" stroke="#f59e0b" stroke-width="2" stroke-linecap="round"
+                  fill="url(#panFillL)"/>
+            <!-- Pan rim highlight -->
+            <path d="M4.5 22 Q10 28.5 15.5 22" stroke="rgba(252,211,77,0.5)" stroke-width="0.8" stroke-linecap="round" fill="none"/>
+            <!-- Weight on left pan (light — one bean) -->
+            <circle cx="10" cy="24.5" r="2.8" fill="#f59e0b" opacity="0.65" filter="url(#glow)"/>
+            <circle cx="10" cy="23.8" r="1.1" fill="#fcd34d" opacity="0.5"/>
+
+            <!-- ═══ RIGHT CHAIN & PAN ═══ -->
+            <!-- Chain (3 links) -->
+            <line x1="70"  y1="33" x2="70"  y2="27" stroke="#d97706" stroke-width="1.5" stroke-linecap="round" stroke-dasharray="2 1.5"/>
+            <!-- Pan arc shape (wider, sits lower — heavier) -->
+            <path d="M62 27 Q70 37 78 27" stroke="#f59e0b" stroke-width="2" stroke-linecap="round"
+                  fill="url(#panFillR)"/>
+            <!-- Pan rim highlight -->
+            <path d="M62.5 27 Q70 35.5 77.5 27" stroke="rgba(252,211,77,0.5)" stroke-width="0.8" stroke-linecap="round" fill="none"/>
+            <!-- Weights on right pan (heavy — two beans side by side) -->
+            <circle cx="66.5" cy="30.5" r="2.8" fill="#f59e0b" opacity="0.9" filter="url(#glow)"/>
+            <circle cx="66.5" cy="29.8" r="1.1" fill="#fcd34d" opacity="0.55"/>
+            <circle cx="73.5" cy="30.5" r="2.8" fill="#f59e0b" opacity="0.9" filter="url(#glow)"/>
+            <circle cx="73.5" cy="29.8" r="1.1" fill="#fcd34d" opacity="0.55"/>
+
+            <!-- ═══ DECORATIVE CORNER MARKS ═══ -->
+            <!-- Top-left accent tick -->
+            <line x1="5" y1="10" x2="10" y2="10" stroke="rgba(245,158,11,0.25)" stroke-width="1" stroke-linecap="round"/>
+            <line x1="5" y1="10" x2="5"  y2="15" stroke="rgba(245,158,11,0.25)" stroke-width="1" stroke-linecap="round"/>
+            <!-- Top-right accent tick -->
+            <line x1="75" y1="10" x2="70" y2="10" stroke="rgba(245,158,11,0.25)" stroke-width="1" stroke-linecap="round"/>
+            <line x1="75" y1="10" x2="75" y2="15" stroke="rgba(245,158,11,0.25)" stroke-width="1" stroke-linecap="round"/>
+          </svg>
         </div>
+
+        <div class="login-brand-name">QABBAN <span>OS</span></div>
+        <div class="login-brand-sub">Roast Operations Platform</div>
+        <div class="login-brand-rule"></div>
       </div>
 
       <div class="login-tabs">
@@ -541,7 +674,21 @@ function adminLayout(pageTitle: string, activeNav: string, content: string, pend
   const body = `
   <header class="topbar">
     <div class="topbar-brand">
-      <div class="topbar-logo">QO</div>
+      <div class="topbar-logo">
+        <svg width="20" height="20" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="38.5" y="35" width="3" height="28" rx="1.5" fill="#f59e0b"/>
+          <rect x="28" y="63" width="24" height="3" rx="1.5" fill="#b45309"/>
+          <polygon points="40,28 43.5,33.5 40,37 36.5,33.5" fill="#f59e0b"/>
+          <line x1="8" y1="31" x2="72" y2="33" stroke="#f59e0b" stroke-width="2.5" stroke-linecap="round"/>
+          <line x1="12" y1="31" x2="12" y2="23" stroke="#d97706" stroke-width="1.5" stroke-linecap="round"/>
+          <path d="M6 23 Q12 30 18 23" stroke="#f59e0b" stroke-width="2" fill="rgba(245,158,11,0.15)" stroke-linecap="round"/>
+          <circle cx="12" cy="25" r="2.5" fill="#f59e0b" opacity="0.7"/>
+          <line x1="68" y1="33" x2="68" y2="27" stroke="#d97706" stroke-width="1.5" stroke-linecap="round"/>
+          <path d="M60 27 Q68 36 76 27" stroke="#f59e0b" stroke-width="2" fill="rgba(245,158,11,0.2)" stroke-linecap="round"/>
+          <circle cx="64" cy="30" r="2.5" fill="#f59e0b" opacity="0.9"/>
+          <circle cx="72" cy="30" r="2.5" fill="#f59e0b" opacity="0.9"/>
+        </svg>
+      </div>
       <span class="topbar-title">QABBAN <span>OS</span></span>
     </div>
     <div class="topbar-right">
@@ -604,7 +751,21 @@ function cafeLayout(pageTitle: string, activeNav: string, content: string, clien
   const body = `
   <header class="topbar">
     <div class="topbar-brand">
-      <div class="topbar-logo">QO</div>
+      <div class="topbar-logo">
+        <svg width="20" height="20" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="38.5" y="35" width="3" height="28" rx="1.5" fill="#f59e0b"/>
+          <rect x="28" y="63" width="24" height="3" rx="1.5" fill="#b45309"/>
+          <polygon points="40,28 43.5,33.5 40,37 36.5,33.5" fill="#f59e0b"/>
+          <line x1="8" y1="31" x2="72" y2="33" stroke="#f59e0b" stroke-width="2.5" stroke-linecap="round"/>
+          <line x1="12" y1="31" x2="12" y2="23" stroke="#d97706" stroke-width="1.5" stroke-linecap="round"/>
+          <path d="M6 23 Q12 30 18 23" stroke="#f59e0b" stroke-width="2" fill="rgba(245,158,11,0.15)" stroke-linecap="round"/>
+          <circle cx="12" cy="25" r="2.5" fill="#f59e0b" opacity="0.7"/>
+          <line x1="68" y1="33" x2="68" y2="27" stroke="#d97706" stroke-width="1.5" stroke-linecap="round"/>
+          <path d="M60 27 Q68 36 76 27" stroke="#f59e0b" stroke-width="2" fill="rgba(245,158,11,0.2)" stroke-linecap="round"/>
+          <circle cx="64" cy="30" r="2.5" fill="#f59e0b" opacity="0.9"/>
+          <circle cx="72" cy="30" r="2.5" fill="#f59e0b" opacity="0.9"/>
+        </svg>
+      </div>
       <span class="topbar-title">QABBAN <span>OS</span></span>
     </div>
     <div class="topbar-right">
