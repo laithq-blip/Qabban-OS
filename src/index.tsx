@@ -1079,9 +1079,9 @@ function cafeLayout(pageTitle: string, activeNav: string, content: string, clien
       if (el) el.style.display = 'none';
     }
 
-    // Initial check + polling every 30s
+    // Initial check + poll every 4 seconds (5-second protocol: recall appears within 5s)
     checkRecalls();
-    setInterval(checkRecalls, 30000);
+    setInterval(checkRecalls, 4000);
   </script>`
   return shell(pageTitle, body)
 }
@@ -2070,7 +2070,6 @@ app.post('/admin/inventory/:lotId/recall', async (c) => {
 app.get('/cafe', (c) => {
   const client      = resolveCafeClient(c.req.query('cid') ?? null)
   const bal         = calcLiveBalance(coffeeLots, beanRequests)
-  const recalledCount = coffeeLots.filter(l => l.status === 'RECALLED').length
 
   // ── Per-origin live roasted balance (summed across all lots for that origin)
   // Includes ALL non-RECALLED lots (OPTIMAL, MONITOR, CRITICAL) with remaining stock.
@@ -2098,14 +2097,9 @@ app.get('/cafe', (c) => {
   const outOfStockCount = CATALOG_ORIGINS.length - inStockCount
 
   const content = `
-  ${recalledCount > 0 ? `
-  <div class="alert alert-critical" style="animation:recallSlideIn .4s ease-out">
-    <i class="fa fa-triangle-exclamation"></i>
-    <div>
-      <strong>${recalledCount} lot${recalledCount > 1 ? 's' : ''} currently RECALLED</strong> —
-      These lots have been removed from ordering. Check the urgent notice above if you received prior dispatches.
-    </div>
-  </div>` : ''}
+  <!-- NOTE: Recall alerts are injected dynamically by checkRecalls() polling every 4s.
+       No static server-rendered recall alert here — banners only appear when admin
+       has explicitly clicked INITIATE RECALL in the Inventory tab. -->
 
   <div class="stat-grid" style="margin-bottom:28px">
     <div class="stat-card">
