@@ -2483,6 +2483,108 @@ app.get('/admin/inventory', (c) => {
       box-shadow: 0 0 14px rgba(245,158,11,0.25);
     }
     .btn-add-green-lot:hover { background:#fbbf24; box-shadow:0 0 20px rgba(245,158,11,0.4); }
+
+    /* ── SACK LABEL PHOTO — image picker ──────────────────────── */
+    .img-picker-zone {
+      position:relative; border:2px dashed rgba(245,158,11,0.35);
+      border-radius:var(--radius); padding:22px 16px; text-align:center;
+      cursor:pointer; transition:border-color .18s, background .18s;
+      background:var(--bg-3);
+    }
+    .img-picker-zone:hover,
+    .img-picker-zone.drag-over {
+      border-color:#F59E0B;
+      background:rgba(245,158,11,0.06);
+      box-shadow:0 0 12px rgba(245,158,11,0.18);
+    }
+    .img-picker-zone input[type="file"] {
+      position:absolute; inset:0; opacity:0; cursor:pointer; width:100%; height:100%;
+    }
+    .img-picker-icon { font-size:24px; color:rgba(245,158,11,0.5); margin-bottom:6px; }
+    .img-picker-label { font-size:12px; color:var(--text-sec); }
+    .img-picker-label span { color:#F59E0B; text-decoration:underline; }
+    .img-picker-sub { font-size:10px; color:var(--text-muted); margin-top:4px; font-family:var(--font-mono); }
+
+    /* ── preview strip (after image selected) ── */
+    .img-preview-wrap {
+      display:none; align-items:center; gap:14px;
+      background:var(--bg-3); border:1px solid #F59E0B;
+      border-radius:var(--radius); padding:10px 14px;
+      box-shadow:0 0 10px rgba(245,158,11,0.12);
+    }
+    .img-preview-wrap.visible { display:flex; }
+    .img-preview-thumb {
+      width:72px; height:72px; max-width:72px;
+      object-fit:contain; border-radius:4px;
+      border:1px solid rgba(245,158,11,0.45);
+      background:var(--bg-1); cursor:pointer;
+      transition:box-shadow .18s, border-color .18s;
+      flex-shrink:0;
+    }
+    .img-preview-thumb:hover {
+      border-color:#F59E0B;
+      box-shadow:0 0 14px rgba(245,158,11,0.45);
+    }
+    .img-preview-info { flex:1; min-width:0; }
+    .img-preview-name {
+      font-size:12px; color:var(--text-pri); font-weight:600;
+      white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    }
+    .img-preview-size { font-family:var(--font-mono); font-size:10px; color:var(--text-muted); margin-top:2px; }
+    .img-preview-clear {
+      background:transparent; border:1px solid rgba(239,68,68,0.35);
+      color:var(--red); font-family:var(--font-mono); font-size:10px;
+      padding:4px 9px; border-radius:var(--radius); cursor:pointer;
+      transition:all .15s; flex-shrink:0;
+    }
+    .img-preview-clear:hover { background:var(--red-dim); border-color:var(--red); }
+    .img-enlarge-hint {
+      font-size:9px; color:var(--amber); font-family:var(--font-mono);
+      margin-top:3px; letter-spacing:.4px;
+    }
+
+    /* ── SFDA helper text ── */
+    .sfda-helper {
+      margin-top:8px; font-size:11px; color:var(--text-muted);
+      line-height:1.6; display:flex; align-items:flex-start; gap:6px;
+    }
+    .sfda-helper i { color:#3b82f6; margin-top:1px; flex-shrink:0; }
+
+    /* ── LIGHTBOX — full-size photo viewer ────────────────────── */
+    .lightbox-overlay {
+      display:none; position:fixed; inset:0; z-index:1000;
+      background:rgba(0,0,0,0.88);
+      align-items:center; justify-content:center;
+      flex-direction:column; gap:14px; padding:24px 16px;
+    }
+    .lightbox-overlay.open { display:flex; }
+    .lightbox-img {
+      max-width:min(860px,92vw); max-height:72vh;
+      object-fit:contain; border-radius:6px;
+      border:2px solid rgba(245,158,11,0.5);
+      box-shadow:0 16px 60px rgba(0,0,0,0.7);
+    }
+    .lightbox-meta {
+      font-family:var(--font-mono); font-size:12px; color:var(--text-sec);
+      text-align:center; max-width:640px;
+    }
+    .lightbox-footer {
+      display:flex; gap:12px; align-items:center;
+    }
+    .lightbox-close {
+      background:transparent; border:1px solid var(--border);
+      color:var(--text-sec); font-family:var(--font-mono); font-size:11px;
+      padding:8px 16px; border-radius:var(--radius); cursor:pointer;
+      transition:all .15s;
+    }
+    .lightbox-close:hover { border-color:var(--text-sec); color:var(--text-pri); }
+    .lightbox-download {
+      background:var(--amber); color:var(--bg-0);
+      font-family:var(--font-mono); font-size:11px; font-weight:700;
+      padding:8px 18px; border:none; border-radius:var(--radius); cursor:pointer;
+      transition:background .15s; display:flex; align-items:center; gap:6px;
+    }
+    .lightbox-download:hover { background:#fbbf24; }
   </style>
 
   <!-- ══ PROMINENT ADD BUTTON ══ -->
@@ -3109,19 +3211,23 @@ app.get('/admin/inventory', (c) => {
               </label>
               <!-- drag-drop / click zone -->
               <div class="img-picker-zone" id="imgPickerZone">
-                <input type="file" id="imgPickerInput" accept="image/jpeg,image/png,image/webp,image/gif"
+                <input type="file" id="imgPickerInput" accept="image/jpeg,image/png,image/webp"
                   onchange="imgPickerHandleFile(this.files[0])"/>
                 <div class="img-picker-icon"><i class="fa fa-image"></i></div>
                 <div class="img-picker-label">Drop photo here, or <span>click to browse</span></div>
-                <div class="img-picker-sub">JPEG · PNG · WebP · max 4 MB</div>
+                <div class="img-picker-sub">JPEG · PNG · WebP · auto-compressed to ≤1 MB</div>
               </div>
               <!-- preview strip after selection -->
               <div class="img-preview-wrap" id="imgPreviewWrap">
-                <img id="imgPreviewThumb" class="img-preview-thumb" src="" alt="Sack label preview"/>
+                <div style="position:relative;flex-shrink:0">
+                  <img id="imgPreviewThumb" class="img-preview-thumb" src="" alt="Sack label preview"
+                    onclick="imgThumbEnlarge()" title="Click to enlarge"/>
+                  <div class="img-enlarge-hint"><i class="fa fa-expand"></i> Click to enlarge</div>
+                </div>
                 <div class="img-preview-info">
                   <div class="img-preview-name" id="imgPreviewName">—</div>
                   <div class="img-preview-size" id="imgPreviewSize">—</div>
-                  <div style="font-size:10px;color:var(--green);margin-top:3px"><i class="fa fa-circle-check"></i> Ready to save</div>
+                  <div style="font-size:10px;color:var(--green);margin-top:3px"><i class="fa fa-circle-check"></i> Ready to save · Auto-compressed ≤1 MB</div>
                 </div>
                 <button type="button" class="img-preview-clear" onclick="imgPickerClear()" title="Remove photo">
                   <i class="fa fa-xmark"></i> Remove
@@ -3222,27 +3328,77 @@ app.get('/admin/inventory', (c) => {
     });
   })();
 
+  /**
+   * imgPickerHandleFile — loads image, compresses to ≤1MB via canvas,
+   * then shows a contained 300px thumbnail with click-to-enlarge.
+   */
   function imgPickerHandleFile(file) {
     if (!file) return;
-    if (file.size > 4 * 1024 * 1024) {
-      alert('Image too large (max 4 MB). Please compress or resize first.');
-      return;
-    }
     if (!file.type.startsWith('image/')) {
-      alert('Only image files accepted (JPEG, PNG, WebP, GIF).');
+      alert('Only image files accepted (JPEG, PNG, WebP).');
       return;
     }
+    if (file.size > 12 * 1024 * 1024) {
+      alert('File too large (max 12 MB source). Please choose a smaller image.');
+      return;
+    }
+
     var reader = new FileReader();
     reader.onload = function(ev) {
-      _imgDataUrl = ev.target.result;
-      document.getElementById('imgPreviewThumb').src = _imgDataUrl;
-      document.getElementById('imgPreviewName').textContent = file.name;
-      document.getElementById('imgPreviewSize').textContent =
-        (file.size / 1024).toFixed(1) + ' KB \u00b7 ' + file.type.split('/')[1].toUpperCase();
-      document.getElementById('imgPreviewWrap').classList.add('visible');
-      document.getElementById('imgPickerZone').style.display = 'none';
+      var img = new Image();
+      img.onload = function() {
+        // ── Canvas compression ─────────────────────────────────
+        var MAX_SIDE = 1600;   // max dimension after resize
+        var TARGET_KB = 900;   // target ≤ 900 KB
+        var w = img.naturalWidth;
+        var h = img.naturalHeight;
+
+        if (w > MAX_SIDE || h > MAX_SIDE) {
+          var ratio = Math.min(MAX_SIDE / w, MAX_SIDE / h);
+          w = Math.round(w * ratio);
+          h = Math.round(h * ratio);
+        }
+
+        var canvas = document.createElement('canvas');
+        canvas.width  = w;
+        canvas.height = h;
+        var ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, w, h);
+
+        // Iteratively lower quality until ≤ TARGET_KB
+        var quality = 0.88;
+        var dataUrl = canvas.toDataURL('image/jpeg', quality);
+        var kb = Math.round(dataUrl.length * 0.75 / 1024);
+        while (kb > TARGET_KB && quality > 0.35) {
+          quality -= 0.08;
+          dataUrl = canvas.toDataURL('image/jpeg', quality);
+          kb = Math.round(dataUrl.length * 0.75 / 1024);
+        }
+        // ──────────────────────────────────────────────────────
+
+        _imgDataUrl = dataUrl;
+
+        // Update thumbnail
+        var thumb = document.getElementById('imgPreviewThumb');
+        thumb.src = dataUrl;
+
+        // Meta info
+        document.getElementById('imgPreviewName').textContent = file.name;
+        document.getElementById('imgPreviewSize').textContent =
+          kb + ' KB (compressed) \u00b7 ' + w + '\u00d7' + h + 'px';
+
+        document.getElementById('imgPreviewWrap').classList.add('visible');
+        document.getElementById('imgPickerZone').style.display = 'none';
+      };
+      img.src = ev.target.result;
     };
     reader.readAsDataURL(file);
+  }
+
+  /** Open the lightbox directly from the form-preview thumbnail */
+  function imgThumbEnlarge() {
+    if (!_imgDataUrl) return;
+    openLightbox('PREVIEW', 'Sack Label Photo', _imgDataUrl);
   }
 
   function imgPickerClear() {
