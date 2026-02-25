@@ -169,12 +169,40 @@ const shell = (title: string, body: string) => `<!DOCTYPE html>
     .badge-MODERATE::before { background:var(--orange); }
     .badge-HIGH     { background:rgba(239,68,68,.1); color:#fb923c; border:1px solid rgba(249,115,22,.4); }
     .badge-HIGH::before     { background:#fb923c; }
-    .badge-PENDING    { background:rgba(59,130,246,.12); color:var(--blue); border:1px solid rgba(59,130,246,.3); }
-    .badge-PENDING::before  { background:var(--blue); }
-    .badge-DISPATCHED { background:var(--amber-glow); color:var(--amber); border:1px solid var(--border-amber); }
-    .badge-DISPATCHED::before { background:var(--amber); }
-    .badge-CANCELLED { background:rgba(113,113,122,0.15); color:#71717a; border:1px solid rgba(113,113,122,0.3); }
-    .badge-CANCELLED::before { background:#71717a; }
+    /* ── Request-status badge colours ──
+       PENDING   = amber  (needs attention)
+       CONFIRMED = green  (unchanged)
+       DISPATCHED= green  (fulfilled)
+       CANCELLED = grey   (inactive / audit)  */
+    .badge-PENDING    { background:var(--amber-glow); color:var(--amber); border:1px solid var(--border-amber); }
+    .badge-PENDING::before  { background:var(--amber); animation:pulse 1.8s ease-in-out infinite; }
+    .badge-DISPATCHED { background:var(--green-dim); color:var(--green); border:1px solid rgba(16,185,129,.3); }
+    .badge-DISPATCHED::before { background:var(--green); }
+    .badge-CANCELLED { background:rgba(63,63,70,0.40); color:#71717a; border:1px solid rgba(113,113,122,0.20); }
+    .badge-CANCELLED::before { background:#52525b; }
+
+    /* ── Cancelled row — dimmed audit style ── */
+    .tr-cancelled td {
+      opacity:0.45;
+      background: repeating-linear-gradient(
+        -45deg,
+        transparent,
+        transparent 6px,
+        rgba(63,63,70,0.08) 6px,
+        rgba(63,63,70,0.08) 7px
+      ) !important;
+    }
+    .tr-cancelled:hover td {
+      background: rgba(63,63,70,0.18) !important;
+      opacity:0.60;
+    }
+    .tr-cancelled .audit-tag {
+      font-family:var(--font-mono); font-size:9px;
+      letter-spacing:1px; text-transform:uppercase;
+      color:#52525b; padding:2px 6px;
+      border:1px solid rgba(113,113,122,0.20);
+      border-radius:2px; white-space:nowrap;
+    }
     @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
 
     /* ── BRANCH CARDS ── */
@@ -1445,19 +1473,27 @@ app.get('/admin/requests', (c) => {
           <tr><th>Req ID</th><th>Cafe</th><th>Lot</th><th>Qty</th><th>Notes</th><th>Submitted</th><th>Status</th><th>Action</th></tr>
         </thead>
         <tbody>
-          ${beanRequests.map(r => `
-          <tr>
-            <td class="mono" style="color:var(--amber)">${r.id}</td>
-            <td><div style="font-weight:500">${r.cafeName}</div><div style="font-size:11px;color:var(--text-muted)">${r.cafeId}</div></td>
-            <td><div style="font-weight:500;font-size:13px">${r.lotOrigin}</div><div class="mono" style="font-size:10px;color:var(--text-muted)">${r.lotId}</div></td>
-            <td class="mono" style="color:var(--amber)">${r.quantityKg} kg</td>
+          ${beanRequests.map(r => {
+            const isCancelled = r.status === 'CANCELLED'
+            return `
+          <tr class="${isCancelled ? 'tr-cancelled' : ''}">
+            <td class="mono" style="color:${isCancelled ? '#52525b' : 'var(--amber)'}">${r.id}</td>
+            <td>
+              <div style="font-weight:500">${r.cafeName}</div>
+              <div style="font-size:11px;color:var(--text-muted)">${r.cafeId}</div>
+            </td>
+            <td>
+              <div style="font-weight:500;font-size:13px">${r.lotOrigin}</div>
+              <div class="mono" style="font-size:10px;color:var(--text-muted)">${r.lotId}</div>
+            </td>
+            <td class="mono" style="color:${isCancelled ? 'var(--text-muted)' : 'var(--amber)'}">${r.quantityKg} kg</td>
             <td style="font-size:12px;color:var(--text-sec);max-width:160px">${r.notes || '—'}</td>
             <td class="mono" style="font-size:10px;color:var(--text-muted)">${r.requestedAt}</td>
             <td><span class="badge badge-${r.status}">${r.status}</span></td>
             <td>
               ${r.status === 'PENDING' ? `
               <form method="POST" action="/admin/requests/${r.id}/confirm" style="display:inline">
-                <button type="submit" style="font-family:var(--font-mono);font-size:10px;padding:5px 10px;background:var(--green-dim);color:var(--green);border:1px solid rgba(16,185,129,.3);border-radius:var(--radius);cursor:pointer;margin-right:4px">CONFIRM</button>
+                <button type="submit" style="font-family:var(--font-mono);font-size:10px;padding:5px 10px;background:var(--green-dim);color:var(--green);border:1px solid rgba(16,185,129,.3);border-radius:var(--radius);cursor:pointer">CONFIRM</button>
               </form>` : ''}
               ${r.status === 'CONFIRMED' ? `
               <form method="POST" action="/admin/requests/${r.id}/dispatch" style="display:inline">
@@ -1467,9 +1503,10 @@ app.get('/admin/requests', (c) => {
               <form method="POST" action="/admin/requests/${r.id}/cancel" style="display:inline">
                 <button type="submit" style="font-family:var(--font-mono);font-size:10px;padding:5px 10px;background:rgba(113,113,122,0.12);color:#a1a1aa;border:1px solid rgba(113,113,122,0.3);border-radius:var(--radius);cursor:pointer">RETURN TO STOCK</button>
               </form>` : ''}
-              ${r.status === 'CANCELLED' ? `<span style="font-size:11px;color:var(--text-muted);font-family:var(--font-mono)">Returned</span>` : ''}
+              ${isCancelled ? `<span class="audit-tag">AUDIT ONLY</span>` : ''}
             </td>
-          </tr>`).join('')}
+          </tr>`
+          }).join('')}
         </tbody>
       </table>
     </div>`}
