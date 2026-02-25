@@ -9,7 +9,11 @@ import {
   calcLiveBalance,
   getFifoLot,
   CATALOG_ORIGINS,
+  CLIMATE_PRESETS,
+  classifyRiskForPreset,
   type CoffeeLot,
+  type Branch,
+  type ClimateType,
   type RoastingInterest,
 } from './data'
 
@@ -1015,7 +1019,7 @@ function adminLayout(pageTitle: string, activeNav: string, content: string, pend
           <i class="fa fa-circle" style="color:var(--green);font-size:8px"></i> System Online
         </div>
         <div class="sidebar-link" style="font-size:11px;color:var(--text-muted)">
-          <i class="fa fa-database"></i> 3 Branches Active
+          <i class="fa fa-database"></i> ${branches.length} Branches Active
         </div>
       </div>
     </nav>
@@ -1486,88 +1490,341 @@ app.get('/admin', (c) => {
 // ── GET /admin/branches ─────────────────────────────────────────
 app.get('/admin/branches', (c) => {
   const pendingCount = beanRequests.filter(r => r.status === 'PENDING').length
+  const filter = (c.req.query('branch') ?? 'all').trim()
+
+  // live lot stats per branch
+  const lotsByBranch = new Map<string, typeof coffeeLots>()
+  for (const b of branches) {
+    lotsByBranch.set(b.name, coffeeLots.filter(l => l.branch === b.name))
+  }
+
+  // aggregate balance for whole inventory (used in stat cards)
+  const bal = calcLiveBalance(coffeeLots, beanRequests)
+
+  // helper: risk colour
+  const riskColor = (r: string) =>
+    r === 'LOW' ? 'var(--green)' : r === 'MODERATE' ? 'var(--orange)' : r === 'HIGH' ? '#fb923c' : 'var(--red)'
+
+  // stat cards at top
+  const totalBranches    = branches.length
+  const criticalCount    = branches.filter(b => b.riskStatus === 'CRITICAL').length
+  const highCount        = branches.filter(b => b.riskStatus === 'HIGH').length
+  const totalActiveLots  = coffeeLots.filter(l => l.status !== 'RECALLED').length
+
+  // branch filter tabs
+  const tabs = [{ id: 'all', label: 'All Branches' }, ...branches.map(b => ({ id: b.name.toLowerCase(), label: b.name }))]
 
   const content = `
-  ${branches.some(b => b.riskStatus === 'CRITICAL') ? `
-  <div class="alert alert-critical">
-    <i class="fa fa-triangle-exclamation"></i>
-    <strong>CRITICAL ALERT:</strong>&nbsp; Dammam branch humidity at ${branches.find(b => b.name === 'Dammam')?.humidity}% — immediate dehumidification required.
-  </div>` : ''}
-  ${branches.some(b => b.riskStatus === 'HIGH') ? `
-  <div class="alert alert-warning">
-    <i class="fa fa-exclamation-triangle"></i>
-    <strong>HIGH RISK:</strong>&nbsp; Jeddah branch humidity elevated — monitor closely.
-  </div>` : ''}
+  <style>
+    /* ── ADD-BRANCH MODAL ── */
+    .branch-modal-overlay {
+      display:none; position:fixed; inset:0; z-index:200;
+      background:rgba(0,0,0,0.72); align-items:center; justify-content:center;
+    }
+    .branch-modal-overlay.open { display:flex; }
+    .branch-modal {
+      background:var(--bg-2); border:1px solid var(--border-amber);
+      border-radius:var(--radius-lg); padding:32px; width:520px; max-width:95vw;
+      max-height:90vh; overflow-y:auto;
+    }
+    .branch-modal-title {
+      font-family:var(--font-mono); font-size:13px; color:var(--amber);
+      letter-spacing:.8px; text-transform:uppercase; margin-bottom:20px;
+      display:flex; align-items:center; gap:10px;
+    }
+    .branch-modal label {
+      display:block; font-size:11px; color:var(--text-sec);
+      text-transform:uppercase; letter-spacing:.6px; margin:14px 0 5px;
+    }
+    .branch-modal input, .branch-modal select {
+      width:100%; padding:9px 12px;
+      background:var(--bg-3); border:1px solid var(--border);
+      color:var(--text-pri); font-size:13px; font-family:var(--font-mono);
+      border-radius:var(--radius); outline:none;
+    }
+    .branch-modal input:focus, .branch-modal select:focus {
+      border-color:var(--amber); box-shadow:0 0 0 2px var(--amber-glow);
+    }
+    .branch-modal-footer {
+      display:flex; gap:10px; justify-content:flex-end; margin-top:24px;
+    }
+    .btn-add-branch {
+      padding:8px 18px; background:var(--amber); color:var(--bg-0);
+      font-family:var(--font-mono); font-size:11px; font-weight:700;
+      letter-spacing:.8px; border:none; border-radius:var(--radius); cursor:pointer;
+    }
+    .btn-add-branch:hover { background:#fbbf24; }
+    .btn-cancel-branch {
+      padding:8px 18px; background:transparent;
+      color:var(--text-sec); font-family:var(--font-mono); font-size:11px;
+      border:1px solid var(--border); border-radius:var(--radius); cursor:pointer;
+    }
+    /* ── EDIT SENSOR MODAL ── */
+    .sensor-modal-overlay {
+      display:none; position:fixed; inset:0; z-index:200;
+      background:rgba(0,0,0,0.72); align-items:center; justify-content:center;
+    }
+    .sensor-modal-overlay.open { display:flex; }
+    .sensor-modal {
+      background:var(--bg-2); border:1px solid rgba(59,130,246,0.4);
+      border-radius:var(--radius-lg); padding:28px; width:420px; max-width:95vw;
+    }
+    .sensor-modal-title {
+      font-family:var(--font-mono); font-size:13px; color:#3b82f6;
+      letter-spacing:.8px; text-transform:uppercase; margin-bottom:18px;
+    }
+    .sensor-modal label {
+      display:block; font-size:11px; color:var(--text-sec);
+      text-transform:uppercase; letter-spacing:.6px; margin:12px 0 4px;
+    }
+    .sensor-modal input {
+      width:100%; padding:9px 12px;
+      background:var(--bg-3); border:1px solid var(--border);
+      color:var(--text-pri); font-size:13px; font-family:var(--font-mono);
+      border-radius:var(--radius); outline:none;
+    }
+    .sensor-modal input:focus { border-color:#3b82f6; box-shadow:0 0 0 2px rgba(59,130,246,0.15); }
+    .sensor-modal-footer { display:flex; gap:10px; justify-content:flex-end; margin-top:20px; }
+    .btn-save-sensor {
+      padding:8px 18px; background:#3b82f6; color:white;
+      font-family:var(--font-mono); font-size:11px; font-weight:700;
+      letter-spacing:.8px; border:none; border-radius:var(--radius); cursor:pointer;
+    }
+    .btn-save-sensor:hover { background:#2563eb; }
+    /* ── BRANCH FILTER TABS ── */
+    .branch-tabs {
+      display:flex; gap:6px; flex-wrap:wrap; margin-bottom:20px;
+    }
+    .branch-tab {
+      padding:6px 14px; font-family:var(--font-mono); font-size:11px;
+      border:1px solid var(--border); border-radius:20px;
+      color:var(--text-sec); background:var(--bg-2); cursor:pointer;
+      text-decoration:none; transition:all .15s;
+    }
+    .branch-tab:hover { border-color:var(--amber); color:var(--amber); text-decoration:none; }
+    .branch-tab.active { background:var(--amber-glow); border-color:var(--amber); color:var(--amber); }
+    /* ── ENHANCED BRANCH CARD ── */
+    .branch-card-v2 {
+      background:var(--bg-2); border:1px solid var(--border);
+      border-radius:var(--radius-lg); overflow:hidden;
+      transition:border-color .15s, transform .15s;
+    }
+    .branch-card-v2:hover { transform:translateY(-1px); }
+    .branch-card-v2.risk-LOW    { border-top:3px solid var(--green); }
+    .branch-card-v2.risk-MODERATE { border-top:3px solid var(--orange); }
+    .branch-card-v2.risk-HIGH   { border-top:3px solid #fb923c; }
+    .branch-card-v2.risk-CRITICAL { border-top:3px solid var(--red); }
+    .bcard-header {
+      padding:16px 18px 10px; display:flex; justify-content:space-between; align-items:flex-start;
+    }
+    .bcard-name { font-weight:600; font-size:15px; color:var(--text-pri); }
+    .bcard-id   { font-family:var(--font-mono); font-size:10px; color:var(--text-muted); margin-top:2px; }
+    .bcard-climate {
+      font-family:var(--font-mono); font-size:10px;
+      padding:3px 8px; border-radius:3px; border:1px solid;
+    }
+    .bcard-climate.Inland  { color:#fbbf24; border-color:rgba(251,191,36,0.3); background:rgba(251,191,36,0.07); }
+    .bcard-climate.Coastal { color:#38bdf8; border-color:rgba(56,189,248,0.3); background:rgba(56,189,248,0.07); }
+    .bcard-metrics { padding:0 18px 14px; display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+    .bcard-metric-box {
+      padding:10px 12px; background:var(--bg-3); border-radius:var(--radius);
+      border:1px solid var(--border);
+    }
+    .bcard-metric-label { font-size:10px; color:var(--text-muted); text-transform:uppercase; letter-spacing:.5px; margin-bottom:4px; }
+    .bcard-metric-val   { font-family:var(--font-mono); font-size:20px; font-weight:700; }
+    .bcard-bar-wrap { padding:0 18px 14px; }
+    .bcard-bar-label { font-size:10px; color:var(--text-muted); display:flex; justify-content:space-between; margin-bottom:4px; }
+    .bcard-bar { height:6px; background:var(--bg-4); border-radius:3px; overflow:hidden; }
+    .bcard-bar-fill { height:100%; border-radius:3px; transition:width .4s; }
+    .bcard-stats { padding:0 18px 14px; display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+    .bcard-stat { font-size:11px; color:var(--text-sec); }
+    .bcard-stat strong { color:var(--text-pri); font-family:var(--font-mono); }
+    .bcard-footer {
+      padding:10px 18px; border-top:1px solid var(--border);
+      display:flex; align-items:center; justify-content:space-between;
+    }
+    .bcard-checked { font-size:10px; color:var(--text-muted); font-family:var(--font-mono); }
+    .btn-edit-sensor {
+      padding:5px 12px; font-family:var(--font-mono); font-size:10px;
+      background:transparent; border:1px solid rgba(59,130,246,0.4);
+      color:#3b82f6; border-radius:var(--radius); cursor:pointer;
+      display:flex; align-items:center; gap:5px;
+    }
+    .btn-edit-sensor:hover { background:rgba(59,130,246,0.1); }
+    /* ── LOTS TABLE BRANCH HIGHLIGHT ── */
+    .branch-section-header {
+      padding:10px 0 6px;
+      font-family:var(--font-mono); font-size:12px; color:var(--amber);
+      border-bottom:1px solid var(--border); margin-bottom:2px;
+      display:flex; align-items:center; gap:8px;
+    }
+  </style>
 
-  <div class="branch-grid" style="margin-bottom:28px">
-    ${branches.map(b => `
-    <div class="branch-card risk-${b.riskStatus}">
-      <div class="branch-name">${b.name}</div>
-      <div class="branch-id">${b.id}</div>
-      <div class="branch-metrics">
-        <div>
-          <div class="branch-metric-label">Humidity</div>
-          <div class="branch-metric-value metric-humidity">${b.humidity}<span style="font-size:14px">%</span></div>
-        </div>
-        <div>
-          <div class="branch-metric-label">Temperature</div>
-          <div class="branch-metric-value metric-temp">${b.temperature}<span style="font-size:14px">°C</span></div>
-        </div>
-      </div>
-      <div class="humidity-bar" style="margin-bottom:12px">
-        <div class="humidity-fill" style="width:${b.humidity}%;background:${
-          b.riskStatus === 'LOW' ? 'var(--green)' :
-          b.riskStatus === 'MODERATE' ? 'var(--orange)' :
-          b.riskStatus === 'HIGH' ? '#fb923c' : 'var(--red)'}"></div>
-      </div>
-      <div class="branch-footer">
-        <div>
-          <div class="branch-footer-info">${b.activeLots} active lots</div>
-          <div class="branch-footer-info">${b.totalGreenKg} kg green / ${applyRoastShrinkage(b.totalGreenKg)} kg roasted</div>
-          <div class="branch-footer-info">Checked: ${b.lastChecked}</div>
-        </div>
-        <span class="badge badge-${b.riskStatus}">${b.riskStatus}</span>
-      </div>
-    </div>`).join('')}
+  <!-- ── ALERTS ── -->
+  ${branches.filter(b => b.riskStatus === 'CRITICAL').map(b => `
+  <div class="alert alert-critical" style="margin-bottom:10px">
+    <i class="fa fa-triangle-exclamation"></i>
+    <strong>CRITICAL:</strong>&nbsp; ${b.name} branch (${b.id}) humidity at <strong>${b.humidity}%</strong> — immediate dehumidification required.
+  </div>`).join('')}
+  ${branches.filter(b => b.riskStatus === 'HIGH').map(b => `
+  <div class="alert alert-warning" style="margin-bottom:10px">
+    <i class="fa fa-exclamation-triangle"></i>
+    <strong>HIGH RISK:</strong>&nbsp; ${b.name} branch humidity at <strong>${b.humidity}%</strong> — dehumidify within 48h.
+  </div>`).join('')}
+
+  <!-- ── TOP STAT STRIP ── -->
+  <div class="stat-grid" style="margin-bottom:24px">
+    <div class="stat-card">
+      <div class="stat-label">Active Branches</div>
+      <div class="stat-value">${totalBranches}</div>
+      <div class="stat-sub">locations online</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label" style="color:var(--red)">Critical / High Risk</div>
+      <div class="stat-value" style="color:${criticalCount > 0 ? 'var(--red)' : 'var(--orange)'}">${criticalCount + highCount}</div>
+      <div class="stat-sub">${criticalCount} critical · ${highCount} high</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Active Lots</div>
+      <div class="stat-value">${totalActiveLots}</div>
+      <div class="stat-sub">across all branches</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Live Green Stock</div>
+      <div class="stat-value">${bal.liveGreenKg.toFixed(1)}<span style="font-size:14px;color:var(--text-sec)"> kg</span></div>
+      <div class="stat-sub">all branches combined</div>
+    </div>
   </div>
 
-  <div class="card">
-    <div class="card-title">Humidity Risk Thresholds</div>
+  <!-- ── PAGE ACTIONS ── -->
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:20px">
+    <div class="branch-tabs">
+      ${tabs.map(t => `<a href="/admin/branches?branch=${t.id}" class="branch-tab ${filter === t.id ? 'active' : ''}">${t.label}</a>`).join('')}
+    </div>
+    <button class="btn-add-branch" onclick="openAddBranchModal()">
+      <i class="fa fa-plus"></i>&nbsp; ADD NEW BRANCH
+    </button>
+  </div>
+
+  <!-- ── BRANCH CARDS GRID ── -->
+  <div class="branch-grid" style="margin-bottom:28px">
+    ${branches
+      .filter(b => filter === 'all' || b.name.toLowerCase() === filter)
+      .map(b => {
+        const bLots = lotsByBranch.get(b.name) ?? []
+        const activeLotCount = bLots.filter(l => l.status !== 'RECALLED').length
+        const recalledCount  = bLots.filter(l => l.status === 'RECALLED').length
+        const greenSum  = bLots.reduce((s, l) => s + l.greenWeightKg, 0)
+        const roastSum  = applyRoastShrinkage(greenSum)
+        const preset    = CLIMATE_PRESETS[b.climateType]
+        const humiColor = riskColor(b.riskStatus)
+        // cafe clients at this branch
+        const localCafes = cafeClients.filter(cl => cl.branch === b.name)
+        return `
+    <div class="branch-card-v2 risk-${b.riskStatus}">
+      <div class="bcard-header">
+        <div>
+          <div class="bcard-name"><i class="fa fa-building" style="color:var(--text-muted);font-size:12px;margin-right:6px"></i>${b.name}</div>
+          <div class="bcard-id">${b.id} · ${b.city}</div>
+        </div>
+        <span class="bcard-climate ${b.climateType}">${b.climateType}</span>
+      </div>
+      <div class="bcard-metrics">
+        <div class="bcard-metric-box">
+          <div class="bcard-metric-label">Humidity</div>
+          <div class="bcard-metric-val" style="color:${humiColor}">${b.humidity}<span style="font-size:13px">%</span></div>
+        </div>
+        <div class="bcard-metric-box">
+          <div class="bcard-metric-label">Temperature</div>
+          <div class="bcard-metric-val" style="color:var(--orange)">${b.temperature}<span style="font-size:13px">°C</span></div>
+        </div>
+      </div>
+      <div class="bcard-bar-wrap">
+        <div class="bcard-bar-label">
+          <span>Humidity Level</span>
+          <span style="color:${humiColor}">${b.riskStatus}</span>
+        </div>
+        <div class="bcard-bar">
+          <div class="bcard-bar-fill" style="width:${b.humidity}%;background:${humiColor}"></div>
+        </div>
+      </div>
+      <div class="bcard-stats">
+        <div class="bcard-stat"><strong>${activeLotCount}</strong> active lots</div>
+        <div class="bcard-stat"><strong>${recalledCount}</strong> recalled lots</div>
+        <div class="bcard-stat"><strong>${greenSum} kg</strong> green total</div>
+        <div class="bcard-stat"><strong>${roastSum} kg</strong> roasted equiv.</div>
+        <div class="bcard-stat" style="grid-column:1/-1"><strong>${localCafes.length}</strong> cafe client${localCafes.length !== 1 ? 's' : ''}${localCafes.length > 0 ? ': ' + localCafes.map(cl => cl.name).join(', ') : ''}</div>
+      </div>
+      <div style="padding:0 18px 14px">
+        <div style="font-size:10px;color:var(--text-muted);margin-bottom:4px">CLIMATE ADVISORY</div>
+        <div style="font-size:11px;color:var(--text-sec);line-height:1.5">${preset.storageAdvice}</div>
+        <div style="font-size:10px;color:${humiColor};margin-top:4px">${preset.acuteRiskNote}</div>
+      </div>
+      <div class="bcard-footer">
+        <div class="bcard-checked"><i class="fa fa-clock" style="margin-right:4px"></i>Checked: ${b.lastChecked}</div>
+        <button class="btn-edit-sensor" onclick="openSensorModal('${b.id}','${b.name}',${b.humidity},${b.temperature})">
+          <i class="fa fa-sliders"></i> Update Sensors
+        </button>
+      </div>
+    </div>`}).join('')}
+  </div>
+
+  <!-- ── RISK THRESHOLD LEGEND ── -->
+  <div class="card" style="margin-bottom:24px">
+    <div class="card-title"><i class="fa fa-triangle-exclamation" style="color:var(--amber);margin-right:6px"></i>Humidity Risk Thresholds</div>
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;padding-top:8px">
       ${[
-        { label: 'LOW',      range: '< 50%',  color: 'var(--green)',  desc: 'Ideal storage conditions'    },
-        { label: 'MODERATE', range: '50–61%', color: 'var(--orange)', desc: 'Monitor weekly'              },
-        { label: 'HIGH',     range: '62–74%', color: '#fb923c',       desc: 'Dehumidify within 48h'       },
-        { label: 'CRITICAL', range: '≥ 75%',  color: 'var(--red)',    desc: 'Immediate action required'   },
+        { label: 'LOW',      range: '< 50%',  color: 'var(--green)',  desc: 'Ideal conditions — standard ventilation' },
+        { label: 'MODERATE', range: '50–61%', color: 'var(--orange)', desc: 'Monitor weekly'                          },
+        { label: 'HIGH',     range: '62–74%', color: '#fb923c',       desc: 'Dehumidify within 48h'                   },
+        { label: 'CRITICAL', range: '≥ 75%',  color: 'var(--red)',    desc: 'Immediate action required'               },
       ].map(t => `
       <div style="padding:14px;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius-lg)">
         <span class="badge badge-${t.label}">${t.label}</span>
-        <div style="font-family:var(--font-mono);font-size:18px;color:${t.color};margin:8px 0 2px">${t.range}</div>
+        <div style="font-family:var(--font-mono);font-size:20px;color:${t.color};margin:8px 0 2px">${t.range}</div>
         <div style="font-size:11px;color:var(--text-muted)">${t.desc}</div>
       </div>`).join('')}
     </div>
   </div>
 
-  <div class="divider"></div>
-
+  <!-- ── LOTS BY BRANCH TABLE ── -->
   <div class="card">
-    <div class="card-title">Lots by Branch</div>
+    <div class="card-title" style="display:flex;align-items:center;justify-content:space-between">
+      <span><i class="fa fa-list" style="color:var(--amber);margin-right:8px"></i>Lots by Branch</span>
+      <span style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted)">${coffeeLots.length} total lots</span>
+    </div>
     <div class="table-wrap">
       <table>
         <thead>
-          <tr><th>Lot ID</th><th>Origin</th><th>Green</th><th>Roasted</th><th>Roast Date</th><th>Status</th><th>Grade</th></tr>
+          <tr>
+            <th>Lot ID</th>
+            <th>Origin</th>
+            <th>Branch</th>
+            <th>Green</th>
+            <th>Roasted</th>
+            <th>Roast Date</th>
+            <th>Expiry</th>
+            <th>Status</th>
+            <th>Grade</th>
+          </tr>
         </thead>
         <tbody>
-          ${branches.flatMap(b => coffeeLots.filter(l => l.branch === b.name).map(l => `
-          <tr>
-            <td class="mono" style="color:var(--amber)">${l.id}</td>
+          ${branches
+            .filter(b => filter === 'all' || b.name.toLowerCase() === filter)
+            .flatMap(b => coffeeLots.filter(l => l.branch === b.name).map(l => `
+          <tr style="${l.status === 'RECALLED' ? 'opacity:.5' : ''}">
+            <td class="mono" style="color:${l.status === 'RECALLED' ? 'var(--red)' : 'var(--amber)'}">${l.id}</td>
             <td>
               <div style="font-weight:500;font-size:13px">${l.origin}</div>
-              <div style="font-size:11px;color:var(--amber)">${b.name}</div>
+              <div style="font-size:10px;color:var(--text-muted)">${l.variety} · ${l.process}</div>
+            </td>
+            <td>
+              <span style="font-size:11px;padding:2px 7px;border-radius:3px;background:var(--bg-3);border:1px solid var(--border)">${b.name}</span>
             </td>
             <td class="mono">${l.greenWeightKg} kg</td>
             <td class="mono" style="color:var(--amber)">${l.roastedWeightKg} kg</td>
             <td class="mono" style="font-size:11px;color:var(--text-muted)">${l.roastDate}</td>
+            <td class="mono" style="font-size:11px;color:var(--text-muted)">${l.expiryDate}</td>
             <td><span class="badge badge-${l.status}">${l.status}</span></td>
             <td>
               <div class="score-bar">
@@ -1579,9 +1836,202 @@ app.get('/admin/branches', (c) => {
         </tbody>
       </table>
     </div>
-  </div>`
+  </div>
+
+  <!-- ══ ADD NEW BRANCH MODAL ══ -->
+  <div class="branch-modal-overlay" id="addBranchOverlay">
+    <div class="branch-modal">
+      <div class="branch-modal-title"><i class="fa fa-plus-circle"></i> Add New Branch</div>
+      <form id="addBranchForm" onsubmit="submitAddBranch(event)">
+        <label>Branch Name</label>
+        <input type="text" name="name" placeholder="e.g. Khobar" required/>
+        <label>City</label>
+        <input type="text" name="city" placeholder="e.g. Al Khobar" required/>
+        <label>Climate Type</label>
+        <select name="climateType">
+          <option value="Inland">Inland — Arid (Riyadh pattern, low humidity)</option>
+          <option value="Coastal">Coastal — Humid (Jeddah / Dammam pattern)</option>
+        </select>
+        <label>Initial Humidity (%)</label>
+        <input type="number" name="humidity" min="0" max="100" placeholder="e.g. 52" required/>
+        <label>Initial Temperature (°C)</label>
+        <input type="number" name="temperature" min="0" max="60" placeholder="e.g. 24" required/>
+        <div style="margin-top:16px;padding:12px;background:var(--bg-3);border-radius:var(--radius);font-size:11px;color:var(--text-sec);line-height:1.6">
+          <i class="fa fa-circle-info" style="color:var(--amber);margin-right:6px"></i>
+          The risk status is <strong>auto-calculated</strong> from humidity using the selected climate preset thresholds.
+          A new Branch ID will be assigned automatically.
+        </div>
+        <div class="branch-modal-footer">
+          <button type="button" class="btn-cancel-branch" onclick="closeAddBranchModal()">CANCEL</button>
+          <button type="submit" class="btn-add-branch"><i class="fa fa-check"></i>&nbsp; CONFIRM ADD</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ══ UPDATE SENSOR MODAL ══ -->
+  <div class="sensor-modal-overlay" id="sensorOverlay">
+    <div class="sensor-modal">
+      <div class="sensor-modal-title"><i class="fa fa-sliders"></i> Update Sensor Reading — <span id="sensorBranchName"></span></div>
+      <form id="sensorForm" onsubmit="submitSensorUpdate(event)">
+        <input type="hidden" name="branchId" id="sensorBranchId"/>
+        <label>Humidity (%)</label>
+        <input type="number" name="humidity" id="sensorHumidity" min="0" max="100" required/>
+        <label>Temperature (°C)</label>
+        <input type="number" name="temperature" id="sensorTemperature" min="0" max="60" required/>
+        <div class="sensor-modal-footer">
+          <button type="button" class="btn-cancel-branch" onclick="closeSensorModal()">CANCEL</button>
+          <button type="submit" class="btn-save-sensor"><i class="fa fa-check"></i>&nbsp; SAVE READING</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+  // ── Add Branch modal ──────────────────────────────────────────
+  function openAddBranchModal() {
+    document.getElementById('addBranchOverlay').classList.add('open')
+  }
+  function closeAddBranchModal() {
+    document.getElementById('addBranchOverlay').classList.remove('open')
+    document.getElementById('addBranchForm').reset()
+  }
+  async function submitAddBranch(e) {
+    e.preventDefault()
+    const fd   = new FormData(e.target)
+    const body = Object.fromEntries(fd.entries())
+    const res  = await fetch('/admin/branches/add', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(body),
+    })
+    if (res.ok) {
+      closeAddBranchModal()
+      window.location.reload()
+    } else {
+      const err = await res.json().catch(() => ({ error: 'Unknown error' }))
+      alert('Error: ' + (err.error ?? 'Could not add branch'))
+    }
+  }
+
+  // ── Update Sensor modal ───────────────────────────────────────
+  function openSensorModal(id, name, humidity, temperature) {
+    document.getElementById('sensorBranchName').textContent = name
+    document.getElementById('sensorBranchId').value         = id
+    document.getElementById('sensorHumidity').value         = humidity
+    document.getElementById('sensorTemperature').value      = temperature
+    document.getElementById('sensorOverlay').classList.add('open')
+  }
+  function closeSensorModal() {
+    document.getElementById('sensorOverlay').classList.remove('open')
+  }
+  async function submitSensorUpdate(e) {
+    e.preventDefault()
+    const fd = new FormData(e.target)
+    const branchId    = fd.get('branchId')
+    const humidity    = parseFloat(fd.get('humidity'))
+    const temperature = parseFloat(fd.get('temperature'))
+    const res = await fetch('/admin/branches/' + branchId + '/update', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ humidity, temperature }),
+    })
+    if (res.ok) {
+      closeSensorModal()
+      window.location.reload()
+    } else {
+      const err = await res.json().catch(() => ({ error: 'Unknown error' }))
+      alert('Error: ' + (err.error ?? 'Could not update sensor'))
+    }
+  }
+
+  // Close modals on backdrop click
+  document.getElementById('addBranchOverlay').addEventListener('click', function(e) {
+    if (e.target === this) closeAddBranchModal()
+  })
+  document.getElementById('sensorOverlay').addEventListener('click', function(e) {
+    if (e.target === this) closeSensorModal()
+  })
+  </script>`
 
   return c.html(adminLayout('Branch Monitor', 'branches', content, pendingCount))
+})
+
+// ── POST /admin/branches/add ─────────────────────────────────────
+// Adds a new branch. Calculates risk status from humidity + climate preset.
+app.post('/admin/branches/add', async (c) => {
+  let body: Record<string, string>
+  try {
+    body = await c.req.json()
+  } catch {
+    return c.json({ error: 'Invalid JSON body' }, 400)
+  }
+
+  const { name, city, climateType, humidity: humRaw, temperature: tempRaw } = body
+  if (!name || !name.trim()) return c.json({ error: 'Branch name is required' }, 400)
+  if (!city || !city.trim()) return c.json({ error: 'City is required' }, 400)
+  if (climateType !== 'Inland' && climateType !== 'Coastal')
+    return c.json({ error: 'climateType must be Inland or Coastal' }, 400)
+
+  const humidity    = parseFloat(humRaw)
+  const temperature = parseFloat(tempRaw)
+  if (isNaN(humidity)    || humidity    < 0 || humidity    > 100) return c.json({ error: 'humidity must be 0–100' }, 400)
+  if (isNaN(temperature) || temperature < 0 || temperature > 60)  return c.json({ error: 'temperature must be 0–60' }, 400)
+
+  // Duplicate name check
+  if (branches.some(b => b.name.toLowerCase() === name.trim().toLowerCase()))
+    return c.json({ error: `Branch "${name.trim()}" already exists` }, 409)
+
+  // Auto-generate a unique ID (BR-XXX)
+  const idNum  = branches.length + 1
+  const padded = String(idNum).padStart(3, '0')
+  const newId  = 'BR-' + name.trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 3) + padded
+
+  const riskStatus = classifyRiskForPreset(humidity, climateType as ClimateType)
+
+  const newBranch: Branch = {
+    id:           newId,
+    name:         name.trim(),
+    city:         city.trim(),
+    climateType:  climateType as ClimateType,
+    humidity,
+    temperature,
+    lastChecked:  new Date().toISOString().replace('T', ' ').slice(0, 16),
+    riskStatus,
+    activeLots:   0,
+    totalGreenKg: 0,
+  }
+
+  branches.push(newBranch)
+  return c.json({ ok: true, branch: newBranch }, 201)
+})
+
+// ── POST /admin/branches/:id/update ─────────────────────────────
+// Updates humidity + temperature for a branch; recalculates risk status.
+app.post('/admin/branches/:id/update', async (c) => {
+  const id = c.req.param('id')
+  const branch = branches.find(b => b.id === id)
+  if (!branch) return c.json({ error: `Branch ${id} not found` }, 404)
+
+  let body: Record<string, number>
+  try {
+    body = await c.req.json()
+  } catch {
+    return c.json({ error: 'Invalid JSON body' }, 400)
+  }
+
+  const { humidity, temperature } = body
+  if (typeof humidity !== 'number' || humidity < 0 || humidity > 100)
+    return c.json({ error: 'humidity must be 0–100' }, 400)
+  if (typeof temperature !== 'number' || temperature < 0 || temperature > 60)
+    return c.json({ error: 'temperature must be 0–60' }, 400)
+
+  branch.humidity    = humidity
+  branch.temperature = temperature
+  branch.riskStatus  = classifyRiskForPreset(humidity, branch.climateType)
+  branch.lastChecked = new Date().toISOString().replace('T', ' ').slice(0, 16)
+
+  return c.json({ ok: true, branch })
 })
 
 // ── GET /admin/inventory/template ──────────────────────────────

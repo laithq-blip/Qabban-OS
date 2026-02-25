@@ -27,14 +27,76 @@ export interface CoffeeLot {
   recallInfo?: RecallInfo    // populated when status === 'RECALLED'
 }
 
+// ─── Climate Presets ──────────────────────────────────────────────────────────
+// Two regional climate archetypes used to auto-configure new branches.
+// Inland  = Riyadh pattern  — arid, low humidity, LOW baseline risk
+// Coastal = Jeddah / Dammam — humid, higher baseline, escalates faster
+export type ClimateType = 'Inland' | 'Coastal'
+
+export interface ClimatePreset {
+  type:            ClimateType
+  label:           string          // display name
+  description:     string
+  typicalHumidity: number          // seeded on creation
+  typicalTemp:     number
+  // Risk thresholds (humidity %) — override classifyHumidityRisk defaults
+  threshLow:       number          // below this → LOW
+  threshModerate:  number          // below this → MODERATE
+  threshHigh:      number          // below this → HIGH
+  // ≥ threshHigh → CRITICAL
+  acuteRiskNote:   string          // shown on card
+  storageAdvice:   string
+}
+
+export const CLIMATE_PRESETS: Record<ClimateType, ClimatePreset> = {
+  Inland: {
+    type:            'Inland',
+    label:           'Inland — Arid',
+    description:     'Continental / desert interior. Low ambient humidity year-round. Risk escalates sharply only during rare humid spells or poor ventilation.',
+    typicalHumidity: 40,
+    typicalTemp:     24,
+    threshLow:       50,   // < 50 % → LOW
+    threshModerate:  62,   // 50–61 % → MODERATE
+    threshHigh:      75,   // 62–74 % → HIGH  (≥75 → CRITICAL)
+    acuteRiskNote:   'Risk: CRITICAL if humidity ≥ 75 % — rare but rapid mould onset',
+    storageAdvice:   'Standard ventilation sufficient. Check sensors weekly.',
+  },
+  Coastal: {
+    type:            'Coastal',
+    label:           'Coastal — Humid',
+    description:     'Sea-facing or Gulf coast location. Consistently elevated humidity. Requires active dehumidification and tighter monitoring cadence.',
+    typicalHumidity: 65,
+    typicalTemp:     28,
+    threshLow:       45,   // < 45 % → LOW   (tighter band)
+    threshModerate:  55,   // 45–54 % → MODERATE
+    threshHigh:      65,   // 55–64 % → HIGH  (≥65 → CRITICAL)
+    acuteRiskNote:   'Risk: CRITICAL if humidity ≥ 65 % — dehumidify immediately',
+    storageAdvice:   'Active dehumidification required. Daily sensor checks.',
+  },
+}
+
+// Re-export a preset-aware risk classifier so new branches use correct thresholds
+export const classifyRiskForPreset = (
+  humidity: number,
+  climate: ClimateType
+): Branch['riskStatus'] => {
+  const p = CLIMATE_PRESETS[climate]
+  if (humidity <  p.threshLow)      return 'LOW'
+  if (humidity <  p.threshModerate) return 'MODERATE'
+  if (humidity <  p.threshHigh)     return 'HIGH'
+  return 'CRITICAL'
+}
+
 export interface Branch {
-  id: string
-  name: 'Riyadh' | 'Jeddah' | 'Dammam'
-  humidity: number
+  id:          string
+  name:        string          // widened from union — supports user-added branches
+  city:        string
+  climateType: ClimateType
+  humidity:    number
   temperature: number
   lastChecked: string
-  riskStatus: 'LOW' | 'MODERATE' | 'HIGH' | 'CRITICAL'
-  activeLots: number
+  riskStatus:  'LOW' | 'MODERATE' | 'HIGH' | 'CRITICAL'
+  activeLots:  number
   totalGreenKg: number
 }
 
@@ -368,33 +430,39 @@ export const coffeeLots: CoffeeLot[] = [
 // ─── Mock branches ─────────────────────────────────────────────────────────
 export const branches: Branch[] = [
   {
-    id: 'BR-RUH',
-    name: 'Riyadh',
-    humidity: 45,
+    id:          'BR-RUH',
+    name:        'Riyadh',
+    city:        'Riyadh',
+    climateType: 'Inland',
+    humidity:    45,
     temperature: 22,
     lastChecked: '2026-02-24 08:30',
-    riskStatus: 'LOW',
-    activeLots: coffeeLots.filter(l => l.branch === 'Riyadh').length,
+    riskStatus:  'LOW',
+    activeLots:  coffeeLots.filter(l => l.branch === 'Riyadh').length,
     totalGreenKg: coffeeLots.filter(l => l.branch === 'Riyadh').reduce((s, l) => s + l.greenWeightKg, 0),
   },
   {
-    id: 'BR-JED',
-    name: 'Jeddah',
-    humidity: 68,
+    id:          'BR-JED',
+    name:        'Jeddah',
+    city:        'Jeddah',
+    climateType: 'Coastal',
+    humidity:    68,
     temperature: 26,
     lastChecked: '2026-02-24 08:28',
-    riskStatus: 'HIGH',
-    activeLots: coffeeLots.filter(l => l.branch === 'Jeddah').length,
+    riskStatus:  'HIGH',
+    activeLots:  coffeeLots.filter(l => l.branch === 'Jeddah').length,
     totalGreenKg: coffeeLots.filter(l => l.branch === 'Jeddah').reduce((s, l) => s + l.greenWeightKg, 0),
   },
   {
-    id: 'BR-DMM',
-    name: 'Dammam',
-    humidity: 80,
+    id:          'BR-DMM',
+    name:        'Dammam',
+    city:        'Dammam',
+    climateType: 'Coastal',
+    humidity:    80,
     temperature: 28,
     lastChecked: '2026-02-24 08:25',
-    riskStatus: 'CRITICAL',
-    activeLots: coffeeLots.filter(l => l.branch === 'Dammam').length,
+    riskStatus:  'CRITICAL',
+    activeLots:  coffeeLots.filter(l => l.branch === 'Dammam').length,
     totalGreenKg: coffeeLots.filter(l => l.branch === 'Dammam').reduce((s, l) => s + l.greenWeightKg, 0),
   },
 ]
