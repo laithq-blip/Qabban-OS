@@ -693,6 +693,104 @@ const shell = (title: string, body: string) => `<!DOCTYPE html>
     }
     @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
 
+    /* ══ BULK IMPORT ══════════════════════════════════════════════ */
+    /* Upload zone — dashed amber border, lights up on drag-over */
+    .import-zone {
+      border:2px dashed rgba(245,158,11,0.35);
+      border-radius:var(--radius-lg);
+      padding:32px 24px;
+      text-align:center;
+      cursor:pointer;
+      transition:all .25s;
+      background:var(--bg-2);
+      position:relative;
+    }
+    .import-zone:hover,
+    .import-zone.drag-over {
+      border-color:var(--amber);
+      background:rgba(245,158,11,0.06);
+    }
+    .import-zone input[type="file"] {
+      position:absolute; inset:0; opacity:0; cursor:pointer; width:100%; height:100%;
+    }
+    .import-zone-icon {
+      font-size:32px; color:var(--amber); margin-bottom:10px; display:block;
+    }
+    .import-zone-label {
+      font-family:var(--font-mono); font-size:13px; color:var(--text-sec);
+      margin-bottom:4px;
+    }
+    .import-zone-sub {
+      font-size:11px; color:var(--text-muted);
+    }
+    /* Template download pill */
+    .import-template-link {
+      display:inline-flex; align-items:center; gap:6px;
+      font-family:var(--font-mono); font-size:11px;
+      color:var(--amber); padding:5px 12px;
+      border:1px solid var(--border-amber); border-radius:var(--radius);
+      background:var(--amber-glow); text-decoration:none; transition:all .2s;
+      white-space:nowrap;
+    }
+    .import-template-link:hover {
+      background:var(--amber); color:var(--bg-0); text-decoration:none;
+    }
+    /* Column mapping grid */
+    .import-map-grid {
+      display:grid;
+      grid-template-columns:repeat(auto-fill,minmax(200px,1fr));
+      gap:12px;
+      margin:14px 0;
+    }
+    /* Preview table — compact, scrollable */
+    .import-preview-wrap {
+      max-height:320px; overflow-y:auto;
+      border:1px solid var(--border); border-radius:var(--radius);
+      margin-top:16px;
+    }
+    .import-preview-wrap table thead th {
+      position:sticky; top:0;
+      background:var(--bg-3); color:var(--amber);
+      font-family:var(--font-mono); font-size:10px;
+      padding:7px 12px; white-space:nowrap;
+    }
+    .import-preview-wrap table tbody tr:nth-child(even) td {
+      background:rgba(255,255,255,0.015);
+    }
+    /* Row validation states */
+    .import-row-ok  td:first-child  { border-left:2px solid var(--green); }
+    .import-row-err td:first-child  { border-left:2px solid var(--red); }
+    .import-row-warn td:first-child { border-left:2px solid var(--orange); }
+    /* Calculated column highlight */
+    .import-calc-col { color:var(--amber); font-family:var(--font-mono); }
+    /* Import progress bar */
+    .import-progress-bar {
+      height:4px; background:var(--bg-4); border-radius:2px;
+      overflow:hidden; margin:10px 0;
+    }
+    .import-progress-fill {
+      height:100%; background:var(--amber);
+      border-radius:2px; transition:width .4s ease;
+    }
+    /* Import summary pills */
+    .import-summary {
+      display:flex; gap:10px; flex-wrap:wrap; margin-top:12px;
+    }
+    .import-pill {
+      font-family:var(--font-mono); font-size:11px; font-weight:600;
+      padding:4px 10px; border-radius:var(--radius);
+      display:inline-flex; align-items:center; gap:5px;
+    }
+    .import-pill-ok   { background:var(--green-dim);  color:var(--green);  border:1px solid rgba(16,185,129,.3); }
+    .import-pill-skip { background:var(--orange-dim); color:var(--orange); border:1px solid rgba(249,115,22,.3); }
+    .import-pill-err  { background:var(--red-dim);    color:var(--red);    border:1px solid rgba(239,68,68,.3);  }
+    /* Section header with action buttons */
+    .import-header-row {
+      display:flex; align-items:center; justify-content:space-between;
+      flex-wrap:wrap; gap:12px; margin-bottom:16px;
+    }
+    /* ══ END BULK IMPORT ══════════════════════════════════════════ */
+
     /* ── MOBILE NAV ── */
     .mobile-nav {
       display:none; position:fixed; bottom:0; left:0; right:0; z-index:100;
@@ -1486,6 +1584,207 @@ app.get('/admin/branches', (c) => {
   return c.html(adminLayout('Branch Monitor', 'branches', content, pendingCount))
 })
 
+// ── GET /admin/inventory/template ──────────────────────────────
+// Streams a CSV template file so owners know the exact column format.
+// Includes 2 example rows with real master-ledger origins.
+app.get('/admin/inventory/template', (c) => {
+  const VALID_ORIGINS = [
+    'Ethiopia Yirgacheffe',
+    'Brazil Cerrado',
+    'Colombia Huila',
+    'Yemen Khawlani',
+    'Kenya AA',
+    'Indonesia Sumatra',
+  ].join(' | ')
+
+  const csv = [
+    // ── Header row ─────────────────────────────────────────────
+    'Lot ID,Origin,Variety,Process,Green Weight (kg),Roast Date (YYYY-MM-DD),Expiry Date (YYYY-MM-DD),Branch,Grade Score (0-100),Flavor Note 1,Flavor Note 2',
+    // ── Example row 1 ──────────────────────────────────────────
+    'LOT-009,Ethiopia Yirgacheffe,Heirloom,Natural,300,2026-03-01,2026-06-01,Riyadh,90,Blueberry,Jasmine',
+    // ── Example row 2 ──────────────────────────────────────────
+    'LOT-010,Yemen Khawlani,Heirloom,Natural,200,2026-03-05,2026-06-05,Jeddah,88,Spices,Dried Fruits',
+    // ── Reminder row (starts with #, will be skipped on import) ─
+    `# Valid Origins: ${VALID_ORIGINS}`,
+    `# Valid Branches: Riyadh | Jeddah | Dammam`,
+    `# Live Roasted Balance is AUTO-CALCULATED on import: Green Weight × 0.82`,
+    `# Rows starting with # are ignored`,
+  ].join('\r\n')
+
+  return new Response(csv, {
+    headers: {
+      'Content-Type':        'text/csv; charset=utf-8',
+      'Content-Disposition': 'attachment; filename="qabban-os-lot-import-template.csv"',
+    },
+  })
+})
+
+// ── POST /admin/inventory/import ────────────────────────────────
+// Accepts a multipart/form-data upload with field name "csvFile".
+// Parses CSV, maps columns, validates each row, applies 0.82 formula,
+// and appends valid rows to coffeeLots in-memory.
+// Returns JSON: { imported, skipped, errors[] }
+app.post('/admin/inventory/import', async (c) => {
+  let csvText = ''
+
+  try {
+    const form = await c.req.formData()
+    const file = form.get('csvFile') as File | null
+    if (!file || file.size === 0) {
+      return c.json({ error: 'No file received' }, 400)
+    }
+    // Accept .csv and .txt; reject obvious binary formats
+    const name = file.name?.toLowerCase() ?? ''
+    if (name.endsWith('.xlsx') || name.endsWith('.xls')) {
+      return c.json({
+        error: 'Excel (.xlsx/.xls) cannot be parsed server-side in this edge runtime. ' +
+               'Please save your file as CSV (UTF-8) first, then re-upload.',
+        hint:  'In Excel: File → Save As → CSV UTF-8 (Comma delimited)',
+      }, 415)
+    }
+    csvText = await file.text()
+  } catch {
+    return c.json({ error: 'Failed to read uploaded file' }, 400)
+  }
+
+  // ── Parse CSV ─────────────────────────────────────────────────
+  const lines   = csvText.split(/\r?\n/).filter(l => l.trim() && !l.trimStart().startsWith('#'))
+  if (lines.length < 2) {
+    return c.json({ error: 'File must have a header row and at least one data row' }, 400)
+  }
+
+  // Normalise header → column index map (case-insensitive, trim whitespace)
+  const headerCells = lines[0].split(',').map(h => h.trim().toLowerCase())
+  const col = (names: string[]): number => {
+    for (const n of names) {
+      const idx = headerCells.indexOf(n.toLowerCase())
+      if (idx !== -1) return idx
+    }
+    return -1
+  }
+
+  const iLotId    = col(['lot id','lot_id','lotid','id'])
+  const iOrigin   = col(['origin'])
+  const iVariety  = col(['variety'])
+  const iProcess  = col(['process'])
+  const iGreen    = col(['green weight (kg)','green weight','green_weight','greenweight','green weight kg'])
+  const iRoast    = col(['roast date (yyyy-mm-dd)','roast date','roast_date','roastdate'])
+  const iExpiry   = col(['expiry date (yyyy-mm-dd)','expiry date','expiry_date','expirydate','expiry'])
+  const iBranch   = col(['branch'])
+  const iGrade    = col(['grade score (0-100)','grade score','grade_score','gradescore','grade'])
+  const iFlavor1  = col(['flavor note 1','flavor_note_1','flavor1','flavour1','tasting 1'])
+  const iFlavor2  = col(['flavor note 2','flavor_note_2','flavor2','flavour2','tasting 2'])
+
+  if (iLotId === -1 || iOrigin === -1 || iGreen === -1) {
+    return c.json({
+      error:   'Required columns not found: "Lot ID", "Origin", "Green Weight (kg)"',
+      headers: headerCells,
+      hint:    'Download the template to see the exact column names.',
+    }, 422)
+  }
+
+  const VALID_BRANCHES = new Set(['Riyadh', 'Jeddah', 'Dammam'])
+  const now = new Date().toISOString().slice(0, 10)
+
+  const imported: string[]    = []
+  const skipped:  string[]    = []
+  const errors:   { row: number; lotId: string; reason: string }[] = []
+
+  const dataLines = lines.slice(1)
+
+  for (let i = 0; i < dataLines.length; i++) {
+    const rowNum = i + 2   // 1-indexed, accounting for header
+    // Simple CSV split — handles quoted fields containing commas
+    const cells = dataLines[i].split(',').map(c => c.trim().replace(/^"|"$/g, ''))
+    const get   = (idx: number) => (idx >= 0 && idx < cells.length) ? cells[idx].trim() : ''
+
+    const lotId    = get(iLotId)
+    const origin   = get(iOrigin)
+    const greenRaw = get(iGreen)
+
+    // ── Required field checks ─────────────────────────────────
+    if (!lotId) {
+      errors.push({ row: rowNum, lotId: '—', reason: 'Missing Lot ID' })
+      continue
+    }
+    if (!origin) {
+      errors.push({ row: rowNum, lotId, reason: 'Missing Origin' })
+      continue
+    }
+    const greenKg = parseFloat(greenRaw)
+    if (isNaN(greenKg) || greenKg <= 0) {
+      errors.push({ row: rowNum, lotId, reason: `Invalid Green Weight: "${greenRaw}"` })
+      continue
+    }
+
+    // ── Duplicate Lot ID check ────────────────────────────────
+    if (coffeeLots.some(l => l.id === lotId)) {
+      skipped.push(`${lotId} (duplicate — already exists)`)
+      continue
+    }
+
+    // ── Branch validation & fallback ─────────────────────────
+    let branch = get(iBranch) as 'Riyadh' | 'Jeddah' | 'Dammam'
+    if (!VALID_BRANCHES.has(branch)) branch = 'Riyadh'
+
+    // ── Dates ────────────────────────────────────────────────
+    const roastDate  = get(iRoast)  || now
+    // Default expiry = 90 days after roast date
+    const expiryDate = get(iExpiry) || (() => {
+      const d = new Date(roastDate)
+      d.setDate(d.getDate() + 90)
+      return d.toISOString().slice(0, 10)
+    })()
+
+    // ── Grade score ───────────────────────────────────────────
+    let grade = parseInt(get(iGrade), 10)
+    if (isNaN(grade) || grade < 0 || grade > 100) grade = 80
+
+    // ── Flavor notes ─────────────────────────────────────────
+    const flavor1 = get(iFlavor1)
+    const flavor2 = get(iFlavor2)
+    const flavorNotes = [flavor1, flavor2].filter(Boolean)
+    if (flavorNotes.length === 0) flavorNotes.push('—')
+
+    // ── Live Roasted Balance: apply 0.82 formula ─────────────
+    const roastedWeightKg = applyRoastShrinkage(greenKg)
+
+    // ── Determine status (OPTIMAL unless grade < 75) ─────────
+    const status: 'OPTIMAL' | 'MONITOR' | 'CRITICAL' =
+      grade >= 80 ? 'OPTIMAL' : grade >= 70 ? 'MONITOR' : 'CRITICAL'
+
+    const newLot: CoffeeLot = {
+      id:              lotId,
+      origin,
+      variety:         get(iVariety)  || 'Unknown',
+      process:         get(iProcess)  || 'Unknown',
+      greenWeightKg:   Math.round(greenKg * 10) / 10,
+      roastedWeightKg,
+      roastDate,
+      expiryDate,
+      status,
+      flavorNotes,
+      branch,
+      gradeScore:      grade,
+    }
+
+    coffeeLots.push(newLot)
+    imported.push(lotId)
+  }
+
+  return c.json({
+    success:        true,
+    imported:       imported.length,
+    importedLotIds: imported,
+    skipped:        skipped.length,
+    skippedDetails: skipped,
+    errors:         errors.length,
+    errorDetails:   errors,
+    formula:        'roastedWeightKg = greenWeightKg × 0.82',
+    totalLots:      coffeeLots.length,
+  })
+})
+
 // ── GET /admin/inventory ────────────────────────────────────────
 app.get('/admin/inventory', (c) => {
   const pendingCount = beanRequests.filter(r => r.status === 'PENDING').length
@@ -1544,6 +1843,442 @@ app.get('/admin/inventory', (c) => {
       </div>
     </div>
   </div>
+
+  </div>
+  <!-- ══ end balance equation ══ -->
+
+  <!-- ══ BULK IMPORT ══════════════════════════════════════════════════ -->
+  <div class="card" style="margin-bottom:24px" id="bulkImportCard">
+
+    <!-- Header row: title + download template link -->
+    <div class="import-header-row">
+      <div>
+        <div class="card-title" style="margin-bottom:2px">
+          <i class="fa fa-file-arrow-up" style="color:var(--amber)"></i>
+          Bulk Import — Upload CSV
+          <span style="font-family:var(--font-mono);font-size:9px;padding:2px 7px;border-radius:2px;background:rgba(245,158,11,0.12);color:var(--amber);border:1px solid rgba(245,158,11,0.35);margin-left:6px">BATCH</span>
+        </div>
+        <div style="font-size:12px;color:var(--text-muted)">
+          Import multiple lots at once. Live Roasted Balance is auto-calculated for every row using the <strong style="color:var(--amber)">× 0.82 formula</strong>.
+        </div>
+      </div>
+      <a class="import-template-link" href="/admin/inventory/template" download="qabban-os-lot-import-template.csv">
+        <i class="fa fa-download"></i> Download Template
+      </a>
+    </div>
+
+    <!-- Drag-and-drop upload zone -->
+    <div class="import-zone" id="importZone">
+      <input type="file" id="importFileInput" accept=".csv,.txt" onchange="importHandleFile(this.files[0])"/>
+      <i class="fa fa-cloud-arrow-up import-zone-icon"></i>
+      <div class="import-zone-label">Drop your CSV file here, or <span style="color:var(--amber)">click to browse</span></div>
+      <div class="import-zone-sub">Accepts .csv files &nbsp;·&nbsp; Max 5 MB &nbsp;·&nbsp; Excel: save as CSV first</div>
+    </div>
+
+    <!-- Progress bar (hidden until upload starts) -->
+    <div id="importProgressWrap" style="display:none;margin-top:12px">
+      <div style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted);margin-bottom:4px" id="importProgressLabel">Parsing…</div>
+      <div class="import-progress-bar">
+        <div class="import-progress-fill" id="importProgressFill" style="width:0%"></div>
+      </div>
+    </div>
+
+    <!-- Column mapping panel (hidden until file is chosen) -->
+    <div id="importMapPanel" style="display:none;margin-top:18px">
+      <div style="font-family:var(--font-mono);font-size:10px;color:var(--amber);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">
+        <i class="fa fa-table-columns"></i> &nbsp;Detected Columns — Mapping to Ledger Fields
+      </div>
+      <div class="import-map-grid" id="importMapGrid"></div>
+    </div>
+
+    <!-- Preview table (hidden until file parsed) -->
+    <div id="importPreviewPanel" style="display:none;margin-top:4px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:8px">
+        <div style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px">
+          <i class="fa fa-eye"></i> &nbsp;Preview — Rows to be Imported
+        </div>
+        <div class="import-summary" id="importSummaryPills"></div>
+      </div>
+      <div class="import-preview-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th style="min-width:90px">Lot ID</th>
+              <th style="min-width:160px">Origin</th>
+              <th style="min-width:100px">Variety</th>
+              <th style="min-width:100px">Process</th>
+              <th style="min-width:90px">Branch</th>
+              <th style="min-width:110px">Green (kg)</th>
+              <th style="min-width:120px;color:var(--amber)">⟹ Roasted (kg) ×0.82</th>
+              <th style="min-width:100px">Roast Date</th>
+              <th style="min-width:100px">Expiry</th>
+              <th style="min-width:60px">Grade</th>
+              <th style="min-width:80px">Status</th>
+              <th style="min-width:140px">Flavor Notes</th>
+              <th style="min-width:60px">Check</th>
+            </tr>
+          </thead>
+          <tbody id="importPreviewBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Action buttons (hidden until preview ready) -->
+    <div id="importActionRow" style="display:none;margin-top:16px;display:none">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <button
+          id="importConfirmBtn"
+          onclick="importConfirm()"
+          style="font-family:var(--font-mono);font-size:12px;font-weight:700;padding:10px 20px;background:var(--amber);color:var(--bg-0);border:none;border-radius:var(--radius);cursor:pointer;transition:all .2s;letter-spacing:.5px"
+        >
+          <i class="fa fa-check-double"></i> &nbsp;IMPORT ALL VALID ROWS
+        </button>
+        <button
+          onclick="importReset()"
+          style="font-family:var(--font-mono);font-size:11px;padding:10px 16px;background:transparent;color:var(--text-muted);border:1px solid var(--border);border-radius:var(--radius);cursor:pointer;transition:all .2s"
+          onmouseover="this.style.color='var(--red)';this.style.borderColor='var(--red)'"
+          onmouseout="this.style.color='var(--text-muted)';this.style.borderColor='var(--border)'"
+        >
+          <i class="fa fa-xmark"></i> &nbsp;CLEAR
+        </button>
+        <span id="importRowCount" style="font-family:var(--font-mono);font-size:11px;color:var(--text-muted)"></span>
+      </div>
+    </div>
+
+    <!-- Result banner (shown after server responds) -->
+    <div id="importResultBanner" style="display:none;margin-top:16px"></div>
+
+  </div>
+  <!-- ══ end BULK IMPORT ══ -->
+
+  <script>
+  /* ═══════════════════════════════════════════════════════════════
+     BULK IMPORT — client-side logic
+     1. User picks / drops a CSV file
+     2. JS parses it, maps columns, applies ×0.82, renders preview
+     3. User clicks IMPORT — JS POSTs the raw file to /admin/inventory/import
+     4. Server response shown as result banner
+  ═══════════════════════════════════════════════════════════════ */
+
+  // ── Drag-and-drop wiring ──────────────────────────────────────
+  (function(){
+    var zone = document.getElementById('importZone');
+    zone.addEventListener('dragover', function(e){
+      e.preventDefault();
+      zone.classList.add('drag-over');
+    });
+    zone.addEventListener('dragleave', function(){
+      zone.classList.remove('drag-over');
+    });
+    zone.addEventListener('drop', function(e){
+      e.preventDefault();
+      zone.classList.remove('drag-over');
+      var files = e.dataTransfer.files;
+      if (files && files[0]) importHandleFile(files[0]);
+    });
+  })();
+
+  var _importFile   = null;   // raw File object
+  var _importRows   = [];     // parsed row objects ready to send
+
+  // ── Column name aliases ──────────────────────────────────────
+  var COL_MAP = {
+    lotId:    ['lot id','lot_id','lotid','id'],
+    origin:   ['origin'],
+    variety:  ['variety'],
+    process:  ['process'],
+    green:    ['green weight (kg)','green weight','green_weight','greenweight','green weight kg'],
+    roast:    ['roast date (yyyy-mm-dd)','roast date','roast_date','roastdate'],
+    expiry:   ['expiry date (yyyy-mm-dd)','expiry date','expiry_date','expirydate','expiry'],
+    branch:   ['branch'],
+    grade:    ['grade score (0-100)','grade score','grade_score','gradescore','grade'],
+    flavor1:  ['flavor note 1','flavor_note_1','flavor1','flavour1','tasting 1'],
+    flavor2:  ['flavor note 2','flavor_note_2','flavor2','flavour2','tasting 2'],
+  };
+
+  function importFindCol(headers, names) {
+    for (var j = 0; j < names.length; j++) {
+      var idx = headers.indexOf(names[j].toLowerCase());
+      if (idx !== -1) return idx;
+    }
+    return -1;
+  }
+
+  function importHandleFile(file) {
+    if (!file) return;
+    // Size guard (5 MB)
+    if (file.size > 5 * 1024 * 1024) {
+      importShowError('File too large (max 5 MB). Please trim the CSV and try again.');
+      return;
+    }
+    _importFile = file;
+    importSetProgress(10, 'Reading file…');
+    document.getElementById('importProgressWrap').style.display = 'block';
+
+    var reader = new FileReader();
+    reader.onload = function(e) {
+      importSetProgress(40, 'Parsing rows…');
+      setTimeout(function(){
+        importParseAndPreview(e.target.result);
+      }, 60);
+    };
+    reader.onerror = function(){
+      importShowError('Could not read the file. Try a different CSV.');
+    };
+    reader.readAsText(file, 'UTF-8');
+  }
+
+  function importSetProgress(pct, label) {
+    document.getElementById('importProgressFill').style.width  = pct + '%';
+    document.getElementById('importProgressLabel').textContent = label;
+  }
+
+  function importParseAndPreview(text) {
+    // Split into lines, skip comments and blanks
+    var lines = text.split(/\\r?\\n/).filter(function(l){
+      return l.trim() && !l.trimStart().startsWith('#');
+    });
+    if (lines.length < 2) {
+      importShowError('File must contain a header row and at least one data row.');
+      return;
+    }
+
+    var headers = lines[0].split(',').map(function(h){ return h.trim().replace(/^"|"$/g,'').toLowerCase(); });
+
+    // Resolve column indices
+    var ci = {};
+    for (var k in COL_MAP) ci[k] = importFindCol(headers, COL_MAP[k]);
+
+    // Required columns check
+    if (ci.lotId === -1 || ci.origin === -1 || ci.green === -1) {
+      importShowError(
+        'Required columns not found. Need at least: "Lot ID", "Origin", "Green Weight (kg)".\\n' +
+        'Detected headers: ' + headers.join(', ') + '\\n' +
+        'Download the template for the exact format.'
+      );
+      return;
+    }
+
+    // Render column mapping panel
+    importRenderMapPanel(headers, ci);
+
+    // Parse data rows
+    var okCount   = 0;
+    var warnCount = 0;
+    var errCount  = 0;
+    var rows      = [];
+    var today     = new Date().toISOString().slice(0,10);
+
+    for (var i = 1; i < lines.length; i++) {
+      var cells = lines[i].split(',').map(function(c){ return c.trim().replace(/^"|"$/g,''); });
+      var get   = function(idx){ return (idx >= 0 && idx < cells.length) ? cells[idx].trim() : ''; };
+
+      var lotId    = get(ci.lotId);
+      var origin   = get(ci.origin);
+      var greenRaw = get(ci.green);
+
+      var rowError = null;
+      if (!lotId)   rowError = 'Missing Lot ID';
+      else if (!origin)  rowError = 'Missing Origin';
+      else {
+        var g = parseFloat(greenRaw);
+        if (isNaN(g) || g <= 0) rowError = 'Invalid Green Weight: "' + greenRaw + '"';
+      }
+
+      var greenKg     = rowError ? 0 : parseFloat(greenRaw);
+      var roasted     = rowError ? 0 : Math.round(greenKg * 0.82 * 10) / 10;
+      var grade       = parseInt(get(ci.grade), 10);
+      if (isNaN(grade) || grade < 0 || grade > 100) grade = 80;
+      var status      = grade >= 80 ? 'OPTIMAL' : grade >= 70 ? 'MONITOR' : 'CRITICAL';
+      var branch      = get(ci.branch) || 'Riyadh';
+      var roastDate   = get(ci.roast)  || today;
+      var expiryDate  = get(ci.expiry) || '';
+      if (!expiryDate) {
+        var d = new Date(roastDate);
+        d.setDate(d.getDate() + 90);
+        expiryDate = d.toISOString().slice(0,10);
+      }
+      var flavor1     = get(ci.flavor1) || '';
+      var flavor2     = get(ci.flavor2) || '';
+      var flavorStr   = [flavor1, flavor2].filter(Boolean).join(', ') || '—';
+      var isDuplicate = false; // can't check client-side without full lot list
+
+      var rowState = rowError ? 'err' : 'ok';
+      if (rowError) errCount++; else okCount++;
+
+      rows.push({
+        lotId, origin, variety: get(ci.variety) || 'Unknown',
+        process: get(ci.process) || 'Unknown', branch,
+        greenKg, roasted, roastDate, expiryDate, grade, status, flavorStr,
+        rowState, rowError,
+      });
+    }
+
+    _importRows = rows;
+    importSetProgress(90, 'Building preview…');
+
+    // Render preview table
+    var tbody = document.getElementById('importPreviewBody');
+    tbody.innerHTML = rows.map(function(r, idx){
+      var stateClass = 'import-row-' + r.rowState;
+      var statusBadgeColor = r.status === 'OPTIMAL' ? 'var(--green)' :
+                             r.status === 'MONITOR'  ? 'var(--orange)' : 'var(--red)';
+      return '<tr class="' + stateClass + '">' +
+        '<td class="mono" style="color:var(--amber);font-size:11px">' + (r.lotId||'—') + '</td>' +
+        '<td style="font-size:12px;font-weight:500">'  + (r.origin||'—')   + '</td>' +
+        '<td style="font-size:11px;color:var(--text-sec)">'  + r.variety   + '</td>' +
+        '<td style="font-size:11px;color:var(--text-sec)">'  + r.process   + '</td>' +
+        '<td style="font-size:11px">'                         + r.branch    + '</td>' +
+        '<td class="mono" style="font-size:12px">'            + (r.greenKg||'?') + ' kg</td>' +
+        '<td class="import-calc-col" style="font-weight:700;font-size:12px">' +
+          (r.rowState==='ok' ? r.roasted + ' kg <span style=\\"font-size:9px;color:var(--text-muted)\\">×0.82</span>' : '—') +
+        '</td>' +
+        '<td class="mono" style="font-size:11px;color:var(--text-muted)">' + r.roastDate  + '</td>' +
+        '<td class="mono" style="font-size:11px;color:var(--text-muted)">' + r.expiryDate + '</td>' +
+        '<td class="mono" style="font-size:11px">'             + r.grade    + '</td>' +
+        '<td><span style="font-family:var(--font-mono);font-size:9px;padding:2px 6px;border-radius:2px;border:1px solid;color:' + statusBadgeColor + ';border-color:' + statusBadgeColor + '40">' + r.status + '</span></td>' +
+        '<td style="font-size:11px;color:var(--text-sec)">'   + r.flavorStr + '</td>' +
+        '<td style="text-align:center">' +
+          (r.rowState === 'ok'
+            ? '<i class="fa fa-circle-check" style="color:var(--green)"></i>'
+            : '<i class="fa fa-circle-xmark" title="' + (r.rowError||'') + '" style="color:var(--red);cursor:help"></i>') +
+        '</td>' +
+      '</tr>';
+    }).join('');
+
+    // Summary pills
+    var pills = document.getElementById('importSummaryPills');
+    pills.innerHTML =
+      (okCount  > 0 ? '<span class="import-pill import-pill-ok"><i class="fa fa-check"></i>' + okCount   + ' ready</span>'   : '') +
+      (errCount > 0 ? '<span class="import-pill import-pill-err"><i class="fa fa-xmark"></i>' + errCount  + ' errors</span>'  : '') +
+      (warnCount > 0? '<span class="import-pill import-pill-skip"><i class="fa fa-warning"></i>' + warnCount + ' warnings</span>' : '');
+
+    document.getElementById('importRowCount').textContent =
+      rows.length + ' row' + (rows.length !== 1 ? 's' : '') + ' detected';
+
+    importSetProgress(100, 'Preview ready');
+    document.getElementById('importPreviewPanel').style.display  = 'block';
+    document.getElementById('importActionRow').style.display     = 'flex';
+
+    if (okCount === 0) {
+      document.getElementById('importConfirmBtn').disabled = true;
+      document.getElementById('importConfirmBtn').style.opacity = '0.4';
+      document.getElementById('importConfirmBtn').style.cursor  = 'not-allowed';
+    }
+  }
+
+  function importRenderMapPanel(headers, ci) {
+    var LABELS = {
+      lotId:'Lot ID', origin:'Origin', variety:'Variety',
+      process:'Process', green:'Green Weight', roast:'Roast Date',
+      expiry:'Expiry Date', branch:'Branch', grade:'Grade Score',
+      flavor1:'Flavor 1', flavor2:'Flavor 2',
+    };
+    var html = '';
+    for (var k in ci) {
+      var found    = ci[k] !== -1;
+      var colName  = found ? headers[ci[k]] : '—';
+      var required = k === 'lotId' || k === 'origin' || k === 'green';
+      var color    = found ? 'var(--green)' : required ? 'var(--red)' : 'var(--text-muted)';
+      html += '<div style="background:var(--bg-3);border:1px solid var(--border);border-radius:var(--radius);padding:8px 12px">' +
+        '<div style="font-size:9px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:3px">' + LABELS[k] + (required ? ' *' : '') + '</div>' +
+        '<div style="font-family:var(--font-mono);font-size:11px;color:' + color + '">' +
+          '<i class="fa ' + (found ? 'fa-circle-check' : 'fa-circle-xmark') + '"></i> ' +
+          (found ? '"' + colName + '"' : 'not found') +
+        '</div>' +
+      '</div>';
+    }
+    document.getElementById('importMapGrid').innerHTML = html;
+    document.getElementById('importMapPanel').style.display = 'block';
+  }
+
+  function importShowError(msg) {
+    var b = document.getElementById('importResultBanner');
+    b.style.display = 'block';
+    b.innerHTML =
+      '<div style="background:var(--red-dim);border:1px solid rgba(239,68,68,0.3);border-radius:var(--radius);padding:12px 16px;color:var(--red);font-size:12px;white-space:pre-wrap;font-family:var(--font-mono)">' +
+      '<i class="fa fa-circle-xmark"></i> &nbsp;' + msg + '</div>';
+    document.getElementById('importProgressWrap').style.display = 'none';
+  }
+
+  function importReset() {
+    _importFile = null;
+    _importRows = [];
+    document.getElementById('importFileInput').value = '';
+    document.getElementById('importProgressWrap').style.display  = 'none';
+    document.getElementById('importMapPanel').style.display      = 'none';
+    document.getElementById('importPreviewPanel').style.display  = 'none';
+    document.getElementById('importActionRow').style.display     = 'none';
+    document.getElementById('importResultBanner').style.display  = 'none';
+    document.getElementById('importPreviewBody').innerHTML        = '';
+    document.getElementById('importMapGrid').innerHTML            = '';
+    document.getElementById('importSummaryPills').innerHTML       = '';
+  }
+
+  function importConfirm() {
+    if (!_importFile) { importShowError('No file loaded. Please re-upload.'); return; }
+    var validCount = _importRows.filter(function(r){ return r.rowState === 'ok'; }).length;
+    if (validCount === 0) { importShowError('No valid rows to import.'); return; }
+
+    var btn = document.getElementById('importConfirmBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> &nbsp;IMPORTING…';
+    importSetProgress(20, 'Uploading to server…');
+    document.getElementById('importProgressWrap').style.display = 'block';
+
+    var fd = new FormData();
+    fd.append('csvFile', _importFile);
+
+    fetch('/admin/inventory/import', { method: 'POST', body: fd })
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        importSetProgress(100, 'Done');
+        var b = document.getElementById('importResultBanner');
+        b.style.display = 'block';
+
+        if (d.error) {
+          b.innerHTML =
+            '<div style="background:var(--red-dim);border:1px solid rgba(239,68,68,0.3);border-radius:var(--radius);padding:14px 18px">' +
+              '<div style="font-family:var(--font-mono);font-size:12px;color:var(--red);font-weight:700;margin-bottom:4px"><i class="fa fa-circle-xmark"></i> Import Failed</div>' +
+              '<div style="font-size:12px;color:var(--text-sec)">' + d.error + '</div>' +
+              (d.hint ? '<div style="margin-top:6px;font-size:11px;color:var(--text-muted);font-family:var(--font-mono)">' + d.hint + '</div>' : '') +
+            '</div>';
+          btn.disabled = false;
+          btn.innerHTML = '<i class="fa fa-check-double"></i> &nbsp;IMPORT ALL VALID ROWS';
+          return;
+        }
+
+        b.innerHTML =
+          '<div style="background:var(--green-dim);border:1px solid rgba(16,185,129,0.3);border-radius:var(--radius);padding:14px 18px">' +
+            '<div style="font-family:var(--font-mono);font-size:12px;color:var(--green);font-weight:700;margin-bottom:8px"><i class="fa fa-circle-check"></i> &nbsp;Import Complete</div>' +
+            '<div class="import-summary" style="margin-bottom:10px">' +
+              '<span class="import-pill import-pill-ok"><i class="fa fa-check"></i>' + d.imported + ' lots imported</span>' +
+              (d.skipped > 0 ? '<span class="import-pill import-pill-skip"><i class="fa fa-forward"></i>' + d.skipped + ' skipped (duplicates)</span>' : '') +
+              (d.errors  > 0 ? '<span class="import-pill import-pill-err"><i class="fa fa-xmark"></i>' + d.errors  + ' rows had errors</span>' : '') +
+            '</div>' +
+            (d.imported > 0 ? '<div style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted)">Lots added: ' + (d.importedLotIds||[]).join(', ') + '</div>' : '') +
+            '<div style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted);margin-top:4px">Formula applied: roasted = green × 0.82 &nbsp;·&nbsp; Total lots in system: ' + d.totalLots + '</div>' +
+            (d.imported > 0 ? '<div style="margin-top:10px"><a href="/admin/inventory" style="font-family:var(--font-mono);font-size:11px;color:var(--green)"><i class="fa fa-rotate-right"></i> Reload page to see updated inventory →</a></div>' : '') +
+          '</div>';
+
+        if (d.errorDetails && d.errorDetails.length > 0) {
+          var errHtml = '<div style="margin-top:10px;background:var(--red-dim);border:1px solid rgba(239,68,68,0.2);border-radius:var(--radius);padding:12px 16px">' +
+            '<div style="font-family:var(--font-mono);font-size:10px;color:var(--red);margin-bottom:6px">Row Errors:</div>';
+          d.errorDetails.forEach(function(e){
+            errHtml += '<div style="font-size:11px;color:var(--text-sec);margin-bottom:2px">Row ' + e.row + ' &nbsp;[' + e.lotId + ']&nbsp; → ' + e.reason + '</div>';
+          });
+          errHtml += '</div>';
+          b.innerHTML += errHtml;
+        }
+      })
+      .catch(function(err){
+        importShowError('Network error: ' + err.message);
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa fa-check-double"></i> &nbsp;IMPORT ALL VALID ROWS';
+      });
+  }
+  </script>
+  <!-- ══ end BULK IMPORT script ══ -->
 
   <!-- ══ FIFO LOG NEW ROAST ══ -->
   <div class="card" style="margin-bottom:24px">
