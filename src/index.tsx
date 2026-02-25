@@ -2235,6 +2235,91 @@ app.post('/admin/inventory/import', async (c) => {
   })
 })
 
+// ── POST /admin/inventory/add ───────────────────────────────────
+// Manual single-lot entry. Applies ×0.82 formula, inherits branch
+// climate risk status, returns the new lot as JSON.
+app.post('/admin/inventory/add', async (c) => {
+  let body: Record<string, string>
+  try { body = await c.req.json() }
+  catch { return c.json({ error: 'Invalid JSON body' }, 400) }
+
+  const {
+    id: lotId, origin, variety, process: proc,
+    branch, greenWeightRaw, arrivalDate,
+    grade: gradeRaw, flavor1, flavor2, notes,
+  } = body
+
+  // ── Required field validation ─────────────────────────────────
+  if (!lotId?.trim())         return c.json({ error: 'Lot ID is required' }, 400)
+  if (!origin?.trim())        return c.json({ error: 'Origin is required' }, 400)
+  const VALID_BRANCHES = ['Riyadh', 'Jeddah', 'Dammam', ...branches.filter(b => !['Riyadh','Jeddah','Dammam'].includes(b.name)).map(b => b.name)]
+  if (!branch || !VALID_BRANCHES.includes(branch))
+    return c.json({ error: 'Invalid branch' }, 400)
+
+  const greenKg = parseFloat(greenWeightRaw)
+  if (isNaN(greenKg) || greenKg <= 0)
+    return c.json({ error: `Invalid green weight: "${greenWeightRaw}"` }, 400)
+
+  // ── Duplicate check ───────────────────────────────────────────
+  if (coffeeLots.some(l => l.id === lotId.trim()))
+    return c.json({ error: `Lot ID "${lotId.trim()}" already exists` }, 409)
+
+  // ── Build new lot ─────────────────────────────────────────────
+  const grade = (() => { const g = parseInt(gradeRaw, 10); return (!isNaN(g) && g >= 0 && g <= 100) ? g : 80 })()
+  const status: 'OPTIMAL' | 'MONITOR' | 'CRITICAL' =
+    grade >= 80 ? 'OPTIMAL' : grade >= 70 ? 'MONITOR' : 'CRITICAL'
+
+  const today      = new Date().toISOString().slice(0, 10)
+  const roastDate  = arrivalDate?.trim() || today
+  const expiryDate = (() => {
+    const d = new Date(roastDate); d.setDate(d.getDate() + 90)
+    return d.toISOString().slice(0, 10)
+  })()
+
+  const flavorNotes = [flavor1, flavor2].map(f => f?.trim()).filter(Boolean) as string[]
+  if (flavorNotes.length === 0) flavorNotes.push('—')
+
+  // ── Climate Sync: look up branch to get risk status ───────────
+  const branchRecord   = branches.find(b => b.name === branch)
+  const climatePreset  = branchRecord ? CLIMATE_PRESETS[branchRecord.climateType] : null
+  const branchRisk     = branchRecord?.riskStatus ?? 'LOW'
+  const climateWarning = branchRecord && branchRecord.riskStatus !== 'LOW'
+    ? `Branch ${branch} is currently at ${branchRisk} humidity risk (${branchRecord.humidity}%). Monitor storage conditions closely.`
+    : null
+
+  const newLot: CoffeeLot = {
+    id:              lotId.trim(),
+    origin:          origin.trim(),
+    variety:         variety?.trim() || 'Unknown',
+    process:         proc?.trim()    || 'Unknown',
+    greenWeightKg:   Math.round(greenKg * 10) / 10,
+    roastedWeightKg: applyRoastShrinkage(greenKg),
+    roastDate,
+    expiryDate,
+    status,
+    flavorNotes,
+    branch:          branch as 'Riyadh' | 'Jeddah' | 'Dammam',
+    gradeScore:      grade,
+  }
+
+  coffeeLots.push(newLot)
+
+  // Update branch aggregate stats
+  if (branchRecord) {
+    branchRecord.activeLots  = coffeeLots.filter(l => l.branch === branch && l.status !== 'RECALLED').length
+    branchRecord.totalGreenKg = coffeeLots.filter(l => l.branch === branch).reduce((s, l) => s + l.greenWeightKg, 0)
+  }
+
+  return c.json({
+    ok: true,
+    lot: newLot,
+    roastedWeightKg: newLot.roastedWeightKg,
+    branchRisk,
+    climateWarning,
+    totalLots: coffeeLots.length,
+  }, 201)
+})
+
 // ── GET /admin/inventory ────────────────────────────────────────
 app.get('/admin/inventory', (c) => {
   const pendingCount = beanRequests.filter(r => r.status === 'PENDING').length
@@ -2248,7 +2333,163 @@ app.get('/admin/inventory', (c) => {
     coffeeLots.filter(l => l.status !== 'RECALLED').map(l => l.origin)
   )].sort()
 
+  // ── Branch data for climate sync ──────────────────────────────
+  const branchClimateData = branches.map(b => ({
+    name:        b.name,
+    riskStatus:  b.riskStatus,
+    humidity:    b.humidity,
+    temperature: b.temperature,
+    climateType: b.climateType,
+    acuteNote:   CLIMATE_PRESETS[b.climateType].acuteRiskNote,
+    storageAdvice: CLIMATE_PRESETS[b.climateType].storageAdvice,
+  }))
+
+  // ── Auto-suggest next lot ID ──────────────────────────────────
+  const existingNums = coffeeLots
+    .map(l => parseInt(l.id.replace('LOT-', ''), 10))
+    .filter(n => !isNaN(n))
+  const nextNum    = existingNums.length > 0 ? Math.max(...existingNums) + 1 : 1
+  const suggestedId = 'LOT-' + String(nextNum).padStart(3, '0')
+
   const content = `
+  <style>
+    /* ── ADD LOT MODAL ─────────────────────────────────────────── */
+    .addlot-overlay {
+      display:none; position:fixed; inset:0; z-index:300;
+      background:rgba(0,0,0,0.78); align-items:flex-start;
+      justify-content:center; padding:32px 16px; overflow-y:auto;
+    }
+    .addlot-overlay.open { display:flex; }
+    .addlot-modal {
+      background:var(--bg-2); border:1px solid var(--border-amber);
+      border-radius:10px; width:640px; max-width:100%;
+      box-shadow:0 24px 60px rgba(0,0,0,0.6);
+      animation: modalSlideIn .22s ease-out;
+    }
+    @keyframes modalSlideIn { from{opacity:0;transform:translateY(-16px)} to{opacity:1;transform:translateY(0)} }
+    .addlot-header {
+      padding:22px 28px 16px;
+      border-bottom:1px solid var(--border);
+      display:flex; align-items:center; justify-content:space-between;
+    }
+    .addlot-title {
+      font-family:var(--font-mono); font-size:13px; color:var(--amber);
+      letter-spacing:.8px; text-transform:uppercase;
+      display:flex; align-items:center; gap:10px;
+    }
+    .addlot-close {
+      background:none; border:none; color:var(--text-muted);
+      font-size:18px; cursor:pointer; padding:4px;
+      transition:color .15s;
+    }
+    .addlot-close:hover { color:var(--text-pri); }
+    .addlot-body { padding:24px 28px; }
+    .addlot-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+    .addlot-grid .full-width { grid-column:1/-1; }
+    .addlot-label {
+      display:block; font-size:10px; color:var(--text-sec);
+      text-transform:uppercase; letter-spacing:.7px; margin-bottom:5px;
+      display:flex; align-items:center; gap:5px;
+    }
+    .addlot-label .req { color:var(--red); }
+    .addlot-input, .addlot-select, .addlot-textarea {
+      width:100%; padding:10px 13px;
+      background:var(--bg-3); border:1px solid var(--border);
+      color:var(--text-pri); font-size:13px; font-family:var(--font-mono);
+      border-radius:var(--radius); outline:none; transition:border-color .15s;
+    }
+    .addlot-input:focus, .addlot-select:focus, .addlot-textarea:focus {
+      border-color:var(--amber); box-shadow:0 0 0 2px var(--amber-glow);
+    }
+    .addlot-input.error { border-color:var(--red) !important; }
+    .addlot-input::placeholder { color:var(--text-muted); }
+    .addlot-select option { background:var(--bg-3); }
+    /* ── live formula preview ── */
+    .roast-preview {
+      margin-top:8px; padding:11px 14px;
+      background:var(--bg-1); border:1px solid var(--border-amber);
+      border-radius:var(--radius);
+      font-family:var(--font-mono); font-size:12px;
+      display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+    }
+    .roast-preview-val { color:var(--amber); font-size:16px; font-weight:700; }
+    .roast-preview-label { color:var(--text-muted); font-size:10px; }
+    /* ── climate sync banner ── */
+    .climate-banner {
+      margin-top:14px; padding:13px 16px;
+      border-radius:var(--radius); border-left:3px solid;
+      font-size:12px; line-height:1.6;
+      display:none;
+    }
+    .climate-banner.LOW      { border-color:var(--green);  background:var(--green-dim); }
+    .climate-banner.MODERATE { border-color:var(--orange); background:var(--orange-dim); }
+    .climate-banner.HIGH     { border-color:#fb923c;       background:rgba(249,115,22,0.1); }
+    .climate-banner.CRITICAL { border-color:var(--red);    background:var(--red-dim); }
+    .climate-badge-inline {
+      display:inline-block; font-family:var(--font-mono); font-size:9px;
+      padding:2px 7px; border-radius:2px; border:1px solid; margin-left:6px;
+      vertical-align:middle; text-transform:uppercase;
+    }
+    /* ── add lot footer ── */
+    .addlot-footer {
+      padding:16px 28px 22px;
+      border-top:1px solid var(--border);
+      display:flex; align-items:center; justify-content:space-between; gap:12px;
+      flex-wrap:wrap;
+    }
+    .addlot-footer-meta { font-family:var(--font-mono); font-size:10px; color:var(--text-muted); }
+    .addlot-footer-actions { display:flex; gap:10px; }
+    .btn-addlot-submit {
+      padding:10px 22px; background:var(--amber); color:var(--bg-0);
+      font-family:var(--font-mono); font-size:12px; font-weight:700;
+      letter-spacing:.6px; border:none; border-radius:var(--radius);
+      cursor:pointer; transition:background .15s;
+      display:flex; align-items:center; gap:7px;
+    }
+    .btn-addlot-submit:hover { background:#fbbf24; }
+    .btn-addlot-submit:disabled { opacity:.45; cursor:not-allowed; }
+    .btn-addlot-cancel {
+      padding:10px 18px; background:transparent;
+      color:var(--text-sec); font-family:var(--font-mono); font-size:11px;
+      border:1px solid var(--border); border-radius:var(--radius); cursor:pointer;
+      transition:all .15s;
+    }
+    .btn-addlot-cancel:hover { border-color:var(--text-sec); color:var(--text-pri); }
+    /* ── result banner ── */
+    #addlotResultBanner { display:none; margin-top:14px; }
+    /* ── header action row ── */
+    .inv-action-row {
+      display:flex; align-items:center; justify-content:space-between;
+      flex-wrap:wrap; gap:12px; margin-bottom:22px;
+    }
+    .btn-add-green-lot {
+      padding:10px 20px; background:var(--amber); color:var(--bg-0);
+      font-family:var(--font-mono); font-size:12px; font-weight:700;
+      letter-spacing:.6px; border:none; border-radius:var(--radius);
+      cursor:pointer; transition:background .15s;
+      display:inline-flex; align-items:center; gap:8px;
+      box-shadow: 0 0 14px rgba(245,158,11,0.25);
+    }
+    .btn-add-green-lot:hover { background:#fbbf24; box-shadow:0 0 20px rgba(245,158,11,0.4); }
+  </style>
+
+  <!-- ══ PROMINENT ADD BUTTON ══ -->
+  <div class="inv-action-row">
+    <div>
+      <div style="font-size:13px;color:var(--text-sec)">
+        <span style="color:var(--amber);font-family:var(--font-mono)">${coffeeLots.length}</span> lots in ledger
+        &nbsp;·&nbsp;
+        <span style="color:var(--amber);font-family:var(--font-mono)">${coffeeLots.filter(l=>l.status!=='RECALLED').length}</span> active
+        &nbsp;·&nbsp;
+        <span style="color:var(--red);font-family:var(--font-mono)">${coffeeLots.filter(l=>l.status==='RECALLED').length}</span> recalled
+      </div>
+    </div>
+    <button class="btn-add-green-lot" onclick="openAddLotModal()">
+      <i class="fa fa-circle-plus"></i>
+      ADD NEW GREEN LOT
+    </button>
+  </div>
+
   <div class="stat-grid" style="margin-bottom:28px">
     <div class="stat-card">
       <div class="stat-label">Live Green Balance</div>
@@ -2729,6 +2970,376 @@ app.get('/admin/inventory', (c) => {
   }
   </script>
   <!-- ══ end BULK IMPORT script ══ -->
+
+  <!-- ══ ADD NEW GREEN LOT MODAL ══════════════════════════════════ -->
+  <div class="addlot-overlay" id="addLotOverlay">
+    <div class="addlot-modal">
+
+      <!-- Header -->
+      <div class="addlot-header">
+        <div class="addlot-title">
+          <i class="fa fa-seedling"></i>
+          Add New Green Lot
+          <span style="font-family:var(--font-mono);font-size:9px;padding:2px 7px;border-radius:2px;background:rgba(245,158,11,0.12);color:var(--amber);border:1px solid rgba(245,158,11,0.35)">MANUAL ENTRY</span>
+        </div>
+        <button class="addlot-close" onclick="closeAddLotModal()" title="Close"><i class="fa fa-xmark"></i></button>
+      </div>
+
+      <!-- Body -->
+      <div class="addlot-body">
+        <form id="addLotForm" onsubmit="submitAddLot(event)" autocomplete="off">
+
+          <div class="addlot-grid">
+
+            <!-- Lot ID -->
+            <div>
+              <label class="addlot-label"><i class="fa fa-barcode"></i> Lot ID <span class="req">*</span></label>
+              <input class="addlot-input" type="text" name="id" id="addLotId" placeholder="e.g. LOT-009" required/>
+              <div style="font-size:10px;color:var(--text-muted);margin-top:3px">Suggested: <span id="suggestedId" style="color:var(--amber);cursor:pointer" onclick="document.getElementById('addLotId').value=this.textContent">${suggestedId}</span></div>
+            </div>
+
+            <!-- Origin -->
+            <div>
+              <label class="addlot-label"><i class="fa fa-globe"></i> Origin <span class="req">*</span></label>
+              <select class="addlot-input addlot-select" name="origin" id="addLotOrigin" required>
+                <option value="">— Select Origin —</option>
+                ${CATALOG_ORIGINS.map(o => `<option value="${o.key}">${o.displayName}</option>`).join('')}
+                <option value="__custom__">Other (type below)</option>
+              </select>
+              <input class="addlot-input" type="text" name="originCustom" id="addLotOriginCustom"
+                placeholder="Custom origin name" style="margin-top:6px;display:none"/>
+            </div>
+
+            <!-- Variety -->
+            <div>
+              <label class="addlot-label"><i class="fa fa-leaf"></i> Variety</label>
+              <input class="addlot-input" type="text" name="variety" id="addLotVariety" placeholder="e.g. Heirloom, SL28"/>
+            </div>
+
+            <!-- Process -->
+            <div>
+              <label class="addlot-label"><i class="fa fa-gears"></i> Process</label>
+              <select class="addlot-input addlot-select" name="process">
+                <option value="Natural">Natural</option>
+                <option value="Washed">Washed</option>
+                <option value="Pulped Natural">Pulped Natural</option>
+                <option value="Wet-Hulled">Wet-Hulled</option>
+                <option value="Honey">Honey</option>
+                <option value="Anaerobic">Anaerobic</option>
+                <option value="Unknown">Unknown</option>
+              </select>
+            </div>
+
+            <!-- Branch -->
+            <div>
+              <label class="addlot-label"><i class="fa fa-building"></i> Branch Location <span class="req">*</span></label>
+              <select class="addlot-input addlot-select" name="branch" id="addLotBranch" onchange="addLotClimatSync(this.value)" required>
+                <option value="">— Select Branch —</option>
+                ${branches.map(b => `<option value="${b.name}">${b.name} (${b.riskStatus})</option>`).join('')}
+              </select>
+            </div>
+
+            <!-- Arrival Date -->
+            <div>
+              <label class="addlot-label"><i class="fa fa-calendar-days"></i> Arrival / Roast Date <span class="req">*</span></label>
+              <input class="addlot-input" type="date" name="arrivalDate" id="addLotDate"
+                value="${new Date().toISOString().slice(0,10)}" required/>
+            </div>
+
+            <!-- Purchased Green Weight — full width with live formula -->
+            <div class="full-width">
+              <label class="addlot-label"><i class="fa fa-weight-hanging"></i> Purchased Green Weight (kg) <span class="req">*</span></label>
+              <input class="addlot-input" type="number" name="greenWeightRaw" id="addLotGreen"
+                placeholder="e.g. 300" min="0.1" step="0.1" oninput="addLotUpdateFormula(this.value)" required/>
+              <!-- Live formula preview -->
+              <div class="roast-preview" id="roastPreview" style="display:none">
+                <div>
+                  <div class="roast-preview-label">Green Weight</div>
+                  <div style="font-family:var(--font-mono);font-size:14px;color:var(--text-sec)" id="previewGreen">—</div>
+                </div>
+                <div style="color:var(--text-muted);font-size:18px">×&nbsp;0.82</div>
+                <div style="color:var(--amber);font-size:20px;font-weight:700">=</div>
+                <div>
+                  <div class="roast-preview-label">Live Roasted Balance</div>
+                  <div class="roast-preview-val" id="previewRoasted">—</div>
+                </div>
+                <div style="flex:1">
+                  <div class="roast-preview-label">Shrinkage (18%)</div>
+                  <div style="font-family:var(--font-mono);font-size:13px;color:var(--red)" id="previewShrink">—</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Grade Score -->
+            <div>
+              <label class="addlot-label"><i class="fa fa-star"></i> Grade Score (0–100)</label>
+              <input class="addlot-input" type="number" name="grade" id="addLotGrade"
+                placeholder="e.g. 88" min="0" max="100" oninput="addLotUpdateStatus(this.value)"/>
+              <div style="font-size:10px;margin-top:4px;font-family:var(--font-mono)" id="gradeStatusPreview">
+                <span style="color:var(--text-muted)">Status auto-set: </span>
+                <span id="gradeStatusBadge" style="color:var(--green)">OPTIMAL (≥ 80)</span>
+              </div>
+            </div>
+
+            <!-- Flavor Notes -->
+            <div>
+              <label class="addlot-label"><i class="fa fa-mug-hot"></i> Flavor Notes</label>
+              <input class="addlot-input" type="text" name="flavor1" placeholder="Note 1 (e.g. Blueberry)"/>
+              <input class="addlot-input" type="text" name="flavor2" placeholder="Note 2 (e.g. Jasmine)" style="margin-top:6px"/>
+            </div>
+
+          </div>
+
+          <!-- Climate Sync Banner -->
+          <div class="climate-banner" id="climateBanner">
+            <span id="climateBannerContent"></span>
+          </div>
+
+          <!-- Result Banner -->
+          <div id="addlotResultBanner"></div>
+
+        </form>
+      </div>
+
+      <!-- Footer -->
+      <div class="addlot-footer">
+        <div class="addlot-footer-meta">
+          <i class="fa fa-circle-info" style="color:var(--amber)"></i>
+          Roasted balance = green × 0.82 — auto-calculated on save.
+          Expiry is set to roast date + 90 days.
+        </div>
+        <div class="addlot-footer-actions">
+          <button type="button" class="btn-addlot-cancel" onclick="closeAddLotModal()">CANCEL</button>
+          <button type="submit" form="addLotForm" class="btn-addlot-submit" id="addLotSubmitBtn">
+            <i class="fa fa-circle-check"></i> SAVE LOT
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <!-- ══ end ADD NEW GREEN LOT MODAL ══ -->
+
+  <script>
+  /* ══════════════════════════════════════════════════════════════
+     ADD NEW GREEN LOT — client-side logic
+  ══════════════════════════════════════════════════════════════ */
+
+  // Branch climate data injected from server
+  var BRANCH_CLIMATE = ${JSON.stringify(branchClimateData)};
+
+  var RISK_COLORS = {
+    LOW:      'var(--green)',
+    MODERATE: 'var(--orange)',
+    HIGH:     '#fb923c',
+    CRITICAL: 'var(--red)',
+  };
+  var RISK_BG = {
+    LOW:      'var(--green-dim)',
+    MODERATE: 'var(--orange-dim)',
+    HIGH:     'rgba(249,115,22,0.1)',
+    CRITICAL: 'var(--red-dim)',
+  };
+
+  function openAddLotModal() {
+    document.getElementById('addLotOverlay').classList.add('open');
+    // Pre-fill suggested ID
+    document.getElementById('addLotId').value = '${suggestedId}';
+  }
+  function closeAddLotModal() {
+    document.getElementById('addLotOverlay').classList.remove('open');
+    document.getElementById('addLotForm').reset();
+    document.getElementById('roastPreview').style.display    = 'none';
+    document.getElementById('climateBanner').style.display   = 'none';
+    document.getElementById('addlotResultBanner').style.display = 'none';
+    document.getElementById('addLotSubmitBtn').disabled      = false;
+    document.getElementById('addLotSubmitBtn').innerHTML     = '<i class="fa fa-circle-check"></i> SAVE LOT';
+    document.getElementById('addLotOriginCustom').style.display = 'none';
+    document.getElementById('addLotId').value = '${suggestedId}';
+  }
+
+  // ── Origin selector: show custom input when "Other" chosen ────
+  document.getElementById('addLotOrigin').addEventListener('change', function() {
+    var custom = document.getElementById('addLotOriginCustom');
+    var variety = document.getElementById('addLotVariety');
+    custom.style.display = this.value === '__custom__' ? 'block' : 'none';
+
+    // Auto-fill variety from catalog
+    var ORIGINS_MAP = ${JSON.stringify(Object.fromEntries(CATALOG_ORIGINS.map(o => [o.key, { variety: o.variety, process: o.process }])))};
+    if (ORIGINS_MAP[this.value]) {
+      variety.value = ORIGINS_MAP[this.value].variety;
+      var procSel = document.querySelector('[name="process"]');
+      if (procSel) procSel.value = ORIGINS_MAP[this.value].process || procSel.value;
+    }
+  });
+
+  // ── Live formula: green → roasted ×0.82 ───────────────────────
+  function addLotUpdateFormula(val) {
+    var g = parseFloat(val);
+    var preview = document.getElementById('roastPreview');
+    if (!val || isNaN(g) || g <= 0) {
+      preview.style.display = 'none'; return;
+    }
+    var roasted = Math.round(g * 0.82 * 10) / 10;
+    var shrink  = Math.round((g - roasted) * 10) / 10;
+    document.getElementById('previewGreen').textContent   = g.toFixed(1) + ' kg';
+    document.getElementById('previewRoasted').textContent = roasted.toFixed(1) + ' kg';
+    document.getElementById('previewShrink').textContent  = '−' + shrink.toFixed(1) + ' kg';
+    preview.style.display = 'flex';
+  }
+
+  // ── Grade → auto status badge ──────────────────────────────────
+  function addLotUpdateStatus(val) {
+    var g = parseInt(val, 10);
+    var badge = document.getElementById('gradeStatusBadge');
+    if (isNaN(g)) { badge.textContent = 'OPTIMAL (≥ 80)'; badge.style.color = 'var(--green)'; return; }
+    if (g >= 80)  { badge.textContent = 'OPTIMAL';  badge.style.color = 'var(--green)';  }
+    else if (g >= 70) { badge.textContent = 'MONITOR'; badge.style.color = 'var(--orange)'; }
+    else          { badge.textContent = 'CRITICAL'; badge.style.color = 'var(--red)';    }
+  }
+
+  // ── Climate Sync: show risk banner for selected branch ────────
+  function addLotClimatSync(branchName) {
+    var banner = document.getElementById('climateBanner');
+    var content = document.getElementById('climateBannerContent');
+    if (!branchName) { banner.style.display = 'none'; return; }
+
+    var bd = BRANCH_CLIMATE.find(function(b){ return b.name === branchName; });
+    if (!bd) { banner.style.display = 'none'; return; }
+
+    var risk      = bd.riskStatus;
+    var color     = RISK_COLORS[risk] || 'var(--text-sec)';
+    var riskLabel = '<span class="climate-badge-inline" style="color:' + color + ';border-color:' + color + '40">' + risk + '</span>';
+
+    var icon = risk === 'LOW' ? 'fa-circle-check' :
+               risk === 'MODERATE' ? 'fa-triangle-exclamation' :
+               risk === 'HIGH'     ? 'fa-exclamation-triangle' : 'fa-radiation';
+
+    content.innerHTML =
+      '<strong style="color:' + color + '"><i class="fa ' + icon + '"></i>' +
+      '  Climate Sync — ' + branchName + ' is ' + riskLabel + '</strong>' +
+      '<br/>' +
+      '<span style="color:var(--text-sec)">' +
+        'Humidity: <strong style="font-family:var(--font-mono)">' + bd.humidity + '%</strong> &nbsp;·&nbsp; ' +
+        'Temperature: <strong style="font-family:var(--font-mono)">' + bd.temperature + '°C</strong> &nbsp;·&nbsp; ' +
+        'Type: <strong style="font-family:var(--font-mono)">' + bd.climateType + '</strong>' +
+      '</span>' +
+      '<br/><span style="color:var(--text-muted);font-size:11px">' +
+        '<i class="fa fa-circle-info"></i> ' + bd.storageAdvice +
+      '</span>' +
+      (risk !== 'LOW'
+        ? '<br/><span style="color:' + color + ';font-size:11px;font-weight:600">' +
+            '<i class="fa fa-triangle-exclamation"></i> ' + bd.acuteNote + '</span>'
+        : '');
+
+    banner.className = 'climate-banner ' + risk;
+    banner.style.display = 'block';
+  }
+
+  // ── Submit form ───────────────────────────────────────────────
+  async function submitAddLot(e) {
+    e.preventDefault();
+    var form   = document.getElementById('addLotForm');
+    var fd     = new FormData(form);
+    var btn    = document.getElementById('addLotSubmitBtn');
+    var banner = document.getElementById('addlotResultBanner');
+
+    // Resolve origin: if "other" was chosen use the custom input
+    var originVal = fd.get('origin');
+    if (originVal === '__custom__') {
+      var customOrigin = (fd.get('originCustom') || '').trim();
+      if (!customOrigin) {
+        document.getElementById('addLotOriginCustom').classList.add('error');
+        document.getElementById('addLotOriginCustom').focus();
+        return;
+      }
+      originVal = customOrigin;
+    }
+
+    var body = {
+      id:             fd.get('id'),
+      origin:         originVal,
+      variety:        fd.get('variety'),
+      process:        fd.get('process'),
+      branch:         fd.get('branch'),
+      greenWeightRaw: fd.get('greenWeightRaw'),
+      arrivalDate:    fd.get('arrivalDate'),
+      grade:          fd.get('grade'),
+      flavor1:        fd.get('flavor1'),
+      flavor2:        fd.get('flavor2'),
+    };
+
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> SAVING…';
+    banner.style.display = 'none';
+
+    try {
+      var res  = await fetch('/admin/inventory/add', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify(body),
+      });
+      var data = await res.json();
+
+      if (!res.ok) {
+        banner.style.display = 'block';
+        banner.innerHTML =
+          '<div style="background:var(--red-dim);border:1px solid rgba(239,68,68,0.3);border-radius:var(--radius);padding:13px 16px">' +
+            '<div style="font-family:var(--font-mono);font-size:12px;color:var(--red);font-weight:700;margin-bottom:3px"><i class="fa fa-circle-xmark"></i>  Error</div>' +
+            '<div style="font-size:12px;color:var(--text-sec)">' + (data.error || 'Unknown error') + '</div>' +
+          '</div>';
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa fa-circle-check"></i> SAVE LOT';
+        return;
+      }
+
+      // ── Success ──
+      var lot     = data.lot;
+      var warning = data.climateWarning;
+
+      banner.style.display = 'block';
+      banner.innerHTML =
+        '<div style="background:var(--green-dim);border:1px solid rgba(16,185,129,0.3);border-radius:var(--radius);padding:14px 18px">' +
+          '<div style="font-family:var(--font-mono);font-size:12px;color:var(--green);font-weight:700;margin-bottom:8px">' +
+            '<i class="fa fa-circle-check"></i>  Lot Added Successfully</div>' +
+          '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-bottom:8px">' +
+            '<div><div style="font-size:9px;color:var(--text-muted);text-transform:uppercase">Lot ID</div>' +
+              '<div style="font-family:var(--font-mono);font-size:14px;color:var(--amber)">' + lot.id + '</div></div>' +
+            '<div><div style="font-size:9px;color:var(--text-muted);text-transform:uppercase">Green</div>' +
+              '<div style="font-family:var(--font-mono);font-size:14px">' + lot.greenWeightKg + ' kg</div></div>' +
+            '<div><div style="font-size:9px;color:var(--text-muted);text-transform:uppercase">Roasted ×0.82</div>' +
+              '<div style="font-family:var(--font-mono);font-size:14px;color:var(--amber)">' + lot.roastedWeightKg + ' kg</div></div>' +
+            '<div><div style="font-size:9px;color:var(--text-muted);text-transform:uppercase">Status</div>' +
+              '<div style="font-family:var(--font-mono);font-size:14px;color:' +
+                (lot.status==='OPTIMAL'?'var(--green)':lot.status==='MONITOR'?'var(--orange)':'var(--red)') +
+              '">' + lot.status + '</div></div>' +
+            '<div><div style="font-size:9px;color:var(--text-muted);text-transform:uppercase">Branch</div>' +
+              '<div style="font-family:var(--font-mono);font-size:14px">' + lot.branch + '</div></div>' +
+            '<div><div style="font-size:9px;color:var(--text-muted);text-transform:uppercase">Expiry</div>' +
+              '<div style="font-family:var(--font-mono);font-size:12px;color:var(--text-sec)">' + lot.expiryDate + '</div></div>' +
+          '</div>' +
+          (warning
+            ? '<div style="margin-top:6px;padding:8px 12px;background:rgba(249,115,22,0.12);border:1px solid rgba(249,115,22,0.3);border-radius:var(--radius);font-size:11px;color:#fb923c">' +
+                '<i class="fa fa-triangle-exclamation"></i> ' + warning + '</div>'
+            : '') +
+          '<div style="margin-top:10px"><a href="/admin/inventory" style="font-family:var(--font-mono);font-size:11px;color:var(--green)"><i class="fa fa-rotate-right"></i> Reload page to see updated ledger →</a></div>' +
+        '</div>';
+
+      btn.innerHTML = '<i class="fa fa-circle-check"></i> SAVED!';
+    } catch(err) {
+      banner.style.display = 'block';
+      banner.innerHTML = '<div style="color:var(--red);font-size:12px;padding:12px;background:var(--red-dim);border-radius:var(--radius);border:1px solid rgba(239,68,68,0.3)">Network error: ' + err.message + '</div>';
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fa fa-circle-check"></i> SAVE LOT';
+    }
+  }
+
+  // Backdrop click to close
+  document.getElementById('addLotOverlay').addEventListener('click', function(e) {
+    if (e.target === this) closeAddLotModal();
+  });
+  </script>
+  <!-- ══ end ADD NEW GREEN LOT MODAL ══ -->
 
   <!-- ══ FIFO LOG NEW ROAST ══ -->
   <div class="card" style="margin-bottom:24px">
