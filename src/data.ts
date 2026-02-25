@@ -2,7 +2,13 @@
 //  Qabban OS  —  Mock Data & Business Logic
 // ─────────────────────────────────────────────
 
-export type LotStatus = 'OPTIMAL' | 'MONITOR' | 'CRITICAL'
+export type LotStatus = 'OPTIMAL' | 'MONITOR' | 'CRITICAL' | 'RECALLED'
+
+export interface RecallInfo {
+  initiatedAt: string          // ISO timestamp
+  instructions: string         // roaster's recall instructions
+  notifiedCafes: string[]      // cafe IDs that had DISPATCHED orders for this lot
+}
 
 export interface CoffeeLot {
   id: string
@@ -17,6 +23,7 @@ export interface CoffeeLot {
   flavorNotes: string[]
   branch: 'Riyadh' | 'Jeddah' | 'Dammam'
   gradeScore: number
+  recallInfo?: RecallInfo    // populated when status === 'RECALLED'
 }
 
 export interface Branch {
@@ -154,6 +161,17 @@ export const calcLiveBalance = (
     byLot,
   }
 }
+
+// ─── FIFO Lot Selector ─────────────────────────────────────────────────────
+// Returns the oldest available (non-RECALLED) lot for a given origin,
+// determined by roastDate ascending. Used by Log New Roast to enforce FIFO.
+export const getFifoLot = (
+  lots: CoffeeLot[],
+  origin: string
+): CoffeeLot | undefined =>
+  lots
+    .filter(l => l.origin === origin && l.status !== 'RECALLED')
+    .sort((a, b) => a.roastDate.localeCompare(b.roastDate))[0]
 
 // ─── Mock coffee lots ──────────────────────────────────────────────────────
 export const coffeeLots: CoffeeLot[] = [

@@ -6,6 +6,8 @@ import {
   beanRequests,
   applyRoastShrinkage,
   calcLiveBalance,
+  getFifoLot,
+  type CoffeeLot,
 } from './data'
 
 const app = new Hono()
@@ -180,6 +182,87 @@ const shell = (title: string, body: string) => `<!DOCTYPE html>
     .badge-DISPATCHED::before { background:var(--green); }
     .badge-CANCELLED { background:rgba(63,63,70,0.40); color:#71717a; border:1px solid rgba(113,113,122,0.20); }
     .badge-CANCELLED::before { background:#52525b; }
+    /* RECALLED — bold red, pulsing */
+    .badge-RECALLED { background:rgba(239,68,68,0.15); color:var(--red); border:1px solid rgba(239,68,68,0.45); }
+    .badge-RECALLED::before { background:var(--red); animation:pulse 1s ease-in-out infinite; }
+
+    /* ── Recalled lot row — strong red tint ── */
+    .tr-recalled td {
+      background: rgba(239,68,68,0.04) !important;
+    }
+    .tr-recalled:hover td {
+      background: rgba(239,68,68,0.09) !important;
+    }
+    /* Recalled lot card overlay */
+    .lot-card.recalled {
+      border-color: rgba(239,68,68,0.50) !important;
+      opacity: 0.70;
+      pointer-events: none;
+    }
+    .lot-card.recalled::after {
+      content: 'RECALLED — BLOCKED';
+      position: absolute; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      font-family: var(--font-mono); font-size: 13px; font-weight: 700;
+      color: var(--red); letter-spacing: 2px;
+      background: rgba(0,0,0,0.55);
+      border-radius: var(--radius-lg);
+      pointer-events: none;
+    }
+
+    /* ── SFDA Recall modal ── */
+    .recall-modal { background:var(--bg-1); border:1px solid rgba(239,68,68,0.55); border-radius:var(--radius-lg); padding:28px; width:480px; max-width:95vw; }
+    .recall-modal-title { font-family:var(--font-mono); font-size:14px; font-weight:700; color:var(--red); margin-bottom:8px; display:flex; align-items:center; gap:8px; }
+    .recall-modal-sub { font-size:12px; color:var(--text-muted); margin-bottom:20px; padding-bottom:16px; border-bottom:1px solid var(--bg-3); }
+    .btn-recall-confirm {
+      flex:2; padding:10px;
+      font-family:var(--font-mono); font-size:12px; font-weight:700;
+      background:var(--red); color:white;
+      border:none; border-radius:var(--radius); cursor:pointer; transition:all .2s; letter-spacing:.5px;
+    }
+    .btn-recall-confirm:hover { background:#dc2626; }
+    .btn-recall-confirm:disabled { background:var(--bg-4); color:var(--text-muted); cursor:not-allowed; }
+
+    /* ── Cafe Recall Urgent Banner ── */
+    .recall-urgent-banner {
+      position: fixed; top: 70px; left: 0; right: 0; z-index: 999;
+      background: rgba(239,68,68,0.97);
+      border-bottom: 2px solid #dc2626;
+      padding: 14px 24px;
+      display: flex; align-items: flex-start; gap: 14px;
+      animation: recallSlideIn 0.4s ease-out;
+      box-shadow: 0 4px 32px rgba(239,68,68,0.5);
+    }
+    @keyframes recallSlideIn {
+      from { transform: translateY(-100%); opacity: 0; }
+      to   { transform: translateY(0);     opacity: 1; }
+    }
+    .recall-banner-icon {
+      font-size: 24px; color: white; flex-shrink: 0; margin-top: 2px;
+      animation: pulse 1s ease-in-out infinite;
+    }
+    .recall-banner-body { flex: 1; }
+    .recall-banner-title {
+      font-family: var(--font-mono); font-size: 13px; font-weight: 700;
+      color: white; letter-spacing: 1px; margin-bottom: 4px;
+    }
+    .recall-banner-lot {
+      font-family: var(--font-mono); font-size: 11px; color: rgba(255,255,255,0.85);
+      margin-bottom: 6px;
+    }
+    .recall-banner-instructions {
+      font-size: 13px; color: white; line-height: 1.5;
+      padding: 8px 12px;
+      background: rgba(0,0,0,0.25); border-radius: var(--radius);
+      border-left: 3px solid rgba(255,255,255,0.5);
+    }
+    .recall-banner-close {
+      background: transparent; border: 1px solid rgba(255,255,255,0.4);
+      border-radius: var(--radius); padding: 6px 12px;
+      color: white; font-family: var(--font-mono); font-size: 11px;
+      cursor: pointer; flex-shrink: 0; transition: all .2s;
+    }
+    .recall-banner-close:hover { background: rgba(0,0,0,0.3); }
 
     /* ── Cancelled row — dimmed audit style ── */
     .tr-cancelled td {
@@ -915,6 +998,57 @@ function cafeLayout(pageTitle: string, activeNav: string, content: string, clien
     document.getElementById('requestModal').addEventListener('click', function(e) {
       if (e.target === this) closeModal();
     });
+
+    /* ── RECALL ALERT CHECKER ── */
+    // Polls for active recalls relevant to this cafe every 30s.
+    // Renders persistent urgent red banner(s) at the top of the portal.
+    var _shownRecalls = new Set();
+    var CAFE_ID = '${clientInfo.name.replace(/'/g, "\\'")}';
+
+    function checkRecalls() {
+      // Use cafeId from URL param or client id mapping
+      var cafeIdMap = {
+        'Al Nokhba Specialty': 'CAF-001',
+        'Qahwa Al Bahr':       'CAF-002',
+        'Pearl Roast Café':    'CAF-003',
+      };
+      var cid = cafeIdMap[CAFE_ID] || 'CAF-001';
+
+      fetch('/api/recalls/' + cid)
+        .then(function(r){ return r.json(); })
+        .then(function(d){
+          (d.recalls || []).forEach(function(recall){
+            if (_shownRecalls.has(recall.lotId)) return;
+            _shownRecalls.add(recall.lotId);
+            renderRecallBanner(recall);
+          });
+        })
+        .catch(function(){});
+    }
+
+    function renderRecallBanner(recall) {
+      var banner = document.createElement('div');
+      banner.className = 'recall-urgent-banner';
+      banner.id = 'recall-banner-' + recall.lotId;
+      banner.innerHTML =
+        '<i class="fa fa-triangle-exclamation recall-banner-icon"></i>' +
+        '<div class="recall-banner-body">' +
+          '<div class="recall-banner-title">⚠ URGENT RECALL — SFDA AUDIT SHIELD</div>' +
+          '<div class="recall-banner-lot">Lot: ' + recall.lotId + ' · ' + recall.lotOrigin + ' · Initiated: ' + recall.initiatedAt + '</div>' +
+          '<div class="recall-banner-instructions"><strong>Instructions from Roaster:</strong> ' + recall.instructions + '</div>' +
+        '</div>' +
+        '<button class="recall-banner-close" onclick="dismissRecallBanner(\'' + recall.lotId + '\')">ACKNOWLEDGE</button>';
+      document.body.insertBefore(banner, document.body.firstChild.nextSibling || document.body.firstChild);
+    }
+
+    function dismissRecallBanner(lotId) {
+      var el = document.getElementById('recall-banner-' + lotId);
+      if (el) el.style.display = 'none';
+    }
+
+    // Initial check + polling every 30s
+    checkRecalls();
+    setInterval(checkRecalls, 30000);
   </script>`
   return shell(pageTitle, body)
 }
@@ -1327,6 +1461,11 @@ app.get('/admin/inventory', (c) => {
   const bal            = calcLiveBalance(coffeeLots, beanRequests)
   const totalShrinkage = bal.liveGreenKg - bal.liveRoastedKg   // shrinkage on live stock only
 
+  // ── FIFO: list unique non-recalled origins for the Log New Roast selector
+  const availableOrigins = [...new Set(
+    coffeeLots.filter(l => l.status !== 'RECALLED').map(l => l.origin)
+  )].sort()
+
   const content = `
   <div class="stat-grid" style="margin-bottom:28px">
     <div class="stat-card">
@@ -1373,6 +1512,70 @@ app.get('/admin/inventory', (c) => {
     </div>
   </div>
 
+  <!-- ══ FIFO LOG NEW ROAST ══ -->
+  <div class="card" style="margin-bottom:24px">
+    <div class="card-title">
+      <i class="fa fa-fire" style="color:var(--amber)"></i>
+      Log New Roast
+      <span style="font-family:var(--font-mono);font-size:9px;padding:2px 7px;border-radius:2px;background:rgba(245,158,11,0.12);color:var(--amber);border:1px solid rgba(245,158,11,0.35);margin-left:4px">FIFO</span>
+    </div>
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:16px">
+      Select an origin — the system automatically suggests the <strong style="color:var(--amber)">oldest available lot</strong> (FIFO compliance).
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr auto;gap:12px;align-items:flex-end;margin-bottom:16px">
+      <div class="form-group" style="margin:0">
+        <label class="form-label">Origin</label>
+        <select class="form-input" id="fifoOriginSelect" onchange="fifoSelectOrigin(this.value)">
+          <option value="">— Select Origin —</option>
+          ${availableOrigins.map(o => `<option value="${o}">${o}</option>`).join('')}
+        </select>
+      </div>
+      <button
+        style="font-family:var(--font-mono);font-size:11px;padding:10px 16px;background:var(--amber-glow);color:var(--amber);border:1px solid var(--border-amber);border-radius:var(--radius);cursor:pointer;white-space:nowrap"
+        onclick="fifoConfirmRoast()"
+        id="fifoRoastBtn"
+        disabled
+      >
+        <i class="fa fa-check"></i> CONFIRM ROAST
+      </button>
+    </div>
+
+    <!-- FIFO suggestion panel (hidden until origin is selected) -->
+    <div id="fifoPanel" style="display:none;background:var(--bg-2);border:1px solid var(--border-amber);border-left:3px solid var(--amber);border-radius:var(--radius);padding:14px 16px">
+      <div style="font-family:var(--font-mono);font-size:10px;color:var(--amber);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">
+        <i class="fa fa-arrow-up-right-dots"></i> &nbsp;FIFO Suggestion — Oldest Available Lot
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px">
+        <div>
+          <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.6px">Lot ID</div>
+          <div id="fifoLotId" style="font-family:var(--font-mono);font-size:16px;color:var(--amber);font-weight:700;margin-top:2px">—</div>
+        </div>
+        <div>
+          <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.6px">Origin</div>
+          <div id="fifoOrigin" style="font-size:13px;font-weight:600;color:var(--text-pri);margin-top:2px">—</div>
+        </div>
+        <div>
+          <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.6px">Roast Date</div>
+          <div id="fifoDate" style="font-family:var(--font-mono);font-size:13px;color:var(--text-sec);margin-top:2px">—</div>
+        </div>
+        <div>
+          <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.6px">Green Weight</div>
+          <div id="fifoGreen" style="font-family:var(--font-mono);font-size:13px;color:var(--text-sec);margin-top:2px">—</div>
+        </div>
+        <div>
+          <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.6px">Status</div>
+          <div id="fifoStatus" style="margin-top:2px">—</div>
+        </div>
+      </div>
+      <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border);font-size:11px;color:var(--text-muted)">
+        <i class="fa fa-circle-info" style="color:var(--amber)"></i>
+        FIFO (First-In First-Out): This is the oldest unrecalled lot for this origin — it must be processed first to maintain traceability.
+      </div>
+    </div>
+  </div>
+  <!-- ══ end FIFO ══ -->
+
   <div class="card">
     <div class="card-title">Full Inventory Ledger — Live Balances</div>
     <div class="table-wrap">
@@ -1383,15 +1586,17 @@ app.get('/admin/inventory', (c) => {
             <th>Purchased</th><th>Dispatched</th>
             <th>Live Green</th><th>Live Roasted</th>
             <th>Roast Date</th><th>Expiry</th><th>Status</th><th>Grade</th>
+            <th>SFDA</th>
           </tr>
         </thead>
         <tbody>
           ${coffeeLots.map(l => {
             const lb = bal.byLot.get(l.id)!
             const hasDispatch = lb.dispatchedRoastedKg > 0
+            const isRecalled = l.status === 'RECALLED'
             return `
-          <tr>
-            <td class="mono" style="color:var(--amber)">${l.id}</td>
+          <tr class="${isRecalled ? 'tr-recalled' : ''}">
+            <td class="mono" style="color:${isRecalled ? 'var(--red)' : 'var(--amber)'}">${l.id}</td>
             <td>
               <div style="font-weight:500">${l.origin}</div>
               <div class="flavor-tags" style="margin:4px 0 0">
@@ -1416,19 +1621,189 @@ app.get('/admin/inventory', (c) => {
             <td class="mono" style="color:var(--amber)">${lb.liveRoastedKg} kg</td>
             <td class="mono" style="font-size:11px;color:var(--text-muted)">${l.roastDate}</td>
             <td class="mono" style="font-size:11px;color:var(--text-muted)">${l.expiryDate}</td>
-            <td><span class="badge badge-${l.status}">${l.status}</span></td>
+            <td><span class="badge badge-${l.status}">${l.status}</span>
+              ${isRecalled && l.recallInfo ? `<div style="font-size:10px;color:var(--red);margin-top:3px">${l.recallInfo.initiatedAt}</div>` : ''}
+            </td>
             <td>
               <div class="score-bar">
                 <div class="score-track"><div class="score-fill" style="width:${l.gradeScore}%"></div></div>
                 <span class="score-num">${l.gradeScore}</span>
               </div>
             </td>
+            <td>
+              ${isRecalled
+                ? `<div style="font-family:var(--font-mono);font-size:9px;color:var(--red);border:1px solid rgba(239,68,68,0.4);padding:3px 7px;border-radius:2px;white-space:nowrap"><i class="fa fa-ban"></i> RECALLED</div>
+                   ${l.recallInfo ? `<div style="font-size:10px;color:var(--text-muted);margin-top:4px;max-width:140px;white-space:normal;line-height:1.3">${l.recallInfo.instructions}</div>` : ''}`
+                : `<button
+                    onclick="openRecallModal('${l.id}','${l.origin.replace(/'/g, "\\'")}')"
+                    style="font-family:var(--font-mono);font-size:10px;padding:5px 10px;background:rgba(239,68,68,0.12);color:var(--red);border:1px solid rgba(239,68,68,0.35);border-radius:var(--radius);cursor:pointer;white-space:nowrap;transition:all .2s"
+                    onmouseover="this.style.background='rgba(239,68,68,0.25)'"
+                    onmouseout="this.style.background='rgba(239,68,68,0.12)'"
+                  >
+                    <i class="fa fa-triangle-exclamation"></i> INITIATE RECALL
+                  </button>`
+              }
+            </td>
           </tr>`
           }).join('')}
         </tbody>
       </table>
     </div>
-  </div>`
+  </div>
+
+  <!-- ══ SFDA RECALL MODAL ══ -->
+  <div class="modal-overlay" id="recallModal">
+    <div class="recall-modal">
+      <div class="recall-modal-title">
+        <i class="fa fa-triangle-exclamation"></i>
+        SFDA AUDIT SHIELD — INITIATE RECALL
+      </div>
+      <div class="recall-modal-sub">
+        <span id="recallLotBadge"></span>
+        You are about to initiate a formal product recall. This action will:
+        <ul style="margin:8px 0 0 16px;line-height:1.8;color:var(--text-sec);font-size:12px">
+          <li>Lock the lot status to <strong style="color:var(--red)">RECALLED</strong></li>
+          <li>Block all further roast logging and cafe ordering for this patch</li>
+          <li>Notify all cafes with dispatched orders from this lot</li>
+          <li>This action cannot be undone.</li>
+        </ul>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label"><i class="fa fa-clipboard-list"></i> &nbsp;Recall Instructions</label>
+        <textarea
+          class="form-textarea"
+          id="recallInstructions"
+          placeholder="e.g. Dispose of lot immediately — do not serve. Courier will pick up tomorrow at 9am."
+          style="min-height:90px"
+        ></textarea>
+        <div style="font-size:10px;color:var(--text-muted);margin-top:4px">These instructions will be sent to all affected cafes as an urgent notification.</div>
+      </div>
+
+      <div class="modal-actions">
+        <button type="button" class="btn-cancel" onclick="closeRecallModal()">CANCEL</button>
+        <button type="button" class="btn-recall-confirm" id="recallConfirmBtn" onclick="submitRecall()">
+          <i class="fa fa-triangle-exclamation"></i> &nbsp;CONFIRM RECALL
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    /* ── FIFO Lot Selector ── */
+    // Built from server-side lot data
+    var LOTS_DATA = ${JSON.stringify(coffeeLots.map(l => ({
+      id: l.id,
+      origin: l.origin,
+      roastDate: l.roastDate,
+      greenWeightKg: l.greenWeightKg,
+      status: l.status,
+    })))};
+
+    function fifoSelectOrigin(origin) {
+      var panel  = document.getElementById('fifoPanel');
+      var btn    = document.getElementById('fifoRoastBtn');
+      if (!origin) {
+        panel.style.display = 'none';
+        btn.disabled = true;
+        return;
+      }
+
+      // Filter non-recalled lots for this origin, sort by roastDate ascending (oldest first)
+      var candidates = LOTS_DATA
+        .filter(function(l){ return l.origin === origin && l.status !== 'RECALLED'; })
+        .sort(function(a,b){ return a.roastDate.localeCompare(b.roastDate); });
+
+      if (!candidates.length) {
+        panel.style.display = 'none';
+        btn.disabled = true;
+        return;
+      }
+
+      var lot = candidates[0];
+      document.getElementById('fifoLotId').textContent   = lot.id;
+      document.getElementById('fifoOrigin').textContent  = lot.origin;
+      document.getElementById('fifoDate').textContent    = lot.roastDate;
+      document.getElementById('fifoGreen').textContent   = lot.greenWeightKg + ' kg';
+      document.getElementById('fifoStatus').innerHTML    =
+        '<span class="badge badge-' + lot.status + '">' + lot.status + '</span>';
+
+      panel.style.display = 'block';
+      btn.disabled = false;
+    }
+
+    function fifoConfirmRoast() {
+      var lotId = document.getElementById('fifoLotId').textContent;
+      if (!lotId || lotId === '—') return;
+      alert('✅ FIFO Compliance Confirmed\\n\\nLot: ' + lotId + '\\nThis lot has been selected for the next roast batch per FIFO protocol.\\n\\nIn a full system, this would open the roast logging form for Lot ' + lotId + '.');
+    }
+
+    /* ── SFDA Recall Modal ── */
+    var _recallLotId     = '';
+    var _recallLotOrigin = '';
+
+    function openRecallModal(lotId, origin) {
+      _recallLotId     = lotId;
+      _recallLotOrigin = origin;
+      document.getElementById('recallLotBadge').innerHTML =
+        '<span class="badge badge-RECALLED" style="margin-right:8px">' + lotId + '</span>' +
+        '<strong style="color:var(--text-pri)">' + origin + '</strong><br/><br/>';
+      document.getElementById('recallInstructions').value = '';
+      document.getElementById('recallConfirmBtn').disabled = false;
+      document.getElementById('recallModal').classList.add('open');
+    }
+
+    function closeRecallModal() {
+      document.getElementById('recallModal').classList.remove('open');
+    }
+
+    function submitRecall() {
+      var instructions = document.getElementById('recallInstructions').value.trim();
+      if (!instructions) {
+        document.getElementById('recallInstructions').focus();
+        document.getElementById('recallInstructions').style.borderColor = 'var(--red)';
+        return;
+      }
+      document.getElementById('recallConfirmBtn').disabled = true;
+      document.getElementById('recallConfirmBtn').innerHTML = '<i class="fa fa-spinner fa-spin"></i> &nbsp;PROCESSING RECALL...';
+
+      // POST to server
+      fetch('/admin/inventory/' + _recallLotId + '/recall', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ instructions: instructions })
+      })
+      .then(function(r){
+        if (r.ok) {
+          window.location.href = '/admin/inventory?recallSuccess=' + encodeURIComponent(_recallLotId);
+        } else {
+          alert('Recall failed. Please try again.');
+          document.getElementById('recallConfirmBtn').disabled = false;
+          document.getElementById('recallConfirmBtn').innerHTML = '<i class="fa fa-triangle-exclamation"></i> &nbsp;CONFIRM RECALL';
+        }
+      })
+      .catch(function(){
+        alert('Network error. Please try again.');
+        document.getElementById('recallConfirmBtn').disabled = false;
+        document.getElementById('recallConfirmBtn').innerHTML = '<i class="fa fa-triangle-exclamation"></i> &nbsp;CONFIRM RECALL';
+      });
+    }
+
+    document.getElementById('recallModal').addEventListener('click', function(e){
+      if (e.target === this) closeRecallModal();
+    });
+
+    /* ── Show recall success alert ── */
+    var urlParams = new URLSearchParams(window.location.search);
+    var recalledId = urlParams.get('recallSuccess');
+    if (recalledId) {
+      var banner = document.createElement('div');
+      banner.className = 'alert alert-critical';
+      banner.style.cssText = 'margin-bottom:16px;animation:recallSlideIn .4s ease-out';
+      banner.innerHTML = '<i class="fa fa-triangle-exclamation"></i><div><strong>RECALL INITIATED — Lot ' + recalledId + '</strong> — Status locked to RECALLED. Affected cafes have been notified.</div>';
+      document.querySelector('.page-header').insertAdjacentElement('afterend', banner);
+    }
+  </script>`
 
   return c.html(adminLayout('Inventory Ledger', 'inventory', content, pendingCount))
 })
@@ -1538,6 +1913,51 @@ app.post('/admin/requests/:id/cancel', (c) => {
   return c.redirect('/admin/requests')
 })
 
+// ── POST /admin/inventory/:lotId/recall ────────────────────────
+// SFDA Audit Shield: marks a lot as RECALLED, records instructions,
+// identifies all cafes with DISPATCHED orders for this lot.
+app.post('/admin/inventory/:lotId/recall', async (c) => {
+  const lotId = c.req.param('lotId')
+  const lot   = coffeeLots.find(l => l.id === lotId)
+  if (!lot) return c.json({ error: 'Lot not found' }, 404)
+  if (lot.status === 'RECALLED') return c.json({ error: 'Already recalled' }, 400)
+
+  let instructions = ''
+  try {
+    const body = await c.req.json() as { instructions?: string }
+    instructions = (body.instructions ?? '').trim()
+  } catch { /* no body */ }
+
+  if (!instructions) return c.json({ error: 'Instructions required' }, 400)
+
+  // Find cafes with DISPATCHED orders for this lot
+  const affectedCafeIds = [
+    ...new Set(
+      beanRequests
+        .filter(r => r.lotId === lotId && r.status === 'DISPATCHED')
+        .map(r => r.cafeId)
+    )
+  ]
+
+  const now = new Date().toISOString().replace('T', ' ').slice(0, 16)
+
+  // Lock the lot
+  lot.status = 'RECALLED'
+  lot.recallInfo = {
+    initiatedAt:   now,
+    instructions:  instructions,
+    notifiedCafes: affectedCafeIds,
+  }
+
+  return c.json({
+    success:       true,
+    lotId,
+    recalledAt:    now,
+    instructions,
+    notifiedCafes: affectedCafeIds,
+  })
+})
+
 // ══════════════════════════════════════════════════════════════════
 //  CAFE ROUTES
 // ══════════════════════════════════════════════════════════════════
@@ -1546,9 +1966,20 @@ app.post('/admin/requests/:id/cancel', (c) => {
 app.get('/cafe', (c) => {
   // Default to the first cafe client for the demo portal view
   const client = cafeClients[0]
-  const optimalLots = coffeeLots.filter(l => l.status === 'OPTIMAL')
+  // Only show OPTIMAL lots — RECALLED lots are fully blocked from ordering
+  const optimalLots   = coffeeLots.filter(l => l.status === 'OPTIMAL')
+  const recalledCount = coffeeLots.filter(l => l.status === 'RECALLED').length
 
   const content = `
+  ${recalledCount > 0 ? `
+  <div class="alert alert-critical" style="animation:recallSlideIn .4s ease-out">
+    <i class="fa fa-triangle-exclamation"></i>
+    <div>
+      <strong>${recalledCount} lot${recalledCount > 1 ? 's' : ''} currently RECALLED</strong> —
+      These lots have been removed from ordering. Check the urgent notice at the top if you received prior dispatches.
+    </div>
+  </div>` : ''}
+
   <div class="alert alert-success" style="margin-bottom:24px">
     <i class="fa fa-circle-check"></i>
     <div>Showing <strong>${optimalLots.length} OPTIMAL lots</strong> available for ordering. All lots have passed quality and humidity checks.</div>
@@ -1572,13 +2003,15 @@ app.get('/cafe', (c) => {
     </div>
     <div class="stat-card">
       <div class="stat-label">Avg. Grade Score</div>
-      <div class="stat-value">${Math.round(optimalLots.reduce((s, l) => s + l.gradeScore, 0) / optimalLots.length)}</div>
+      <div class="stat-value">${optimalLots.length > 0 ? Math.round(optimalLots.reduce((s, l) => s + l.gradeScore, 0) / optimalLots.length) : '—'}</div>
       <div class="stat-unit">quality points</div>
     </div>
   </div>
 
   <div class="lot-grid">
-    ${optimalLots.map(l => `
+    ${optimalLots.length === 0
+      ? '<div class="empty-state"><i class="fa fa-boxes-stacked"></i><p>No optimal lots available at this time.</p></div>'
+      : optimalLots.map(l => `
     <div class="lot-card">
       <div class="lot-header">
         <div>
@@ -1635,7 +2068,7 @@ app.post('/cafe/request', async (c) => {
   const notes    = (form.get('notes') as string) || ''
   const cafeId   = form.get('cafeId') as string
 
-  const lot    = coffeeLots.find(l => l.id === lotId && l.status === 'OPTIMAL')
+  const lot    = coffeeLots.find(l => l.id === lotId && l.status === 'OPTIMAL')  // RECALLED lots blocked
   const client = cafeClients[0]
 
   if (!lot || isNaN(quantity) || quantity <= 0) return c.redirect('/cafe')
@@ -1729,6 +2162,25 @@ app.get('/api/lots',         (c) => c.json(coffeeLots))
 app.get('/api/lots/optimal', (c) => c.json(coffeeLots.filter(l => l.status === 'OPTIMAL')))
 app.get('/api/branches',     (c) => c.json(branches))
 app.get('/api/requests',     (c) => c.json(beanRequests))
+
+// ── GET /api/recalls/:cafeId  ─────────────────────────────────────────
+// Returns active recalls relevant to this cafe (had DISPATCHED orders for
+// a recalled lot). Used by the cafe portal to render urgent red banners.
+app.get('/api/recalls/:cafeId', (c) => {
+  const cafeId = c.req.param('cafeId')
+
+  // Collect all recalled lots where this cafe had a dispatched order
+  const relevantRecalls = coffeeLots
+    .filter(l => l.status === 'RECALLED' && l.recallInfo?.notifiedCafes.includes(cafeId))
+    .map(l => ({
+      lotId:        l.id,
+      lotOrigin:    l.origin,
+      instructions: l.recallInfo!.instructions,
+      initiatedAt:  l.recallInfo!.initiatedAt,
+    }))
+
+  return c.json({ recalls: relevantRecalls })
+})
 
 // ── GET /api/weather  ──────────────────────────────────────────────
 // Server-side proxy to OpenWeatherMap so the API key never reaches
