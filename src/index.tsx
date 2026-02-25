@@ -4,10 +4,13 @@ import {
   branches,
   cafeClients,
   beanRequests,
+  roastingInterests,
   applyRoastShrinkage,
   calcLiveBalance,
   getFifoLot,
+  CATALOG_ORIGINS,
   type CoffeeLot,
+  type RoastingInterest,
 } from './data'
 
 const app = new Hono()
@@ -182,6 +185,16 @@ const shell = (title: string, body: string) => `<!DOCTYPE html>
     .badge-DISPATCHED::before { background:var(--green); }
     .badge-CANCELLED { background:rgba(63,63,70,0.40); color:#71717a; border:1px solid rgba(113,113,122,0.20); }
     .badge-CANCELLED::before { background:#52525b; }
+    /* OUT OF STOCK — muted grey */
+    .badge-OOS { background:rgba(63,63,70,0.30); color:#a1a1aa; border:1px solid rgba(113,113,122,0.25); letter-spacing:.8px; }
+    .badge-OOS::before { background:#71717a; }
+    /* Roasting Interest (pre-order) badge */
+    .badge-interest-NEW       { background:rgba(59,130,246,0.12); color:#60a5fa; border:1px solid rgba(59,130,246,0.30); }
+    .badge-interest-NEW::before { background:#60a5fa; animation:pulse 1.8s ease-in-out infinite; }
+    .badge-interest-SEEN      { background:rgba(245,158,11,0.10); color:var(--amber); border:1px solid var(--border-amber); }
+    .badge-interest-SEEN::before { background:var(--amber); }
+    .badge-interest-SCHEDULED { background:var(--green-dim); color:var(--green); border:1px solid rgba(16,185,129,.3); }
+    .badge-interest-SCHEDULED::before { background:var(--green); }
     /* RECALLED — bold red, pulsing */
     .badge-RECALLED { background:rgba(239,68,68,0.15); color:var(--red); border:1px solid rgba(239,68,68,0.45); }
     .badge-RECALLED::before { background:var(--red); animation:pulse 1s ease-in-out infinite; }
@@ -321,6 +334,23 @@ const shell = (title: string, body: string) => `<!DOCTYPE html>
       transition:all .25s;
     }
     .lot-card:hover { border-color:var(--border-amber); transform:translateY(-2px); box-shadow:0 8px 32px rgba(0,0,0,.4); }
+    /* OUT OF STOCK lot card — visible but dimmed, no hover lift */
+    .lot-card.oos {
+      opacity: 0.72;
+      border-color: rgba(113,113,122,0.25);
+    }
+    .lot-card.oos:hover { transform:none; box-shadow:none; border-color:rgba(113,113,122,0.45); }
+    /* Request Roasting button — blue/interest tone */
+    .btn-roasting {
+      width:100%;
+      font-family:var(--font-mono); font-size:12px; font-weight:600;
+      padding:10px 16px; border-radius:var(--radius);
+      background:rgba(59,130,246,0.12); color:#60a5fa;
+      border:1px solid rgba(59,130,246,0.30);
+      cursor:pointer; transition:all .2s;
+      display:flex; align-items:center; justify-content:center; gap:8px;
+    }
+    .btn-roasting:hover { background:rgba(59,130,246,0.22); border-color:rgba(59,130,246,0.55); }
     .lot-header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px; }
     .lot-id { font-family:var(--font-mono); font-size:11px; color:var(--text-muted); }
     .lot-origin { font-size:15px; font-weight:600; color:var(--text-pri); margin-top:2px; }
@@ -699,14 +729,23 @@ ${body}
 //  CREDENTIALS  (client-side check — plain lookup table)
 // ══════════════════════════════════════════════════════════════════
 // Credentials are validated entirely in the browser via JavaScript.
-// The server just serves the pages at /admin and /cafe directly —
-// no session middleware, no cookie checks, no redirects.
+// The server serves pages at /cafe?cid=CAF-xxx so each cafe user
+// sees their own identity — no cookie/session middleware required.
 
 const CREDENTIALS: Record<string, { dest: string }> = {
-  'admin':      { dest: '/admin' },
-  'alnokhba':   { dest: '/cafe' },
-  'qahwa_bahr': { dest: '/cafe' },
-  'pearl_roast':{ dest: '/cafe' },
+  'admin':       { dest: '/admin' },
+  'alnokhba':    { dest: '/cafe?cid=CAF-001' },
+  'qahwa_bahr':  { dest: '/cafe?cid=CAF-002' },
+  'pearl_roast': { dest: '/cafe?cid=CAF-003' },
+}
+
+// ── Resolve cafe client from ?cid= query param ─────────────────────────────
+function resolveCafeClient(cidParam: string | null) {
+  if (cidParam) {
+    const found = cafeClients.find(c => c.id === cidParam)
+    if (found) return found
+  }
+  return cafeClients[0]  // fallback
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -792,9 +831,9 @@ app.get('/', (c) => {
     /* ── credential table ── */
     var CREDS = {
       admin:       { pass: 'qabban2026', dest: '/admin' },
-      alnokhba:    { pass: 'cafe123',    dest: '/cafe'  },
-      qahwa_bahr:  { pass: 'cafe123',    dest: '/cafe'  },
-      pearl_roast: { pass: 'cafe123',    dest: '/cafe'  }
+      alnokhba:    { pass: 'cafe123',    dest: '/cafe?cid=CAF-001' },
+      qahwa_bahr:  { pass: 'cafe123',    dest: '/cafe?cid=CAF-002' },
+      pearl_roast: { pass: 'cafe123',    dest: '/cafe?cid=CAF-003' }
     };
 
     function handleLogin() {
@@ -901,10 +940,11 @@ function adminLayout(pageTitle: string, activeNav: string, content: string, pend
   return shell(pageTitle, body)
 }
 
-function cafeLayout(pageTitle: string, activeNav: string, content: string, clientInfo: { name: string; tier: string; branch: string }) {
+function cafeLayout(pageTitle: string, activeNav: string, content: string, clientInfo: { name: string; tier: string; branch: string; id: string }) {
+  const cid = clientInfo.id  // e.g. "CAF-001"
   const navLinks = [
-    { href: '/cafe',        icon: 'fa-mug-hot',           label: 'Available Lots', id: 'lots'   },
-    { href: '/cafe/orders', icon: 'fa-clock-rotate-left', label: 'My Orders',      id: 'orders' },
+    { href: `/cafe?cid=${cid}`,        icon: 'fa-mug-hot',           label: 'Coffee Catalog', id: 'lots'   },
+    { href: `/cafe/orders?cid=${cid}`, icon: 'fa-clock-rotate-left', label: 'My Orders',      id: 'orders' },
   ]
   const tierColor = clientInfo.tier === 'Gold' ? 'var(--amber)' : clientInfo.tier === 'Silver' ? '#94a3b8' : '#cd7f32'
   const body = `
@@ -939,13 +979,14 @@ function cafeLayout(pageTitle: string, activeNav: string, content: string, clien
           <div style="font-size:12px;font-weight:600;color:var(--text-pri)">${clientInfo.name}</div>
           <div style="font-size:11px;color:var(--text-muted);margin-top:2px">${clientInfo.branch} Branch</div>
           <div style="font-size:11px;color:${tierColor};margin-top:4px">★ ${clientInfo.tier} Client</div>
+          <div style="font-size:10px;color:var(--text-muted);margin-top:2px;font-family:var(--font-mono)">${cid}</div>
         </div>
       </div>
     </nav>
     <main class="main">
       <div class="page-header">
         <div class="page-title"><span>// </span>${pageTitle}</div>
-        <div class="page-sub">Showing OPTIMAL lots only · ${clientInfo.branch} region</div>
+        <div class="page-sub">Coffee Catalog · All Origins · ${clientInfo.branch} Region</div>
       </div>
       ${content}
     </main>
@@ -965,7 +1006,7 @@ function cafeLayout(pageTitle: string, activeNav: string, content: string, clien
       <div class="modal-title"><i class="fa fa-basket-shopping"></i> Request Beans</div>
       <div id="modalContent"></div>
       <form method="POST" action="/cafe/request" id="requestForm">
-        <input type="hidden" name="cafeId" value="${clientInfo.name}"/>
+        <input type="hidden" name="cafeId" value="${cid}"/>
         <input type="hidden" name="lotId" id="modalLotId"/>
         <div class="form-group" style="margin-bottom:16px">
           <label class="form-label">Quantity (kg)</label>
@@ -1003,18 +1044,10 @@ function cafeLayout(pageTitle: string, activeNav: string, content: string, clien
     // Polls for active recalls relevant to this cafe every 30s.
     // Renders persistent urgent red banner(s) at the top of the portal.
     var _shownRecalls = new Set();
-    var CAFE_ID = '${clientInfo.name.replace(/'/g, "\\'")}';
+    var CAFE_ID = '${cid}';
 
     function checkRecalls() {
-      // Use cafeId from URL param or client id mapping
-      var cafeIdMap = {
-        'Al Nokhba Specialty': 'CAF-001',
-        'Qahwa Al Bahr':       'CAF-002',
-        'Pearl Roast Café':    'CAF-003',
-      };
-      var cid = cafeIdMap[CAFE_ID] || 'CAF-001';
-
-      fetch('/api/recalls/' + cid)
+      fetch('/api/recalls/' + CAFE_ID)
         .then(function(r){ return r.json(); })
         .then(function(d){
           (d.recalls || []).forEach(function(recall){
@@ -1885,6 +1918,63 @@ app.get('/admin/requests', (c) => {
         </tbody>
       </table>
     </div>`}
+  </div>
+
+  <!-- ── Roasting Interests (Pre-Orders for OUT OF STOCK) ── -->
+  <div class="card" style="margin-top:24px">
+    <div class="card-title">
+      <i class="fa fa-fire" style="color:#60a5fa"></i>
+      Roasting Interests — Pre-Orders
+      ${roastingInterests.filter(r => r.status === 'NEW').length > 0
+        ? `<span style="background:rgba(59,130,246,0.15);color:#60a5fa;font-family:var(--font-mono);font-size:9px;padding:2px 7px;border-radius:2px;border:1px solid rgba(59,130,246,0.35);margin-left:4px">${roastingInterests.filter(r => r.status === 'NEW').length} NEW</span>`
+        : ''
+      }
+    </div>
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:14px">
+      Cafes submitted these pre-orders for origins that are currently <strong>OUT OF STOCK</strong>. Use this to plan your next roast schedule.
+    </div>
+    ${roastingInterests.length === 0
+      ? `<div class="empty-state" style="padding:28px">
+           <i class="fa fa-clock" style="color:#52525b"></i>
+           <p>No pre-orders yet — cafes will submit Roasting Interest requests when an origin is out of stock.</p>
+         </div>`
+      : `<div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Ref</th><th>Cafe</th><th>Origin</th>
+            <th>Interested Qty</th><th>Notes</th><th>Submitted</th><th>Status</th><th>Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${roastingInterests.map(r => `
+          <tr>
+            <td class="mono" style="color:#60a5fa">${r.id}</td>
+            <td>
+              <div style="font-weight:500">${r.cafeName}</div>
+              <div style="font-size:11px;color:var(--text-muted)">${r.cafeId}</div>
+            </td>
+            <td style="font-weight:500">${r.origin}</td>
+            <td class="mono" style="color:#60a5fa">${r.interestedKg} kg</td>
+            <td style="font-size:12px;color:var(--text-sec);max-width:160px">${r.notes || '—'}</td>
+            <td class="mono" style="font-size:10px;color:var(--text-muted)">${r.submittedAt}</td>
+            <td><span class="badge badge-interest-${r.status}">${r.status}</span></td>
+            <td style="white-space:nowrap">
+              ${r.status === 'NEW' ? `
+              <form method="POST" action="/admin/interests/${r.id}/seen" style="display:inline">
+                <button type="submit" style="font-family:var(--font-mono);font-size:10px;padding:5px 10px;background:var(--amber-glow);color:var(--amber);border:1px solid var(--border-amber);border-radius:var(--radius);cursor:pointer;margin-right:4px">MARK SEEN</button>
+              </form>` : ''}
+              ${r.status !== 'SCHEDULED' ? `
+              <form method="POST" action="/admin/interests/${r.id}/schedule" style="display:inline">
+                <button type="submit" style="font-family:var(--font-mono);font-size:10px;padding:5px 10px;background:var(--green-dim);color:var(--green);border:1px solid rgba(16,185,129,.3);border-radius:var(--radius);cursor:pointer">SCHEDULE</button>
+              </form>` : `
+              <span style="font-family:var(--font-mono);font-size:10px;color:var(--green)"><i class="fa fa-check"></i> Scheduled</span>`}
+            </td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`
+    }
   </div>`
 
   return c.html(adminLayout('Bean Requests', 'requests', content, pendingCount))
@@ -1910,6 +2000,20 @@ app.post('/admin/requests/:id/dispatch', (c) => {
 app.post('/admin/requests/:id/cancel', (c) => {
   const req = beanRequests.find(r => r.id === c.req.param('id'))
   if (req) req.status = 'CANCELLED'
+  return c.redirect('/admin/requests')
+})
+
+// ── POST /admin/interests/:id/seen ─────────────────────────────
+app.post('/admin/interests/:id/seen', (c) => {
+  const ri = roastingInterests.find(r => r.id === c.req.param('id'))
+  if (ri) ri.status = 'SEEN'
+  return c.redirect('/admin/requests')
+})
+
+// ── POST /admin/interests/:id/schedule ─────────────────────────
+app.post('/admin/interests/:id/schedule', (c) => {
+  const ri = roastingInterests.find(r => r.id === c.req.param('id'))
+  if (ri) ri.status = 'SCHEDULED'
   return c.redirect('/admin/requests')
 })
 
@@ -1964,11 +2068,34 @@ app.post('/admin/inventory/:lotId/recall', async (c) => {
 
 // ── GET /cafe ────────────────────────────────────────────────────
 app.get('/cafe', (c) => {
-  // Default to the first cafe client for the demo portal view
-  const client = cafeClients[0]
-  // Only show OPTIMAL lots — RECALLED lots are fully blocked from ordering
-  const optimalLots   = coffeeLots.filter(l => l.status === 'OPTIMAL')
+  const client      = resolveCafeClient(c.req.query('cid') ?? null)
+  const bal         = calcLiveBalance(coffeeLots, beanRequests)
   const recalledCount = coffeeLots.filter(l => l.status === 'RECALLED').length
+
+  // ── Per-origin live roasted balance (summed across all lots for that origin)
+  // Includes ALL non-RECALLED lots (OPTIMAL, MONITOR, CRITICAL) with remaining stock.
+  const originBalanceMap = new Map<string, number>()
+  for (const cat of CATALOG_ORIGINS) {
+    const total = coffeeLots
+      .filter(l => l.origin === cat.key && l.status !== 'RECALLED')
+      .reduce((sum, lot) => {
+        const lb = bal.byLot.get(lot.id)
+        return sum + (lb ? lb.liveRoastedKg : 0)
+      }, 0)
+    originBalanceMap.set(cat.key, Math.round(total * 10) / 10)
+  }
+
+  // ── Best lot per origin (highest grade non-RECALLED lot with remaining stock)
+  const bestLotMap = new Map<string, CoffeeLot>()
+  for (const cat of CATALOG_ORIGINS) {
+    const lots = coffeeLots
+      .filter(l => l.origin === cat.key && l.status !== 'RECALLED')
+      .sort((a, b) => b.gradeScore - a.gradeScore)
+    if (lots.length > 0) bestLotMap.set(cat.key, lots[0])
+  }
+
+  const inStockCount  = CATALOG_ORIGINS.filter(c => (originBalanceMap.get(c.key) ?? 0) > 0).length
+  const outOfStockCount = CATALOG_ORIGINS.length - inStockCount
 
   const content = `
   ${recalledCount > 0 ? `
@@ -1976,88 +2103,174 @@ app.get('/cafe', (c) => {
     <i class="fa fa-triangle-exclamation"></i>
     <div>
       <strong>${recalledCount} lot${recalledCount > 1 ? 's' : ''} currently RECALLED</strong> —
-      These lots have been removed from ordering. Check the urgent notice at the top if you received prior dispatches.
+      These lots have been removed from ordering. Check the urgent notice above if you received prior dispatches.
     </div>
   </div>` : ''}
 
-  <div class="alert alert-success" style="margin-bottom:24px">
-    <i class="fa fa-circle-check"></i>
-    <div>Showing <strong>${optimalLots.length} OPTIMAL lots</strong> available for ordering. All lots have passed quality and humidity checks.</div>
-  </div>
-
   <div class="stat-grid" style="margin-bottom:28px">
     <div class="stat-card">
-      <div class="stat-label">Available Lots</div>
-      <div class="stat-value">${optimalLots.length}</div>
-      <div class="stat-unit">OPTIMAL status only</div>
+      <div class="stat-label">Origins in Catalog</div>
+      <div class="stat-value">${CATALOG_ORIGINS.length}</div>
+      <div class="stat-unit">master ledger origins</div>
     </div>
     <div class="stat-card">
-      <div class="stat-label">Total Roasted Stock</div>
-      <div class="stat-value">${optimalLots.reduce((s, l) => s + l.roastedWeightKg, 0).toLocaleString()}</div>
-      <div class="stat-unit">kg available</div>
+      <div class="stat-label">In Stock</div>
+      <div class="stat-value" style="color:var(--green)">${inStockCount}</div>
+      <div class="stat-unit">origins with roasted balance</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Out of Stock</div>
+      <div class="stat-value" style="color:var(--text-muted)">${outOfStockCount}</div>
+      <div class="stat-unit">pre-order available</div>
     </div>
     <div class="stat-card">
       <div class="stat-label">Your Orders</div>
       <div class="stat-value">${beanRequests.filter(r => r.cafeId === client.id).length}</div>
       <div class="stat-unit">total requests</div>
     </div>
-    <div class="stat-card">
-      <div class="stat-label">Avg. Grade Score</div>
-      <div class="stat-value">${optimalLots.length > 0 ? Math.round(optimalLots.reduce((s, l) => s + l.gradeScore, 0) / optimalLots.length) : '—'}</div>
-      <div class="stat-unit">quality points</div>
-    </div>
   </div>
 
+  <!-- Catalog Grid — all 6 origins always visible -->
   <div class="lot-grid">
-    ${optimalLots.length === 0
-      ? '<div class="empty-state"><i class="fa fa-boxes-stacked"></i><p>No optimal lots available at this time.</p></div>'
-      : optimalLots.map(l => `
-    <div class="lot-card">
+    ${CATALOG_ORIGINS.map(cat => {
+      const liveRoasted = originBalanceMap.get(cat.key) ?? 0
+      const isInStock   = liveRoasted > 0
+      const bestLot     = bestLotMap.get(cat.key)
+      const isRecalled  = coffeeLots.some(l => l.origin === cat.key && l.status === 'RECALLED')
+
+      return `
+    <div class="lot-card${isInStock ? '' : ' oos'}" style="position:relative">
+      <!-- Header row: origin name + stock badge -->
       <div class="lot-header">
         <div>
-          <div class="lot-id">${l.id}</div>
-          <div class="lot-origin">${l.origin}</div>
-          <div class="lot-variety">${l.variety} · ${l.process}</div>
+          <div class="lot-id">${cat.variety} · ${cat.process}</div>
+          <div class="lot-origin">${cat.displayName}</div>
         </div>
-        <span class="badge badge-OPTIMAL">OPTIMAL</span>
+        ${isInStock
+          ? `<span class="badge badge-OPTIMAL">IN STOCK</span>`
+          : `<span class="badge badge-OOS">OUT OF STOCK</span>`
+        }
       </div>
+
+      <!-- Flavor tags from master catalog -->
       <div class="flavor-tags">
-        ${l.flavorNotes.map(f => `<span class="flavor-tag">${f}</span>`).join('')}
+        ${cat.flavorNotes.map(f => `<span class="flavor-tag">${f}</span>`).join('')}
       </div>
+
+      <!-- Origin description -->
+      <div style="font-size:11px;color:var(--text-muted);line-height:1.5;margin:8px 0 12px">${cat.description}</div>
+
       <div class="lot-divider"></div>
-      <div class="lot-metrics">
+
+      ${isInStock && bestLot ? `
+      <!-- In-stock metrics: use live balance -->
+      <div class="lot-metrics" style="margin-bottom:12px">
         <div>
-          <div class="lot-metric-label">Roasted Stock</div>
-          <div class="lot-metric-value">${l.roastedWeightKg} kg</div>
-          <div class="lot-metric-sub">from ${l.greenWeightKg} kg green</div>
+          <div class="lot-metric-label">Roasted Balance</div>
+          <div class="lot-metric-value">${liveRoasted} kg</div>
+          <div class="lot-metric-sub">live available</div>
         </div>
         <div>
-          <div class="lot-metric-label">Grade Score</div>
-          <div class="lot-metric-value">${l.gradeScore}</div>
+          <div class="lot-metric-label">Best Lot Grade</div>
+          <div class="lot-metric-value">${bestLot.gradeScore}</div>
           <div class="lot-metric-sub">
             <div class="score-bar">
-              <div class="score-track"><div class="score-fill" style="width:${l.gradeScore}%"></div></div>
+              <div class="score-track"><div class="score-fill" style="width:${bestLot.gradeScore}%"></div></div>
             </div>
           </div>
         </div>
         <div>
-          <div class="lot-metric-label">Roasted</div>
-          <div class="lot-metric-value" style="font-size:13px">${l.roastDate}</div>
+          <div class="lot-metric-label">Lot Ref</div>
+          <div class="lot-metric-value" style="font-size:12px;color:var(--amber)">${bestLot.id}</div>
+          <div class="lot-metric-sub">latest batch</div>
         </div>
         <div>
           <div class="lot-metric-label">Expires</div>
-          <div class="lot-metric-value" style="font-size:13px">${l.expiryDate}</div>
+          <div class="lot-metric-value" style="font-size:12px">${bestLot.expiryDate}</div>
         </div>
       </div>
       <div class="lot-footer">
-        <button class="btn-request" onclick="openModal('${l.id}','${l.origin}',${l.roastedWeightKg})">
+        <button class="btn-request"
+          onclick="openModal('${bestLot.id}','${cat.displayName.replace(/'/g, "\\'")}',${liveRoasted})">
           <i class="fa fa-basket-shopping"></i> REQUEST BEANS
         </button>
       </div>
-    </div>`).join('')}
-  </div>`
+      ` : `
+      <!-- Out of stock: show pre-order panel -->
+      <div style="padding:14px 0 4px">
+        <div style="font-size:11px;color:var(--text-muted);margin-bottom:12px;display:flex;align-items:center;gap:6px">
+          <i class="fa fa-clock" style="color:#71717a"></i>
+          Not currently roasted — express your interest and the roaster will schedule it.
+        </div>
+        ${isRecalled ? `
+        <div style="font-family:var(--font-mono);font-size:10px;color:var(--red);padding:6px 10px;border:1px solid rgba(239,68,68,.35);border-radius:var(--radius);margin-bottom:10px">
+          <i class="fa fa-ban"></i> One or more lots from this origin are currently RECALLED
+        </div>` : ''}
+      </div>
+      <div class="lot-footer">
+        <button class="btn-roasting"
+          onclick="openRoastingModal('${cat.key.replace(/'/g, "\\'")}','${cat.displayName.replace(/'/g, "\\'")}')">
+          <i class="fa fa-fire"></i> REQUEST ROASTING
+        </button>
+      </div>
+      `}
+    </div>`
+    }).join('')}
+  </div>
 
-  return c.html(cafeLayout('Available Coffee Lots', 'lots', content, { name: client.name, tier: client.tier, branch: client.branch }))
+  <!-- ── Request Roasting Modal (pre-order / interest) ── -->
+  <div class="modal-overlay" id="roastingModal">
+    <div class="modal" style="border-color:rgba(59,130,246,0.40)">
+      <div class="modal-title" style="color:#60a5fa">
+        <i class="fa fa-fire" style="color:#60a5fa"></i>
+        Request Roasting
+      </div>
+      <div style="font-size:12px;color:var(--text-muted);margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid var(--bg-3)">
+        <span id="roastingOriginLabel" style="font-weight:600;color:var(--text-pri)"></span><br/>
+        This origin is currently out of stock. Let the roaster know how many kg you need and they'll schedule a roast for you.
+      </div>
+      <form method="POST" action="/cafe/roasting-interest" id="roastingForm">
+        <input type="hidden" name="cafeId" id="roastingCafeId" value="${client.id}"/>
+        <input type="hidden" name="origin" id="roastingOriginInput"/>
+        <div class="form-group" style="margin-bottom:14px">
+          <label class="form-label">How many kg are you interested in?</label>
+          <input class="form-input" type="number" name="interestedKg" id="roastingKg"
+                 min="1" max="2000" placeholder="e.g. 50" required
+                 style="border-color:rgba(59,130,246,0.40)"/>
+        </div>
+        <div class="form-group" style="margin-bottom:16px">
+          <label class="form-label">Notes (optional)</label>
+          <textarea class="form-textarea" name="notes"
+                    placeholder="Preferred roast profile, delivery timing, blend use-case..."
+                    style="border-color:rgba(59,130,246,0.25)"></textarea>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn-cancel" onclick="closeRoastingModal()">CANCEL</button>
+          <button type="submit"
+            style="flex:2;padding:10px;font-family:var(--font-mono);font-size:12px;font-weight:700;background:#3b82f6;color:white;border:none;border-radius:var(--radius);cursor:pointer;letter-spacing:.5px">
+            <i class="fa fa-paper-plane"></i> &nbsp;SEND INTEREST
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    function openRoastingModal(originKey, displayName) {
+      document.getElementById('roastingOriginInput').value = originKey;
+      document.getElementById('roastingOriginLabel').textContent = displayName;
+      document.getElementById('roastingKg').value = '';
+      document.getElementById('roastingModal').classList.add('open');
+    }
+    function closeRoastingModal() {
+      document.getElementById('roastingModal').classList.remove('open');
+    }
+    document.getElementById('roastingModal').addEventListener('click', function(e) {
+      if (e.target === this) closeRoastingModal();
+    });
+  </script>`
+
+  return c.html(cafeLayout('Coffee Catalog', 'lots', content, { name: client.name, tier: client.tier, branch: client.branch, id: client.id }))
 })
 
 // ── POST /cafe/request ──────────────────────────────────────────
@@ -2066,10 +2279,10 @@ app.post('/cafe/request', async (c) => {
   const lotId    = form.get('lotId') as string
   const quantity = parseInt(form.get('quantity') as string, 10)
   const notes    = (form.get('notes') as string) || ''
-  const cafeId   = form.get('cafeId') as string
+  const cafeId   = (form.get('cafeId') as string) || ''
 
-  const lot    = coffeeLots.find(l => l.id === lotId && l.status === 'OPTIMAL')  // RECALLED lots blocked
-  const client = cafeClients[0]
+  const lot    = coffeeLots.find(l => l.id === lotId && l.status !== 'RECALLED')  // RECALLED lots blocked
+  const client = resolveCafeClient(cafeId)
 
   if (!lot || isNaN(quantity) || quantity <= 0) return c.redirect('/cafe')
 
@@ -2078,7 +2291,7 @@ app.post('/cafe/request', async (c) => {
   beanRequests.push({
     id: reqId,
     cafeId: client.id,
-    cafeName: cafeId || client.name,
+    cafeName: client.name,
     lotId,
     lotOrigin: lot.origin,
     quantityKg: quantity,
@@ -2087,20 +2300,56 @@ app.post('/cafe/request', async (c) => {
     notes,
   })
 
-  return c.redirect('/cafe/orders?success=1')
+  return c.redirect('/cafe/orders?success=1&cid=' + client.id)
+})
+
+// ── POST /cafe/roasting-interest ─────────────────────────────────
+// Captures pre-order interest for OUT OF STOCK origins.
+app.post('/cafe/roasting-interest', async (c) => {
+  const form         = await c.req.formData()
+  const origin       = (form.get('origin') as string ?? '').trim()
+  const interestedKg = parseInt(form.get('interestedKg') as string, 10)
+  const notes        = (form.get('notes') as string) || ''
+  const cafeId       = (form.get('cafeId') as string) || ''
+  const client       = resolveCafeClient(cafeId)
+
+  if (!origin || isNaN(interestedKg) || interestedKg <= 0) return c.redirect('/cafe')
+
+  const now  = new Date().toISOString().replace('T', ' ').slice(0, 16)
+  const riId = `RI-${String(roastingInterests.length + 1).padStart(3, '0')}`
+
+  roastingInterests.push({
+    id:           riId,
+    cafeId:       client.id,
+    cafeName:     client.name,
+    origin,
+    interestedKg,
+    submittedAt:  now,
+    notes,
+    status:       'NEW',
+  })
+
+  return c.redirect('/cafe/orders?preorder=1&cid=' + client.id)
 })
 
 // ── GET /cafe/orders ─────────────────────────────────────────────
 app.get('/cafe/orders', (c) => {
-  const client    = cafeClients[0]
+  const client    = resolveCafeClient(c.req.query('cid') ?? null)
   const myOrders  = beanRequests.filter(r => r.cafeId === client.id)
+  const myInterests = roastingInterests.filter(r => r.cafeId === client.id)
   const success   = c.req.query('success')
+  const preorder  = c.req.query('preorder')
 
   const content = `
   ${success ? `
   <div class="alert alert-success">
     <i class="fa fa-circle-check"></i>
     <div><strong>Request sent!</strong> Your bean request has been submitted. The roaster admin will review and confirm shortly.</div>
+  </div>` : ''}
+  ${preorder ? `
+  <div class="alert" style="background:rgba(59,130,246,0.10);border:1px solid rgba(59,130,246,0.30);color:#60a5fa">
+    <i class="fa fa-fire"></i>
+    <div><strong>Roasting interest registered!</strong> The roaster has been notified of your pre-order request and will schedule accordingly.</div>
   </div>` : ''}
 
   <div class="stat-grid" style="margin-bottom:28px">
@@ -2110,25 +2359,27 @@ app.get('/cafe/orders', (c) => {
     </div>
     <div class="stat-card">
       <div class="stat-label">Pending</div>
-      <div class="stat-value" style="color:var(--blue)">${myOrders.filter(r => r.status === 'PENDING').length}</div>
+      <div class="stat-value" style="color:var(--amber)">${myOrders.filter(r => r.status === 'PENDING').length}</div>
     </div>
     <div class="stat-card">
       <div class="stat-label">Confirmed</div>
       <div class="stat-value" style="color:var(--green)">${myOrders.filter(r => r.status === 'CONFIRMED').length}</div>
     </div>
     <div class="stat-card">
-      <div class="stat-label">Dispatched</div>
-      <div class="stat-value" style="color:var(--amber)">${myOrders.filter(r => r.status === 'DISPATCHED').length}</div>
+      <div class="stat-label">Pre-Orders</div>
+      <div class="stat-value" style="color:#60a5fa">${myInterests.length}</div>
+      <div class="stat-unit">roasting interests</div>
     </div>
   </div>
 
-  <div class="card">
-    <div class="card-title">Order History</div>
+  <!-- Bean Orders -->
+  <div class="card" style="margin-bottom:24px">
+    <div class="card-title"><i class="fa fa-basket-shopping" style="color:var(--amber)"></i> Bean Orders</div>
     ${myOrders.length === 0 ? `
     <div class="empty-state">
       <i class="fa fa-basket-shopping"></i>
-      <p>No orders yet — browse available lots and request beans.</p>
-      <a href="/cafe" style="display:inline-block;margin-top:12px;font-family:var(--font-mono);font-size:12px">Browse Lots →</a>
+      <p>No orders yet — browse the catalog and request available beans.</p>
+      <a href="/cafe?cid=${client.id}" style="display:inline-block;margin-top:12px;font-family:var(--font-mono);font-size:12px">Browse Catalog →</a>
     </div>` : `
     <div class="table-wrap">
       <table>
@@ -2149,9 +2400,38 @@ app.get('/cafe/orders', (c) => {
         </tbody>
       </table>
     </div>`}
+  </div>
+
+  <!-- Roasting Interests / Pre-Orders -->
+  <div class="card">
+    <div class="card-title"><i class="fa fa-fire" style="color:#60a5fa"></i> Roasting Interests (Pre-Orders)</div>
+    ${myInterests.length === 0 ? `
+    <div class="empty-state">
+      <i class="fa fa-clock" style="color:#52525b"></i>
+      <p>No pre-orders yet — click 'Request Roasting' on any out-of-stock origin in the catalog.</p>
+      <a href="/cafe?cid=${client.id}" style="display:inline-block;margin-top:12px;font-family:var(--font-mono);font-size:12px">Browse Catalog →</a>
+    </div>` : `
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Ref</th><th>Origin</th><th>Interested Qty</th><th>Notes</th><th>Submitted</th><th>Status</th></tr>
+        </thead>
+        <tbody>
+          ${myInterests.map(r => `
+          <tr>
+            <td class="mono" style="color:#60a5fa">${r.id}</td>
+            <td style="font-weight:500">${r.origin}</td>
+            <td class="mono" style="color:#60a5fa">${r.interestedKg} kg</td>
+            <td style="font-size:12px;color:var(--text-sec);max-width:140px">${r.notes || '—'}</td>
+            <td class="mono" style="font-size:10px;color:var(--text-muted)">${r.submittedAt}</td>
+            <td><span class="badge badge-interest-${r.status}">${r.status}</span></td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`}
   </div>`
 
-  return c.html(cafeLayout('My Orders', 'orders', content, { name: client.name, tier: client.tier, branch: client.branch }))
+  return c.html(cafeLayout('My Orders', 'orders', content, { name: client.name, tier: client.tier, branch: client.branch, id: client.id }))
 })
 
 // ══════════════════════════════════════════════════════════════════
@@ -2162,6 +2442,8 @@ app.get('/api/lots',         (c) => c.json(coffeeLots))
 app.get('/api/lots/optimal', (c) => c.json(coffeeLots.filter(l => l.status === 'OPTIMAL')))
 app.get('/api/branches',     (c) => c.json(branches))
 app.get('/api/requests',     (c) => c.json(beanRequests))
+app.get('/api/interests',    (c) => c.json(roastingInterests))
+app.get('/api/catalog',      (c) => c.json(CATALOG_ORIGINS))
 
 // ── GET /api/recalls/:cafeId  ─────────────────────────────────────────
 // Returns active recalls relevant to this cafe (had DISPATCHED orders for

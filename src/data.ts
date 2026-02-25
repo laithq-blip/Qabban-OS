@@ -1,6 +1,7 @@
-// ─────────────────────────────────────────────
-//  Qabban OS  —  Mock Data & Business Logic
-// ─────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+//  Qabban OS  —  Master Data & Business Logic
+//  Synced with: Qabban OS Regional Master Ledger
+// ─────────────────────────────────────────────────────────────────────────────
 
 export type LotStatus = 'OPTIMAL' | 'MONITOR' | 'CRITICAL' | 'RECALLED'
 
@@ -29,8 +30,8 @@ export interface CoffeeLot {
 export interface Branch {
   id: string
   name: 'Riyadh' | 'Jeddah' | 'Dammam'
-  humidity: number          // percent
-  temperature: number       // celsius
+  humidity: number
+  temperature: number
   lastChecked: string
   riskStatus: 'LOW' | 'MODERATE' | 'HIGH' | 'CRITICAL'
   activeLots: number
@@ -40,7 +41,7 @@ export interface Branch {
 export interface CafeClient {
   id: string
   username: string
-  password: string          // hashed in real-world; plain for demo
+  password: string
   name: string
   branch: 'Riyadh' | 'Jeddah' | 'Dammam'
   tier: 'Gold' | 'Silver' | 'Bronze'
@@ -58,18 +59,29 @@ export interface BeanRequest {
   notes: string
 }
 
+// ─── Roasting Interest (Pre-Order for OUT OF STOCK origins) ────────────────
+// Submitted by cafes when an origin has 0 kg live roasted balance.
+// Captures demand so the roaster knows what to schedule next.
+export interface RoastingInterest {
+  id: string
+  cafeId: string
+  cafeName: string
+  origin: string             // catalog origin key
+  interestedKg: number       // how many kg the cafe wants
+  submittedAt: string
+  notes: string
+  status: 'NEW' | 'SEEN' | 'SCHEDULED'
+}
+
 // ─── Shrinkage formula ─────────────────────────────────────────────────────
 export const applyRoastShrinkage = (greenKg: number): number =>
   Math.round(greenKg * 0.82 * 10) / 10
 
-// Reverse: convert a dispatched roasted quantity back to its green equivalent
 export const roastedToGreenEquiv = (roastedKg: number): number =>
   Math.round((roastedKg / 0.82) * 10) / 10
 
 // ─── Humidity risk classifier ──────────────────────────────────────────────
-export const classifyHumidityRisk = (
-  humidity: number
-): Branch['riskStatus'] => {
+export const classifyHumidityRisk = (humidity: number): Branch['riskStatus'] => {
   if (humidity < 50) return 'LOW'
   if (humidity < 62) return 'MODERATE'
   if (humidity < 75) return 'HIGH'
@@ -78,24 +90,17 @@ export const classifyHumidityRisk = (
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Live Balance Calculator
-//
-//  Rule: only DISPATCHED requests reduce live stock.
-//  CANCELLED orders are fully excluded — their weight is restored.
-//
-//  dispatchedRoastedKg  = sum of quantityKg for DISPATCHED (non-CANCELLED) requests
-//  dispatchedGreenEquiv = dispatchedRoastedKg / 0.82   (reverse shrinkage)
-//  liveGreenKg          = purchasedGreenKg − dispatchedGreenEquiv
-//  liveRoastedKg        = liveGreenKg × 0.82
+//  Only DISPATCHED requests reduce live stock; CANCELLED are excluded entirely.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface LotLiveBalance {
-  lotId:                 string
-  purchasedGreenKg:      number   // original purchase weight
-  purchasedRoastedKg:    number   // original roasted weight
-  dispatchedRoastedKg:   number   // total dispatched (roasted kg)
-  dispatchedGreenEquiv:  number   // dispatched converted back to green
-  liveGreenKg:           number   // balance remaining (green)
-  liveRoastedKg:         number   // balance remaining (roasted)
+  lotId:                string
+  purchasedGreenKg:     number
+  purchasedRoastedKg:   number
+  dispatchedRoastedKg:  number
+  dispatchedGreenEquiv: number
+  liveGreenKg:          number
+  liveRoastedKg:        number
 }
 
 export interface AggregateBalance {
@@ -112,22 +117,18 @@ export const calcLiveBalance = (
   lots: CoffeeLot[],
   requests: BeanRequest[]
 ): AggregateBalance => {
-  // Build per-lot dispatched totals from DISPATCHED requests only
   const dispatchedByLot = new Map<string, number>()
   for (const r of requests) {
     if (r.status === 'DISPATCHED') {
-      dispatchedByLot.set(
-        r.lotId,
-        (dispatchedByLot.get(r.lotId) ?? 0) + r.quantityKg
-      )
+      dispatchedByLot.set(r.lotId, (dispatchedByLot.get(r.lotId) ?? 0) + r.quantityKg)
     }
   }
 
   const byLot = new Map<string, LotLiveBalance>()
-  let totPurchasedGreen   = 0
-  let totPurchasedRoasted = 0
+  let totPurchasedGreen    = 0
+  let totPurchasedRoasted  = 0
   let totDispatchedRoasted = 0
-  let totDispatchedGreen  = 0
+  let totDispatchedGreen   = 0
 
   for (const lot of lots) {
     const dispatchedRoasted = Math.round((dispatchedByLot.get(lot.id) ?? 0) * 10) / 10
@@ -163,18 +164,86 @@ export const calcLiveBalance = (
 }
 
 // ─── FIFO Lot Selector ─────────────────────────────────────────────────────
-// Returns the oldest available (non-RECALLED) lot for a given origin,
-// determined by roastDate ascending. Used by Log New Roast to enforce FIFO.
-export const getFifoLot = (
-  lots: CoffeeLot[],
-  origin: string
-): CoffeeLot | undefined =>
+export const getFifoLot = (lots: CoffeeLot[], origin: string): CoffeeLot | undefined =>
   lots
     .filter(l => l.origin === origin && l.status !== 'RECALLED')
     .sort((a, b) => a.roastDate.localeCompare(b.roastDate))[0]
 
-// ─── Mock coffee lots ──────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+//  CATALOG MASTER — 6 canonical origins, Qabban OS Regional Master Ledger
+//  Always shown in the Cafe Portal. Drives the catalog-led view.
+// ─────────────────────────────────────────────────────────────────────────────
+export interface CatalogOrigin {
+  key: string           // matches lot.origin exactly
+  displayName: string
+  variety: string
+  process: string
+  flavorNotes: string[]
+  description: string
+}
+
+export const CATALOG_ORIGINS: CatalogOrigin[] = [
+  {
+    key:         'Ethiopia Yirgacheffe',
+    displayName: 'Ethiopia Yirgacheffe',
+    variety:     'Heirloom',
+    process:     'Natural',
+    flavorNotes: ['Blueberry', 'Jasmine'],
+    description: 'A classic Ethiopian natural with pronounced fruit-forward complexity. Notes of wild blueberry and floral jasmine.',
+  },
+  {
+    key:         'Brazil Cerrado',
+    displayName: 'Brazil Cerrado',
+    variety:     'Catuai',
+    process:     'Pulped Natural',
+    flavorNotes: ['Milk Chocolate', 'Almond'],
+    description: 'Grown on the high-altitude Cerrado plateau. Smooth and balanced — the ideal everyday espresso base.',
+  },
+  {
+    key:         'Colombia Huila',
+    displayName: 'Colombia Huila',
+    variety:     'Caturra',
+    process:     'Washed',
+    flavorNotes: ['Caramel', 'Red Apple'],
+    description: 'From the Huila department in southern Colombia. Bright washed clarity with clean caramel sweetness and a crisp apple finish.',
+  },
+  {
+    key:         'Yemen Khawlani',
+    displayName: 'Yemen Khawlani',
+    variety:     'Heirloom',
+    process:     'Natural',
+    flavorNotes: ['Spices', 'Dried Fruits'],
+    description: 'Sourced from ancient terraced farms in the Khawlan highlands. Rare and complex with layers of warm spice and sun-dried fruit.',
+  },
+  {
+    key:         'Kenya AA',
+    displayName: 'Kenya AA',
+    variety:     'SL28',
+    process:     'Washed',
+    flavorNotes: ['Blackcurrant', 'Citrus'],
+    description: 'Kenya AA grade, washed for exceptional clarity. Intense blackcurrant brightness and vibrant citrus acidity.',
+  },
+  {
+    key:         'Indonesia Sumatra',
+    displayName: 'Indonesia Sumatra',
+    variety:     'Lintong',
+    process:     'Wet-Hulled',
+    flavorNotes: ['Cedar', 'Cocoa'],
+    description: 'Wet-hulled (Giling Basah) from the Lintong region. Full-bodied and earthy with cedar and dark cocoa. Exceptionally low acidity.',
+  },
+]
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Coffee Lots — synced exactly with Qabban OS Regional Master Ledger
+//
+//  Corrections applied:
+//    LOT-003  Yemen Khawlani   (was: Yemen Haraaz / Typica / Natural Dry)
+//    LOT-004  Yemen Khawlani   (was: Guatemala Antigua / Bourbon / Honey — REMOVED)
+//    LOT-005  Kenya AA         (was: Kenya AA Kiambu / Double Fermented)
+//    LOT-007  Indonesia Sumatra (was: Costa Rica Tarrazú — NOT in master ledger, REMOVED)
+// ─────────────────────────────────────────────────────────────────────────────
 export const coffeeLots: CoffeeLot[] = [
+  // ── Ethiopia Yirgacheffe ──────────────────────────────────────────────────
   {
     id: 'LOT-001',
     origin: 'Ethiopia Yirgacheffe',
@@ -185,10 +254,11 @@ export const coffeeLots: CoffeeLot[] = [
     roastDate: '2026-02-10',
     expiryDate: '2026-05-10',
     status: 'OPTIMAL',
-    flavorNotes: ['Blueberry', 'Jasmine', 'Dark Chocolate'],
+    flavorNotes: ['Blueberry', 'Jasmine'],
     branch: 'Riyadh',
     gradeScore: 92,
   },
+  // ── Colombia Huila ────────────────────────────────────────────────────────
   {
     id: 'LOT-002',
     origin: 'Colombia Huila',
@@ -199,52 +269,56 @@ export const coffeeLots: CoffeeLot[] = [
     roastDate: '2026-02-14',
     expiryDate: '2026-05-14',
     status: 'OPTIMAL',
-    flavorNotes: ['Caramel', 'Red Apple', 'Citrus'],
+    flavorNotes: ['Caramel', 'Red Apple'],
     branch: 'Jeddah',
     gradeScore: 89,
   },
+  // ── Yemen Khawlani (Batch 1) — was Yemen Haraaz ───────────────────────────
   {
     id: 'LOT-003',
-    origin: 'Yemen Haraaz',
-    variety: 'Typica',
-    process: 'Natural Dry',
+    origin: 'Yemen Khawlani',
+    variety: 'Heirloom',
+    process: 'Natural',
     greenWeightKg: 200,
     roastedWeightKg: applyRoastShrinkage(200),
     roastDate: '2026-01-28',
     expiryDate: '2026-04-28',
     status: 'MONITOR',
-    flavorNotes: ['Dried Fruit', 'Spice', 'Wine'],
+    flavorNotes: ['Spices', 'Dried Fruits'],
     branch: 'Dammam',
-    gradeScore: 85,
+    gradeScore: 88,
   },
+  // ── Yemen Khawlani (Batch 2) — was Guatemala Antigua (CORRECTED) ──────────
   {
     id: 'LOT-004',
-    origin: 'Guatemala Antigua',
-    variety: 'Bourbon',
-    process: 'Honey',
+    origin: 'Yemen Khawlani',
+    variety: 'Heirloom',
+    process: 'Natural',
     greenWeightKg: 450,
     roastedWeightKg: applyRoastShrinkage(450),
     roastDate: '2026-02-18',
     expiryDate: '2026-05-18',
     status: 'OPTIMAL',
-    flavorNotes: ['Brown Sugar', 'Peach', 'Walnut'],
+    flavorNotes: ['Spices', 'Dried Fruits'],
     branch: 'Riyadh',
     gradeScore: 91,
   },
+  // ── Kenya AA — was "Kenya AA Kiambu / Double Fermented" ───────────────────
   {
     id: 'LOT-005',
-    origin: 'Kenya AA Kiambu',
+    origin: 'Kenya AA',
     variety: 'SL28',
-    process: 'Double Fermented',
+    process: 'Washed',
     greenWeightKg: 320,
     roastedWeightKg: applyRoastShrinkage(320),
     roastDate: '2026-01-20',
     expiryDate: '2026-04-20',
     status: 'CRITICAL',
-    flavorNotes: ['Blackcurrant', 'Tomato', 'Cedar'],
+    flavorNotes: ['Blackcurrant', 'Citrus'],
     branch: 'Dammam',
-    gradeScore: 78,
+    gradeScore: 81,
   },
+  // ── Brazil Cerrado ────────────────────────────────────────────────────────
   {
     id: 'LOT-006',
     origin: 'Brazil Cerrado',
@@ -255,24 +329,26 @@ export const coffeeLots: CoffeeLot[] = [
     roastDate: '2026-02-20',
     expiryDate: '2026-05-20',
     status: 'OPTIMAL',
-    flavorNotes: ['Hazelnut', 'Milk Chocolate', 'Almond'],
+    flavorNotes: ['Milk Chocolate', 'Almond'],
     branch: 'Jeddah',
     gradeScore: 87,
   },
+  // ── Indonesia Sumatra (Batch 1) — was Costa Rica Tarrazú (CORRECTED) ──────
   {
     id: 'LOT-007',
-    origin: 'Costa Rica Tarrazú',
-    variety: 'Gesha',
-    process: 'Anaerobic',
+    origin: 'Indonesia Sumatra',
+    variety: 'Lintong',
+    process: 'Wet-Hulled',
     greenWeightKg: 150,
     roastedWeightKg: applyRoastShrinkage(150),
     roastDate: '2026-02-05',
     expiryDate: '2026-05-05',
     status: 'MONITOR',
-    flavorNotes: ['Bergamot', 'Tropical Fruit', 'Rose'],
+    flavorNotes: ['Cedar', 'Cocoa'],
     branch: 'Riyadh',
-    gradeScore: 93,
+    gradeScore: 85,
   },
+  // ── Indonesia Sumatra (Batch 2) ───────────────────────────────────────────
   {
     id: 'LOT-008',
     origin: 'Indonesia Sumatra',
@@ -283,7 +359,7 @@ export const coffeeLots: CoffeeLot[] = [
     roastDate: '2026-02-22',
     expiryDate: '2026-05-22',
     status: 'OPTIMAL',
-    flavorNotes: ['Earthy', 'Cedar', 'Dark Cocoa'],
+    flavorNotes: ['Cedar', 'Cocoa'],
     branch: 'Dammam',
     gradeScore: 84,
   },
@@ -298,10 +374,8 @@ export const branches: Branch[] = [
     temperature: 22,
     lastChecked: '2026-02-24 08:30',
     riskStatus: 'LOW',
-    activeLots: coffeeLots.filter((l) => l.branch === 'Riyadh').length,
-    totalGreenKg: coffeeLots
-      .filter((l) => l.branch === 'Riyadh')
-      .reduce((s, l) => s + l.greenWeightKg, 0),
+    activeLots: coffeeLots.filter(l => l.branch === 'Riyadh').length,
+    totalGreenKg: coffeeLots.filter(l => l.branch === 'Riyadh').reduce((s, l) => s + l.greenWeightKg, 0),
   },
   {
     id: 'BR-JED',
@@ -310,10 +384,8 @@ export const branches: Branch[] = [
     temperature: 26,
     lastChecked: '2026-02-24 08:28',
     riskStatus: 'HIGH',
-    activeLots: coffeeLots.filter((l) => l.branch === 'Jeddah').length,
-    totalGreenKg: coffeeLots
-      .filter((l) => l.branch === 'Jeddah')
-      .reduce((s, l) => s + l.greenWeightKg, 0),
+    activeLots: coffeeLots.filter(l => l.branch === 'Jeddah').length,
+    totalGreenKg: coffeeLots.filter(l => l.branch === 'Jeddah').reduce((s, l) => s + l.greenWeightKg, 0),
   },
   {
     id: 'BR-DMM',
@@ -322,39 +394,16 @@ export const branches: Branch[] = [
     temperature: 28,
     lastChecked: '2026-02-24 08:25',
     riskStatus: 'CRITICAL',
-    activeLots: coffeeLots.filter((l) => l.branch === 'Dammam').length,
-    totalGreenKg: coffeeLots
-      .filter((l) => l.branch === 'Dammam')
-      .reduce((s, l) => s + l.greenWeightKg, 0),
+    activeLots: coffeeLots.filter(l => l.branch === 'Dammam').length,
+    totalGreenKg: coffeeLots.filter(l => l.branch === 'Dammam').reduce((s, l) => s + l.greenWeightKg, 0),
   },
 ]
 
 // ─── Mock cafe clients ──────────────────────────────────────────────────────
 export const cafeClients: CafeClient[] = [
-  {
-    id: 'CAF-001',
-    username: 'alnokhba',
-    password: 'cafe123',
-    name: 'Al Nokhba Specialty',
-    branch: 'Riyadh',
-    tier: 'Gold',
-  },
-  {
-    id: 'CAF-002',
-    username: 'qahwa_bahr',
-    password: 'cafe123',
-    name: 'Qahwa Al Bahr',
-    branch: 'Jeddah',
-    tier: 'Silver',
-  },
-  {
-    id: 'CAF-003',
-    username: 'pearl_roast',
-    password: 'cafe123',
-    name: 'Pearl Roast Café',
-    branch: 'Dammam',
-    tier: 'Bronze',
-  },
+  { id: 'CAF-001', username: 'alnokhba',    password: 'cafe123', name: 'Al Nokhba Specialty', branch: 'Riyadh', tier: 'Gold'   },
+  { id: 'CAF-002', username: 'qahwa_bahr',  password: 'cafe123', name: 'Qahwa Al Bahr',        branch: 'Jeddah', tier: 'Silver' },
+  { id: 'CAF-003', username: 'pearl_roast', password: 'cafe123', name: 'Pearl Roast Café',      branch: 'Dammam', tier: 'Bronze' },
 ]
 
 // ─── In-memory bean requests store ────────────────────────────────────────
@@ -367,7 +416,7 @@ export const beanRequests: BeanRequest[] = [
     lotOrigin: 'Colombia Huila',
     quantityKg: 20,
     requestedAt: '2026-02-23 14:12',
-    status: 'DISPATCHED',       // already dispatched — deducts from LOT-002 live balance
+    status: 'DISPATCHED',
     notes: 'Urgent — weekend event',
   },
   {
@@ -378,7 +427,7 @@ export const beanRequests: BeanRequest[] = [
     lotOrigin: 'Ethiopia Yirgacheffe',
     quantityKg: 50,
     requestedAt: '2026-02-24 09:05',
-    status: 'CONFIRMED',        // confirmed but not dispatched yet — no deduction
+    status: 'CONFIRMED',
     notes: 'Monthly standing order',
   },
   {
@@ -393,3 +442,6 @@ export const beanRequests: BeanRequest[] = [
     notes: '',
   },
 ]
+
+// ─── In-memory roasting interest store (pre-orders for OUT OF STOCK) ───────
+export const roastingInterests: RoastingInterest[] = []
