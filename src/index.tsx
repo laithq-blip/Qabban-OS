@@ -2247,6 +2247,7 @@ app.post('/admin/inventory/add', async (c) => {
     id: lotId, origin, variety, process: proc,
     branch, greenWeightRaw, arrivalDate,
     grade: gradeRaw, flavor1, flavor2, notes,
+    labelImageUrl,
   } = body
 
   // ── Required field validation ─────────────────────────────────
@@ -2287,6 +2288,15 @@ app.post('/admin/inventory/add', async (c) => {
     ? `Branch ${branch} is currently at ${branchRisk} humidity risk (${branchRecord.humidity}%). Monitor storage conditions closely.`
     : null
 
+  // ── Validate image (optional) ──────────────────────────────────
+  // Accept data-URLs (jpeg/png/webp/gif) up to ~4 MB (base64 ≈ 4/3 raw bytes)
+  let safeImageUrl: string | undefined
+  if (labelImageUrl && typeof labelImageUrl === 'string') {
+    const ok = /^data:image\/(jpeg|png|webp|gif);base64,[A-Za-z0-9+/=]{1,5500000}$/.test(labelImageUrl)
+    if (!ok) return c.json({ error: 'labelImageUrl must be a valid base64 image data-URL (jpeg/png/webp, max ~4 MB)' }, 400)
+    safeImageUrl = labelImageUrl
+  }
+
   const newLot: CoffeeLot = {
     id:              lotId.trim(),
     origin:          origin.trim(),
@@ -2300,6 +2310,7 @@ app.post('/admin/inventory/add', async (c) => {
     flavorNotes,
     branch:          branch as 'Riyadh' | 'Jeddah' | 'Dammam',
     gradeScore:      grade,
+    ...(safeImageUrl ? { labelImageUrl: safeImageUrl } : {}),
   }
 
   coffeeLots.push(newLot)
@@ -2316,6 +2327,7 @@ app.post('/admin/inventory/add', async (c) => {
     roastedWeightKg: newLot.roastedWeightKg,
     branchRisk,
     climateWarning,
+    hasImage: !!safeImageUrl,
     totalLots: coffeeLots.length,
   }, 201)
 })
@@ -3088,6 +3100,43 @@ app.get('/admin/inventory', (c) => {
               <input class="addlot-input" type="text" name="flavor2" placeholder="Note 2 (e.g. Jasmine)" style="margin-top:6px"/>
             </div>
 
+            <!-- ── SACK LABEL PHOTO (OPTIONAL) ── -->
+            <div class="full-width">
+              <label class="addlot-label">
+                <i class="fa fa-camera"></i>
+                Sack Label Photo
+                <span style="margin-left:6px;font-family:var(--font-mono);font-size:9px;color:var(--text-muted);border:1px solid var(--border);padding:1px 5px;border-radius:2px;text-transform:uppercase;letter-spacing:.5px">OPTIONAL</span>
+              </label>
+              <!-- drag-drop / click zone -->
+              <div class="img-picker-zone" id="imgPickerZone">
+                <input type="file" id="imgPickerInput" accept="image/jpeg,image/png,image/webp,image/gif"
+                  onchange="imgPickerHandleFile(this.files[0])"/>
+                <div class="img-picker-icon"><i class="fa fa-image"></i></div>
+                <div class="img-picker-label">Drop photo here, or <span>click to browse</span></div>
+                <div class="img-picker-sub">JPEG · PNG · WebP · max 4 MB</div>
+              </div>
+              <!-- preview strip after selection -->
+              <div class="img-preview-wrap" id="imgPreviewWrap">
+                <img id="imgPreviewThumb" class="img-preview-thumb" src="" alt="Sack label preview"/>
+                <div class="img-preview-info">
+                  <div class="img-preview-name" id="imgPreviewName">—</div>
+                  <div class="img-preview-size" id="imgPreviewSize">—</div>
+                  <div style="font-size:10px;color:var(--green);margin-top:3px"><i class="fa fa-circle-check"></i> Ready to save</div>
+                </div>
+                <button type="button" class="img-preview-clear" onclick="imgPickerClear()" title="Remove photo">
+                  <i class="fa fa-xmark"></i> Remove
+                </button>
+              </div>
+              <!-- SFDA helper text -->
+              <div class="sfda-helper">
+                <i class="fa fa-shield-halved"></i>
+                <strong style="color:#3b82f6">Optional:</strong>
+                Keep a visual record for <strong style="color:var(--text-pri)">SFDA Article 18 traceability compliance.</strong>
+                Stored as <code style="font-family:var(--font-mono);font-size:10px;color:var(--amber)">Label_Image_URL</code> in the lot record.
+                Show this thumbnail instantly during inspector audits.
+              </div>
+            </div>
+
           </div>
 
           <!-- Climate Sync Banner -->
@@ -3156,6 +3205,56 @@ app.get('/admin/inventory', (c) => {
     document.getElementById('addLotSubmitBtn').innerHTML     = '<i class="fa fa-circle-check"></i> SAVE LOT';
     document.getElementById('addLotOriginCustom').style.display = 'none';
     document.getElementById('addLotId').value = '${suggestedId}';
+    imgPickerClear();
+  }
+
+  // ── Image picker logic ────────────────────────────────────────
+  var _imgDataUrl = null;
+
+  (function(){
+    var zone = document.getElementById('imgPickerZone');
+    zone.addEventListener('dragover',  function(e){ e.preventDefault(); zone.classList.add('drag-over'); });
+    zone.addEventListener('dragleave', function(){ zone.classList.remove('drag-over'); });
+    zone.addEventListener('drop', function(e){
+      e.preventDefault(); zone.classList.remove('drag-over');
+      var files = e.dataTransfer.files;
+      if (files && files[0]) imgPickerHandleFile(files[0]);
+    });
+  })();
+
+  function imgPickerHandleFile(file) {
+    if (!file) return;
+    if (file.size > 4 * 1024 * 1024) {
+      alert('Image too large (max 4 MB). Please compress or resize first.');
+      return;
+    }
+    if (!file.type.startsWith('image/')) {
+      alert('Only image files accepted (JPEG, PNG, WebP, GIF).');
+      return;
+    }
+    var reader = new FileReader();
+    reader.onload = function(ev) {
+      _imgDataUrl = ev.target.result;
+      document.getElementById('imgPreviewThumb').src = _imgDataUrl;
+      document.getElementById('imgPreviewName').textContent = file.name;
+      document.getElementById('imgPreviewSize').textContent =
+        (file.size / 1024).toFixed(1) + ' KB \u00b7 ' + file.type.split('/')[1].toUpperCase();
+      document.getElementById('imgPreviewWrap').classList.add('visible');
+      document.getElementById('imgPickerZone').style.display = 'none';
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function imgPickerClear() {
+    _imgDataUrl = null;
+    var inp = document.getElementById('imgPickerInput');
+    if (inp) inp.value = '';
+    var wrap = document.getElementById('imgPreviewWrap');
+    if (wrap) wrap.classList.remove('visible');
+    var thumb = document.getElementById('imgPreviewThumb');
+    if (thumb) thumb.src = '';
+    var zone = document.getElementById('imgPickerZone');
+    if (zone) zone.style.display = 'block';
   }
 
   // ── Origin selector: show custom input when "Other" chosen ────
@@ -3267,6 +3366,7 @@ app.get('/admin/inventory', (c) => {
       grade:          fd.get('grade'),
       flavor1:        fd.get('flavor1'),
       flavor2:        fd.get('flavor2'),
+      labelImageUrl:  _imgDataUrl || undefined,
     };
 
     btn.disabled = true;
@@ -3318,6 +3418,12 @@ app.get('/admin/inventory', (c) => {
             '<div><div style="font-size:9px;color:var(--text-muted);text-transform:uppercase">Expiry</div>' +
               '<div style="font-family:var(--font-mono);font-size:12px;color:var(--text-sec)">' + lot.expiryDate + '</div></div>' +
           '</div>' +
+          (data.hasImage && _imgDataUrl
+            ? '<div style="display:flex;align-items:center;gap:10px;margin-top:6px;padding:8px 10px;background:rgba(59,130,246,0.08);border:1px solid rgba(59,130,246,0.22);border-radius:var(--radius)">' +
+                '<img src="' + _imgDataUrl + '" style="width:48px;height:48px;object-fit:cover;border-radius:3px;border:1px solid var(--border-amber)"/>' +
+                '<div style="font-size:11px;color:#3b82f6"><i class="fa fa-shield-halved"></i> <strong>Sack label photo saved</strong> \u2014 Label_Image_URL stored for SFDA Article 18 traceability.</div>' +
+              '</div>'
+            : '') +
           (warning
             ? '<div style="margin-top:6px;padding:8px 12px;background:rgba(249,115,22,0.12);border:1px solid rgba(249,115,22,0.3);border-radius:var(--radius);font-size:11px;color:#fb923c">' +
                 '<i class="fa fa-triangle-exclamation"></i> ' + warning + '</div>'
@@ -3332,6 +3438,29 @@ app.get('/admin/inventory', (c) => {
       btn.disabled = false;
       btn.innerHTML = '<i class="fa fa-circle-check"></i> SAVE LOT';
     }
+  }
+
+  // ── Lightbox — sack label photo inspector ─────────────────────
+  var _lbDataUrl = '';
+  var _lbLotId   = '';
+
+  function openLightbox(lotId, origin, dataUrl) {
+    _lbDataUrl = dataUrl;
+    _lbLotId   = lotId;
+    document.getElementById('lightboxImg').src        = dataUrl;
+    document.getElementById('lightboxLotId').textContent  = lotId;
+    document.getElementById('lightboxOrigin').textContent = origin;
+    document.getElementById('lightboxOverlay').classList.add('open');
+  }
+  function closeLightbox() {
+    document.getElementById('lightboxOverlay').classList.remove('open');
+  }
+  function downloadLabelImage() {
+    if (!_lbDataUrl) return;
+    var a = document.createElement('a');
+    a.href     = _lbDataUrl;
+    a.download = 'sack-label-' + _lbLotId + '.jpg';
+    a.click();
   }
 
   // Backdrop click to close
@@ -3415,6 +3544,7 @@ app.get('/admin/inventory', (c) => {
             <th>Purchased</th><th>Dispatched</th>
             <th>Live Green</th><th>Live Roasted</th>
             <th>Roast Date</th><th>Expiry</th><th>Status</th><th>Grade</th>
+            <th style="min-width:58px">Label</th>
             <th>SFDA</th>
           </tr>
         </thead>
@@ -3459,6 +3589,18 @@ app.get('/admin/inventory', (c) => {
                 <span class="score-num">${l.gradeScore}</span>
               </div>
             </td>
+            <td style="text-align:center;vertical-align:middle">
+              ${l.labelImageUrl
+                ? `<img
+                    src="${l.labelImageUrl}"
+                    class="lot-thumb"
+                    alt="Sack label — ${l.id}"
+                    title="Click to inspect: ${l.id} · ${l.origin}"
+                    onclick="openLightbox('${l.id}','${l.origin.replace(/'/g, '&apos;')}','${l.labelImageUrl}')"
+                  />`
+                : `<span class="no-photo-badge"><i class="fa fa-image" style="opacity:.35;margin-right:3px"></i>—</span>`
+              }
+            </td>
             <td>
               ${isRecalled
                 ? `<div style="font-family:var(--font-mono);font-size:9px;color:var(--red);border:1px solid rgba(239,68,68,0.4);padding:3px 7px;border-radius:2px;white-space:nowrap"><i class="fa fa-ban"></i> RECALLED</div>
@@ -3479,6 +3621,23 @@ app.get('/admin/inventory', (c) => {
       </table>
     </div>
   </div>
+
+  <!-- ══ LIGHTBOX — SACK LABEL PHOTO VIEWER ══ -->
+  <div class="lightbox-overlay" id="lightboxOverlay" onclick="if(event.target===this)closeLightbox()">
+    <img id="lightboxImg" class="lightbox-img" src="" alt="Sack label"/>
+    <div class="lightbox-meta">
+      <strong id="lightboxLotId"></strong>
+      &nbsp;·&nbsp; <span id="lightboxOrigin"></span>
+      &nbsp;·&nbsp; <span style="color:#3b82f6"><i class="fa fa-shield-halved"></i> SFDA Article 18 — Label_Image_URL</span>
+    </div>
+    <div class="lightbox-footer">
+      <button class="lightbox-close" onclick="closeLightbox()"><i class="fa fa-xmark"></i> Close</button>
+      <button class="lightbox-download" id="lightboxDownload" onclick="downloadLabelImage()">
+        <i class="fa fa-download"></i> Download for Inspector
+      </button>
+    </div>
+  </div>
+  <!-- ══ end LIGHTBOX ══ -->
 
   <!-- ══ SFDA RECALL MODAL ══ -->
   <div class="modal-overlay" id="recallModal">

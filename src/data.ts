@@ -25,6 +25,8 @@ export interface CoffeeLot {
   branch: 'Riyadh' | 'Jeddah' | 'Dammam'
   gradeScore: number
   recallInfo?: RecallInfo    // populated when status === 'RECALLED'
+  labelImageUrl?: string     // optional sack-label photo (base64 data-URL or blob URL)
+                             // stored as Label_Image_URL — SFDA Article 18 traceability
 }
 
 // ─── Climate Presets ──────────────────────────────────────────────────────────
