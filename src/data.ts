@@ -47,7 +47,7 @@ export interface BeanRequest {
   lotOrigin: string
   quantityKg: number        // roasted kg ordered by the cafe
   requestedAt: string
-  status: 'PENDING' | 'CONFIRMED' | 'DISPATCHED'
+  status: 'PENDING' | 'CONFIRMED' | 'DISPATCHED' | 'CANCELLED'
   notes: string
 }
 
@@ -72,10 +72,10 @@ export const classifyHumidityRisk = (
 // ─────────────────────────────────────────────────────────────────────────────
 //  Live Balance Calculator
 //
-//  Rule: once a BeanRequest is DISPATCHED, its ordered roasted quantity is
-//  converted back to its green equivalent and deducted from that lot's balance.
+//  Rule: only DISPATCHED requests reduce live stock.
+//  CANCELLED orders are fully excluded — their weight is restored.
 //
-//  dispatchedRoastedKg  = sum of quantityKg for DISPATCHED requests on this lot
+//  dispatchedRoastedKg  = sum of quantityKg for DISPATCHED (non-CANCELLED) requests
 //  dispatchedGreenEquiv = dispatchedRoastedKg / 0.82   (reverse shrinkage)
 //  liveGreenKg          = purchasedGreenKg − dispatchedGreenEquiv
 //  liveRoastedKg        = liveGreenKg × 0.82

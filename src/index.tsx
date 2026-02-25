@@ -160,7 +160,8 @@ const shell = (title: string, body: string) => `<!DOCTYPE html>
     .badge-OPTIMAL::before  { background:var(--green); }
     .badge-MONITOR  { background:var(--orange-dim); color:var(--orange); border:1px solid rgba(249,115,22,.3); }
     .badge-MONITOR::before  { background:var(--orange); }
-    .badge-CRITICAL { background:var(--red-dim); color:var(--red); border:1px solid rgba(239,68,68,.3); }
+    .badge-CONFIRMED  { background:var(--green-dim); color:var(--green); border:1px solid rgba(16,185,129,.3); }
+    .badge-CONFIRMED::before { background:var(--green); }
     .badge-CRITICAL::before { background:var(--red); animation:pulse 1.2s infinite; }
     .badge-LOW      { background:var(--green-dim); color:var(--green); border:1px solid rgba(16,185,129,.3); }
     .badge-LOW::before      { background:var(--green); }
@@ -170,10 +171,10 @@ const shell = (title: string, body: string) => `<!DOCTYPE html>
     .badge-HIGH::before     { background:#fb923c; }
     .badge-PENDING    { background:rgba(59,130,246,.12); color:var(--blue); border:1px solid rgba(59,130,246,.3); }
     .badge-PENDING::before  { background:var(--blue); }
-    .badge-CONFIRMED  { background:var(--green-dim); color:var(--green); border:1px solid rgba(16,185,129,.3); }
-    .badge-CONFIRMED::before { background:var(--green); }
     .badge-DISPATCHED { background:var(--amber-glow); color:var(--amber); border:1px solid var(--border-amber); }
     .badge-DISPATCHED::before { background:var(--amber); }
+    .badge-CANCELLED { background:rgba(113,113,122,0.15); color:#71717a; border:1px solid rgba(113,113,122,0.3); }
+    .badge-CANCELLED::before { background:#71717a; }
     @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
 
     /* ── BRANCH CARDS ── */
@@ -1303,12 +1304,12 @@ app.get('/admin/inventory', (c) => {
     <div class="stat-card">
       <div class="stat-label">Live Green Balance</div>
       <div class="stat-value">${bal.liveGreenKg.toLocaleString()}</div>
-      <div class="stat-unit">kg remaining (after dispatches)</div>
+      <div class="stat-unit">kg available</div>
     </div>
     <div class="stat-card">
       <div class="stat-label">Live Roasted Balance</div>
       <div class="stat-value">${bal.liveRoastedKg.toLocaleString()}</div>
-      <div class="stat-unit">kg remaining after −18%</div>
+      <div class="stat-unit">kg available</div>
     </div>
     <div class="stat-card">
       <div class="stat-label">Total Dispatched</div>
@@ -1429,8 +1430,8 @@ app.get('/admin/requests', (c) => {
       <div class="stat-value" style="color:var(--amber)">${beanRequests.filter(r => r.status === 'DISPATCHED').length}</div>
     </div>
     <div class="stat-card">
-      <div class="stat-label">Total Requests</div>
-      <div class="stat-value">${beanRequests.length}</div>
+      <div class="stat-label">Cancelled</div>
+      <div class="stat-value" style="color:var(--text-muted)">${beanRequests.filter(r => r.status === 'CANCELLED').length}</div>
     </div>
   </div>
 
@@ -1462,7 +1463,11 @@ app.get('/admin/requests', (c) => {
               <form method="POST" action="/admin/requests/${r.id}/dispatch" style="display:inline">
                 <button type="submit" style="font-family:var(--font-mono);font-size:10px;padding:5px 10px;background:var(--amber-glow);color:var(--amber);border:1px solid var(--border-amber);border-radius:var(--radius);cursor:pointer">DISPATCH</button>
               </form>` : ''}
-              ${r.status === 'DISPATCHED' ? `<span style="font-size:11px;color:var(--text-muted)">Completed</span>` : ''}
+              ${r.status === 'DISPATCHED' ? `
+              <form method="POST" action="/admin/requests/${r.id}/cancel" style="display:inline">
+                <button type="submit" style="font-family:var(--font-mono);font-size:10px;padding:5px 10px;background:rgba(113,113,122,0.12);color:#a1a1aa;border:1px solid rgba(113,113,122,0.3);border-radius:var(--radius);cursor:pointer">RETURN TO STOCK</button>
+              </form>` : ''}
+              ${r.status === 'CANCELLED' ? `<span style="font-size:11px;color:var(--text-muted);font-family:var(--font-mono)">Returned</span>` : ''}
             </td>
           </tr>`).join('')}
         </tbody>
@@ -1484,6 +1489,15 @@ app.post('/admin/requests/:id/confirm', (c) => {
 app.post('/admin/requests/:id/dispatch', (c) => {
   const req = beanRequests.find(r => r.id === c.req.param('id'))
   if (req) req.status = 'DISPATCHED'
+  return c.redirect('/admin/requests')
+})
+
+// ── POST /admin/requests/:id/cancel ────────────────────────────
+// Sets status to CANCELLED. calcLiveBalance() only counts DISPATCHED,
+// so the deducted weight is immediately restored to live stock totals.
+app.post('/admin/requests/:id/cancel', (c) => {
+  const req = beanRequests.find(r => r.id === c.req.param('id'))
+  if (req) req.status = 'CANCELLED'
   return c.redirect('/admin/requests')
 })
 
