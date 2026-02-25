@@ -203,6 +203,44 @@ const shell = (title: string, body: string) => `<!DOCTYPE html>
     .badge-RECALLED { background:rgba(239,68,68,0.15); color:var(--red); border:1px solid rgba(239,68,68,0.45); }
     .badge-RECALLED::before { background:var(--red); animation:pulse 1s ease-in-out infinite; }
 
+    /* ── INVENTORY LEDGER — row & thumbnail constraints ──────── */
+    /* Hard cap on row height so images never stretch rows */
+    .inv-table tbody tr { max-height:60px; }
+    .inv-table td { padding:8px 12px; vertical-align:middle; max-height:60px; overflow:hidden; }
+    .inv-table th { padding:9px 12px; }
+    /* Label column: tiny 40×40 thumbnail, cover crop, amber border */
+    .lot-thumb {
+      display:block;
+      width:40px; height:40px;
+      min-width:40px; min-height:40px;
+      max-width:40px; max-height:40px;
+      object-fit:cover;
+      border-radius:4px;
+      border:1.5px solid rgba(245,158,11,0.45);
+      cursor:pointer;
+      transition:border-color .18s, box-shadow .18s;
+      background:var(--bg-1);
+    }
+    .lot-thumb:hover {
+      border-color:#F59E0B;
+      box-shadow:0 0 10px rgba(245,158,11,0.55);
+    }
+    .label-cell {
+      text-align:center; vertical-align:middle;
+      padding:6px 10px !important;
+      width:56px; min-width:56px;
+    }
+    /* Grey placeholder when no photo exists */
+    .no-photo-badge {
+      display:inline-flex; align-items:center; justify-content:center;
+      width:40px; height:40px;
+      border-radius:4px;
+      background:var(--bg-3);
+      border:1px dashed rgba(113,113,122,0.35);
+      color:rgba(113,113,122,0.5);
+      font-size:16px;
+    }
+
     /* ── Recalled lot row — strong red tint ── */
     .tr-recalled td {
       background: rgba(239,68,68,0.04) !important;
@@ -3597,18 +3635,36 @@ app.get('/admin/inventory', (c) => {
   }
 
   // ── Lightbox — sack label photo inspector ─────────────────────
+  // Lot image registry: populated from <img> tags already in the DOM
+  // (avoids embedding giant base64 strings inside onclick attributes)
+  var _lotImageMap = {};
+  (function buildImageMap() {
+    document.querySelectorAll('.lot-thumb[data-lot-id]').forEach(function(img) {
+      _lotImageMap[img.dataset.lotId] = img.src;
+    });
+  })();
+
   var _lbDataUrl = '';
   var _lbLotId   = '';
 
+  /** Open lightbox from the inventory ledger — looks up image by lot ID */
+  function openLightboxById(lotId, origin) {
+    // Re-read from the actual <img> src already rendered in the table
+    var thumb = document.querySelector('.lot-thumb[data-lot-id="' + lotId + '"]');
+    var dataUrl = thumb ? thumb.src : (_lotImageMap[lotId] || '');
+    openLightbox(lotId, origin, dataUrl);
+  }
+
   function openLightbox(lotId, origin, dataUrl) {
     _lbDataUrl = dataUrl;
-    _lbLotId   = lotId;
-    document.getElementById('lightboxImg').src        = dataUrl;
+    _lbLotId   = (lotId === 'PREVIEW') ? 'PREVIEW' : lotId;
+    document.getElementById('lightboxImg').src            = dataUrl;
     document.getElementById('lightboxLotId').textContent  = lotId;
     document.getElementById('lightboxOrigin').textContent = origin;
     document.getElementById('lightboxOverlay').classList.add('open');
   }
   function closeLightbox() {
+    document.getElementById('lightboxImg').src = ''; // free memory
     document.getElementById('lightboxOverlay').classList.remove('open');
   }
   function downloadLabelImage() {
@@ -3693,18 +3749,18 @@ app.get('/admin/inventory', (c) => {
   <div class="card">
     <div class="card-title">Full Inventory Ledger — Live Balances</div>
     <div class="table-wrap">
-      <table>
+      <table class="inv-table">
         <thead>
           <tr>
             <th>Lot ID</th><th>Origin</th><th>Variety / Process</th><th>Branch</th>
             <th>Purchased</th><th>Dispatched</th>
             <th>Live Green</th><th>Live Roasted</th>
             <th>Roast Date</th><th>Expiry</th><th>Status</th><th>Grade</th>
-            <th style="min-width:58px">Label</th>
+            <th class="label-cell">Label</th>
             <th>SFDA</th>
           </tr>
         </thead>
-        <tbody>
+        <tbody class="inv-table-body">
           ${coffeeLots.map(l => {
             const lb = bal.byLot.get(l.id)!
             const hasDispatch = lb.dispatchedRoastedKg > 0
@@ -3745,16 +3801,17 @@ app.get('/admin/inventory', (c) => {
                 <span class="score-num">${l.gradeScore}</span>
               </div>
             </td>
-            <td style="text-align:center;vertical-align:middle">
+            <td class="label-cell">
               ${l.labelImageUrl
                 ? `<img
                     src="${l.labelImageUrl}"
                     class="lot-thumb"
-                    alt="Sack label — ${l.id}"
-                    title="Click to inspect: ${l.id} · ${l.origin}"
-                    onclick="openLightbox('${l.id}','${l.origin.replace(/'/g, '&apos;')}','${l.labelImageUrl}')"
+                    data-lot-id="${l.id}"
+                    alt="Sack label"
+                    title="Click to enlarge · ${l.id}"
+                    onclick="openLightboxById('${l.id}','${l.origin.replace(/'/g, '&apos;')}')"
                   />`
-                : `<span class="no-photo-badge"><i class="fa fa-image" style="opacity:.35;margin-right:3px"></i>—</span>`
+                : `<span class="no-photo-badge" title="No photo"><i class="fa fa-image"></i></span>`
               }
             </td>
             <td>
