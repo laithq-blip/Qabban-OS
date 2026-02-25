@@ -22,7 +22,7 @@ export interface CoffeeLot {
   expiryDate: string
   status: LotStatus
   flavorNotes: string[]
-  branch: 'Riyadh' | 'Jeddah' | 'Dammam'
+  branch: string    // widened — supports runtime-added branches
   gradeScore: number
   recallInfo?: RecallInfo    // populated when status === 'RECALLED'
   labelImageUrl?: string     // optional sack-label photo (base64 data-URL or blob URL)
@@ -107,7 +107,7 @@ export interface CafeClient {
   username: string
   password: string
   name: string
-  branch: 'Riyadh' | 'Jeddah' | 'Dammam'
+  branch: string    // widened — supports runtime-added branches
   tier: 'Gold' | 'Silver' | 'Bronze'
 }
 
@@ -144,7 +144,11 @@ export const applyRoastShrinkage = (greenKg: number): number =>
 export const roastedToGreenEquiv = (roastedKg: number): number =>
   Math.round((roastedKg / 0.82) * 10) / 10
 
-// ─── Humidity risk classifier ──────────────────────────────────────────────
+// ─── Humidity risk classifier (LEGACY — Inland thresholds only) ────────────
+// ⚠️  DEPRECATED: Use classifyRiskForPreset(humidity, climateType) instead.
+//     This function uses Inland (Riyadh-style) thresholds and will produce
+//     INCORRECT results for Coastal branches (Jeddah, Dammam).
+//     Kept only for backward-compatibility reference; not called by any route.
 export const classifyHumidityRisk = (humidity: number): Branch['riskStatus'] => {
   if (humidity < 50) return 'LOW'
   if (humidity < 62) return 'MODERATE'
@@ -451,7 +455,7 @@ export const branches: Branch[] = [
     humidity:    68,
     temperature: 26,
     lastChecked: '2026-02-24 08:28',
-    riskStatus:  'HIGH',
+    riskStatus:  'CRITICAL',
     activeLots:  coffeeLots.filter(l => l.branch === 'Jeddah').length,
     totalGreenKg: coffeeLots.filter(l => l.branch === 'Jeddah').reduce((s, l) => s + l.greenWeightKg, 0),
   },

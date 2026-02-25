@@ -2318,11 +2318,14 @@ app.post('/admin/inventory/add', async (c) => {
   const flavorNotes = [flavor1, flavor2].map(f => f?.trim()).filter(Boolean) as string[]
   if (flavorNotes.length === 0) flavorNotes.push('—')
 
-  // ── Climate Sync: look up branch to get risk status ───────────
+  // ── Climate Sync: look up branch to get live risk status ─────────
   const branchRecord   = branches.find(b => b.name === branch)
   const climatePreset  = branchRecord ? CLIMATE_PRESETS[branchRecord.climateType] : null
-  const branchRisk     = branchRecord?.riskStatus ?? 'LOW'
-  const climateWarning = branchRecord && branchRecord.riskStatus !== 'LOW'
+  // Always compute live — never rely on the cached .riskStatus seed value
+  const branchRisk     = branchRecord
+    ? classifyRiskForPreset(branchRecord.humidity, branchRecord.climateType)
+    : 'LOW'
+  const climateWarning = branchRecord && branchRisk !== 'LOW'
     ? `Branch ${branch} is currently at ${branchRisk} humidity risk (${branchRecord.humidity}%). Monitor storage conditions closely.`
     : null
 
