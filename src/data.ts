@@ -519,3 +519,72 @@ export const beanRequests: BeanRequest[] = [
 
 // ─── In-memory roasting interest store (pre-orders for OUT OF STOCK) ───────
 export const roastingInterests: RoastingInterest[] = []
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Govee H5075 BLE Sensor Registry
+//
+//  The Govee H5075 is a Bluetooth-only sensor. It cannot be reached via the
+//  Govee Developer REST API (which only supports Wi-Fi devices). Integration
+//  is achieved through a lightweight Python bridge script running on any
+//  Bluetooth-capable device near the sensor (e.g. Raspberry Pi, laptop).
+//
+//  Bridge workflow:
+//    1. The bridge script uses `bleak` to scan BLE advertisements from nearby
+//       GVH5075 devices every 10 minutes.
+//    2. It decodes the manufacturer payload to extract temperature, humidity,
+//       and battery level.
+//    3. It POSTs the readings to /api/govee/push (authenticated with GOVEE_BRIDGE_SECRET).
+//    4. Qabban OS updates the linked branch's live humidity and recalculates
+//       the climate risk status, exactly as if the manager tapped "Update Sensors".
+//
+//  Each GoveeDevice record below represents one physical H5075 unit.
+//  'macAddress' is the BLE MAC (format: XX:XX:XX:XX:XX:XX).
+//  'branchId'   links the sensor to a branch — readings auto-push to that branch.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface GoveeDevice {
+  id:           string          // e.g. 'GOV-001'
+  macAddress:   string          // BLE MAC address — from Govee app → Device Info
+  name:         string          // friendly name set in the Govee app (GVH5075_XXXX)
+  branchId:     string          // linked Branch.id
+  branchName:   string          // denormalised for display
+  lastReading?: {
+    temperature: number         // °C
+    humidity:    number         // %RH
+    battery:     number         // % (0–100)
+    receivedAt:  string         // ISO timestamp of last push from bridge
+  }
+  status:       'ONLINE' | 'OFFLINE' | 'PENDING_SETUP'
+  // ONLINE   = bridge has pushed a reading within the last 20 minutes
+  // OFFLINE  = no reading for > 20 minutes (BLE out of range / bridge down)
+  // PENDING_SETUP = MAC address not yet confirmed / bridge not installed
+}
+
+// ── Pre-registered sensors: one per branch warehouse ─────────────────────────
+// You received TWO Govee H5075 units.
+// Step 1: Open the Govee app → tap each sensor → Device Info → note the MAC address.
+// Step 2: Replace the 'macAddress' placeholders below with the real MAC addresses.
+// Step 3: Deploy the Python bridge script (see /admin/branches → Govee Setup Guide).
+export const goveeDevices: GoveeDevice[] = [
+  {
+    id:         'GOV-001',
+    macAddress: 'PENDING_SETUP',   // replace with real BLE MAC from Govee app
+    name:       'GVH5075 — Sensor 1',
+    branchId:   'BR-JED',
+    branchName: 'Jeddah',
+    status:     'PENDING_SETUP',
+  },
+  {
+    id:         'GOV-002',
+    macAddress: 'PENDING_SETUP',   // replace with real BLE MAC from Govee app
+    name:       'GVH5075 — Sensor 2',
+    branchId:   'BR-DMM',
+    branchName: 'Dammam',
+    status:     'PENDING_SETUP',
+  },
+]
+
+// ── Secret for bridge authentication ─────────────────────────────────────────
+// The bridge script sends this as the X-Bridge-Secret header on every push.
+// Change to a strong random string; inject via Cloudflare secret GOVEE_BRIDGE_SECRET.
+export const GOVEE_BRIDGE_SECRET_PLACEHOLDER = 'CHANGE_ME_TO_A_STRONG_SECRET'

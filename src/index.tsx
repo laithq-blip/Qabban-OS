@@ -5,6 +5,8 @@ import {
   cafeClients,
   beanRequests,
   roastingInterests,
+  goveeDevices,
+  GOVEE_BRIDGE_SECRET_PLACEHOLDER,
   applyRoastShrinkage,
   calcLiveBalance,
   getFifoLot,
@@ -15,6 +17,7 @@ import {
   type Branch,
   type ClimateType,
   type RoastingInterest,
+  type GoveeDevice,
 } from './data'
 
 const app = new Hono()
@@ -1734,6 +1737,59 @@ app.get('/admin/branches', (c) => {
       border-bottom:1px solid var(--border); margin-bottom:2px;
       display:flex; align-items:center; gap:8px;
     }
+    /* ── GOVEE SENSOR PANEL ── */
+    .govee-panel { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:16px; margin-top:8px; }
+    .govee-card {
+      background:var(--bg-2); border:1px solid var(--border); border-radius:var(--radius-lg);
+      padding:16px 18px; display:flex; flex-direction:column; gap:8px; position:relative; overflow:hidden;
+    }
+    .govee-card.govee-online  { border-left:3px solid var(--green); }
+    .govee-card.govee-offline { border-left:3px solid #6b7280; }
+    .govee-card.govee-pending { border-left:3px solid var(--amber); }
+    .govee-card-header { display:flex; align-items:flex-start; justify-content:space-between; gap:8px; }
+    .govee-device-name { font-weight:600; font-size:13px; color:var(--text-pri); }
+    .govee-badge {
+      font-family:var(--font-mono); font-size:9px; padding:2px 7px; border-radius:3px;
+      letter-spacing:.5px; white-space:nowrap; flex-shrink:0;
+    }
+    .govee-badge-online  { background:rgba(16,185,129,.12); color:var(--green);  border:1px solid rgba(16,185,129,.25); }
+    .govee-badge-offline { background:rgba(107,114,128,.12); color:#9ca3af;       border:1px solid rgba(107,114,128,.25); }
+    .govee-badge-pending { background:rgba(245,158,11,.12);  color:var(--amber);  border:1px solid rgba(245,158,11,.25); }
+    .govee-reading-row {
+      display:flex; align-items:center; gap:16px;
+      background:var(--bg-3); border-radius:6px; padding:10px 14px;
+    }
+    .govee-reading-val { font-family:var(--font-mono); font-size:22px; font-weight:700; line-height:1; }
+    .govee-reading-unit { font-family:var(--font-mono); font-size:10px; color:var(--text-muted); margin-top:2px; }
+    .govee-meta { font-size:11px; color:var(--text-muted); display:flex; gap:12px; flex-wrap:wrap; }
+    .govee-meta span { display:flex; align-items:center; gap:4px; }
+    .govee-battery-bar {
+      width:32px; height:6px; background:var(--bg-3); border-radius:3px; overflow:hidden; display:inline-block; vertical-align:middle;
+    }
+    .govee-battery-fill { height:100%; border-radius:3px; transition:width .4s; }
+    .govee-linked-branch {
+      font-size:10px; padding:3px 8px; border-radius:3px;
+      background:rgba(245,158,11,.08); color:var(--amber); border:1px solid rgba(245,158,11,.2);
+      display:inline-flex; align-items:center; gap:4px;
+    }
+    .govee-setup-hint {
+      font-size:11px; color:var(--amber); background:rgba(245,158,11,.07);
+      border:1px dashed rgba(245,158,11,.3); border-radius:6px; padding:8px 12px; line-height:1.5;
+    }
+    /* ── GOVEE SETUP GUIDE ── */
+    .govee-guide { font-size:12px; line-height:1.65; color:var(--text-sec); }
+    .govee-guide h4 { font-size:11px; font-family:var(--font-mono); color:var(--amber); letter-spacing:.5px; text-transform:uppercase; margin:12px 0 4px; }
+    .govee-guide code {
+      display:block; white-space:pre; overflow-x:auto;
+      background:var(--bg-2); border:1px solid var(--border); border-radius:6px;
+      padding:12px 14px; font-size:11px; color:#a5f3fc; font-family:var(--font-mono); margin:6px 0;
+    }
+    .govee-guide .step { display:flex; gap:10px; margin:6px 0; }
+    .govee-guide .step-num {
+      min-width:20px; height:20px; border-radius:50%;
+      background:var(--amber); color:#000; font-weight:700;
+      font-size:10px; display:flex; align-items:center; justify-content:center; flex-shrink:0; margin-top:2px;
+    }
   </style>
 
   <!-- ── ALERTS ── -->
@@ -1845,6 +1901,71 @@ app.get('/admin/branches', (c) => {
     </div>`}).join('')}
   </div>
 
+  <!-- ══ GOVEE H5075 LIVE SENSOR PANEL ══ -->
+  <div class="card" style="margin-bottom:24px" id="goveePanelCard">
+    <div class="card-title" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+      <span>
+        <i class="fa fa-bluetooth" style="color:var(--amber);margin-right:6px"></i>
+        Govee H5075 — Live BLE Sensors
+        <span style="font-family:var(--font-mono);font-size:9px;padding:2px 8px;border-radius:2px;
+          background:rgba(245,158,11,.1);color:var(--amber);border:1px solid rgba(245,158,11,.25);
+          letter-spacing:.5px;margin-left:8px" id="goveeBadge">◌ BLE BRIDGE</span>
+      </span>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-size:11px;color:var(--text-muted)" id="goveeLastUpdated">—</span>
+        <button class="env-refresh-btn" onclick="fetchGoveeDevices()" style="font-size:10px;padding:5px 10px">
+          <i class="fa fa-rotate-right" id="goveeRefreshIcon"></i> REFRESH
+        </button>
+      </div>
+    </div>
+    <div class="govee-panel" id="goveePanel">
+      ${goveeDevices.map(dev => `
+      <div class="govee-card govee-${dev.status.toLowerCase().replace('_setup','').replace('pending','pending')}" id="govee-card-${dev.id}">
+        <div class="govee-card-header">
+          <div>
+            <div class="govee-device-name"><i class="fa fa-thermometer-half" style="color:var(--amber);margin-right:5px"></i>${dev.name}</div>
+            <span class="govee-linked-branch"><i class="fa fa-location-dot"></i>${dev.branchName}</span>
+          </div>
+          <span class="govee-badge govee-badge-${dev.status === 'ONLINE' ? 'online' : dev.status === 'OFFLINE' ? 'offline' : 'pending'}" id="govee-status-${dev.id}">
+            ${dev.status === 'ONLINE' ? '● ONLINE' : dev.status === 'OFFLINE' ? '○ OFFLINE' : '⚙ SETUP NEEDED'}
+          </span>
+        </div>
+        ${dev.lastReading ? `
+        <div class="govee-reading-row">
+          <div style="text-align:center">
+            <div class="govee-reading-val" style="color:#60a5fa" id="govee-hum-${dev.id}">${dev.lastReading.humidity}</div>
+            <div class="govee-reading-unit">% RH</div>
+          </div>
+          <div style="width:1px;height:32px;background:var(--border)"></div>
+          <div style="text-align:center">
+            <div class="govee-reading-val" style="color:var(--amber)" id="govee-temp-${dev.id}">${dev.lastReading.temperature}</div>
+            <div class="govee-reading-unit">°C</div>
+          </div>
+        </div>
+        <div class="govee-meta">
+          <span><i class="fa fa-battery-three-quarters" style="color:var(--green)"></i>
+            <span class="govee-battery-bar"><span class="govee-battery-fill" style="width:${dev.lastReading.battery}%;background:${dev.lastReading.battery > 50 ? 'var(--green)' : dev.lastReading.battery > 20 ? 'var(--orange)' : 'var(--red)'}"></span></span>
+            <span id="govee-bat-${dev.id}">${dev.lastReading.battery}%</span>
+          </span>
+          <span><i class="fa fa-clock" style="color:var(--amber)"></i>
+            <span id="govee-time-${dev.id}">${dev.lastReading.receivedAt.replace('T',' ').slice(0,16)}</span>
+          </span>
+        </div>` : `
+        <div class="govee-setup-hint">
+          <i class="fa fa-triangle-exclamation" style="margin-right:5px"></i>
+          <strong>No readings yet.</strong> Deploy the Python bridge and set MAC address.
+          <br>See setup guide below ↓
+        </div>`}
+        <div class="govee-meta" style="margin-top:4px">
+          <span><i class="fa fa-fingerprint" style="color:var(--text-muted)"></i>
+            <span style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted)">${dev.id} · MAC: ${dev.macAddress}</span>
+          </span>
+        </div>
+      </div>`).join('')}
+    </div>
+  </div>
+  <!-- ══ end Govee panel ══ -->
+
   <!-- ── RISK THRESHOLD LEGEND ── -->
   <div class="card" style="margin-bottom:24px">
     <div class="card-title"><i class="fa fa-triangle-exclamation" style="color:var(--amber);margin-right:6px"></i>Humidity Risk Thresholds</div>
@@ -1945,6 +2066,121 @@ app.get('/admin/branches', (c) => {
     </div>
   </div>
 
+  <!-- ══ GOVEE SETUP GUIDE ══ -->
+  <div class="card" style="margin-bottom:24px">
+    <div class="card-title">
+      <i class="fa fa-book-open" style="color:var(--amber);margin-right:6px"></i>
+      Govee H5075 — Bridge Setup Guide
+    </div>
+    <div class="govee-guide">
+      <p>The H5075 transmits via <strong>Bluetooth Low Energy (BLE)</strong> only — it does not connect to Wi-Fi or the Govee cloud API.
+      To feed live readings into Qabban OS you need a <strong>Python bridge script</strong> running on any Bluetooth-capable device
+      near the sensor (Raspberry Pi, laptop, or mini-PC in the warehouse).</p>
+
+      <h4>Step 1 — Find your sensor MAC addresses</h4>
+      <div class="step"><div class="step-num">1</div><div>Open the <strong>Govee app</strong> on your phone → tap the sensor → <em>Device Info</em> → note the <strong>MAC Address</strong> (e.g. <code style="display:inline;padding:1px 5px;font-size:11px">A4:C1:38:XX:XX:XX</code>).</div></div>
+      <div class="step"><div class="step-num">2</div><div>Edit <code style="display:inline;padding:1px 5px;font-size:11px">src/data.ts</code> → replace the two <code style="display:inline;padding:1px 5px;font-size:11px">PENDING_SETUP</code> placeholders with your real MAC addresses, one per sensor.</div></div>
+
+      <h4>Step 2 — Install bridge dependencies</h4>
+      <code>pip install bleak requests</code>
+
+      <h4>Step 3 — Bridge script (save as govee_bridge.py)</h4>
+      <code>#!/usr/bin/env python3
+"""
+Govee H5075 → Qabban OS bridge
+Scans BLE advertisements every 10 minutes and pushes to /api/govee/push
+"""
+import asyncio, time, struct, requests
+from bleak import BleakScanner
+
+# ── CONFIG ─────────────────────────────────────────────────────────
+QABBAN_URL     = "https://YOUR-APP.pages.dev"  # or http://localhost:3000 for local
+BRIDGE_SECRET  = "CHANGE_ME_TO_A_STRONG_SECRET"
+SENSOR_MACS    = [
+    "A4:C1:38:XX:XX:XX",  # Sensor 1 → Jeddah
+    "A4:C1:38:YY:YY:YY",  # Sensor 2 → Dammam
+]
+POLL_INTERVAL  = 600  # seconds (10 minutes)
+SCAN_DURATION  = 15   # seconds per BLE scan
+# ───────────────────────────────────────────────────────────────────
+
+def decode_govee_h5075(adv_data: bytes):
+    """Decode manufacturer payload for H5075 / H5074 family."""
+    if len(adv_data) < 6:
+        return None
+    # bytes 3-5 encode temp*10 + humidity*10 packed as 3-byte big-endian int
+    raw = struct.unpack_from('>I', bytes(1) + adv_data[3:6])[0]
+    temp_raw = raw // 1000
+    hum_raw  = raw  % 1000
+    # Handle negative temperatures (bit 20 set)
+    if temp_raw > 32767:
+        temp_raw -= 65536
+    temperature = round(temp_raw / 10, 1)
+    humidity    = round(hum_raw  / 10, 1)
+    battery     = adv_data[6] if len(adv_data) > 6 else 0
+    return {"temperature": temperature, "humidity": humidity, "battery": battery}
+
+async def scan_once():
+    results = {}
+    def callback(device, adv):
+        mac = device.address.upper()
+        if mac not in [m.upper() for m in SENSOR_MACS]:
+            return
+        mfr = adv.manufacturer_data
+        for company_id, payload in mfr.items():
+            reading = decode_govee_h5075(payload)
+            if reading:
+                results[mac] = reading
+    scanner = BleakScanner(detection_callback=callback)
+    await scanner.start()
+    await asyncio.sleep(SCAN_DURATION)
+    await scanner.stop()
+    return results
+
+def push_reading(mac, reading):
+    payload = {"macAddress": mac, **reading}
+    headers = {"X-Bridge-Secret": BRIDGE_SECRET, "Content-Type": "application/json"}
+    try:
+        r = requests.post(f"{QABBAN_URL}/api/govee/push", json=payload, headers=headers, timeout=10)
+        print(f"[{mac}] push → {r.status_code}: {r.json()}")
+    except Exception as e:
+        print(f"[{mac}] push error: {e}")
+
+async def main():
+    print(f"Govee bridge started. Polling every {POLL_INTERVAL}s.")
+    while True:
+        print("Scanning BLE...")
+        readings = await scan_once()
+        for mac, reading in readings.items():
+            print(f"  {mac}: {reading}")
+            push_reading(mac, reading)
+        if not readings:
+            print("  No sensors found in range.")
+        await asyncio.sleep(POLL_INTERVAL)
+
+if __name__ == "__main__":
+    asyncio.run(main())</code>
+
+      <h4>Step 4 — Run the bridge</h4>
+      <code>python3 govee_bridge.py</code>
+      <p style="color:var(--text-muted)">To run as a background service on Raspberry Pi: <code style="display:inline;padding:1px 5px;font-size:11px">nohup python3 govee_bridge.py &amp;</code></p>
+
+      <h4>Step 5 — Test a manual push (curl)</h4>
+      <code>curl -X POST ${request ? `${new URL(request.url).origin}` : 'https://YOUR-APP.pages.dev'}/api/govee/push \\
+  -H "Content-Type: application/json" \\
+  -H "X-Bridge-Secret: CHANGE_ME_TO_A_STRONG_SECRET" \\
+  -d '{"macAddress":"A4:C1:38:XX:XX:XX","temperature":28.5,"humidity":67.3,"battery":82}'</code>
+
+      <h4>Step 6 — Set production secret</h4>
+      <code>wrangler pages secret put GOVEE_BRIDGE_SECRET</code>
+      <p style="color:var(--text-muted)">Enter a strong random string when prompted. Update the same value in govee_bridge.py.</p>
+
+      <h4>Supported MAC address formats</h4>
+      <p style="color:var(--text-muted)">Both <code style="display:inline;padding:1px 5px;font-size:11px">A4:C1:38:68:41:23</code> and <code style="display:inline;padding:1px 5px;font-size:11px">a4:c1:38:68:41:23</code> are accepted (case-insensitive).</p>
+    </div>
+  </div>
+  <!-- ══ end Govee setup guide ══ -->
+
   <!-- ══ UPDATE SENSOR MODAL ══ -->
   <div class="sensor-modal-overlay" id="sensorOverlay">
     <div class="sensor-modal">
@@ -2028,6 +2264,79 @@ app.get('/admin/branches', (c) => {
   document.getElementById('sensorOverlay').addEventListener('click', function(e) {
     if (e.target === this) closeSensorModal()
   })
+
+  // ── Govee Live Sensor Panel ────────────────────────────────────
+  function fetchGoveeDevices() {
+    var icon = document.getElementById('goveeRefreshIcon')
+    if (icon) { icon.style.animation = 'spin .7s linear infinite' }
+
+    fetch('/api/govee/devices')
+      .then(function(r) { return r.json() })
+      .then(function(d) {
+        if (icon) { icon.style.animation = '' }
+
+        var badge = document.getElementById('goveeBadge')
+        var anyOnline = d.devices && d.devices.some(function(dv) { return dv.status === 'ONLINE' })
+
+        if (badge) {
+          if (anyOnline) {
+            badge.textContent = '● BLE LIVE'
+            badge.style.color = 'var(--green)'
+            badge.style.background = 'rgba(16,185,129,.12)'
+            badge.style.borderColor = 'rgba(16,185,129,.25)'
+          } else {
+            badge.textContent = '◌ BLE BRIDGE'
+            badge.style.color = 'var(--amber)'
+            badge.style.background = 'rgba(245,158,11,.10)'
+            badge.style.borderColor = 'rgba(245,158,11,.25)'
+          }
+        }
+
+        var now = new Date().toLocaleTimeString('en-SA', {hour:'2-digit', minute:'2-digit', second:'2-digit'})
+        var ts = document.getElementById('goveeLastUpdated')
+        if (ts) ts.textContent = 'Polled: ' + now
+
+        if (d.devices) {
+          d.devices.forEach(function(dv) {
+            var card = document.getElementById('govee-card-' + dv.id)
+            if (!card) return
+
+            // update status badge
+            var statusEl = document.getElementById('govee-status-' + dv.id)
+            if (statusEl) {
+              statusEl.className = 'govee-badge govee-badge-' +
+                (dv.status === 'ONLINE' ? 'online' : dv.status === 'OFFLINE' ? 'offline' : 'pending')
+              statusEl.textContent = dv.status === 'ONLINE' ? '● ONLINE'
+                                   : dv.status === 'OFFLINE' ? '○ OFFLINE' : '⚙ SETUP NEEDED'
+            }
+
+            // update card border
+            card.className = 'govee-card govee-' +
+              (dv.status === 'ONLINE' ? 'online' : dv.status === 'OFFLINE' ? 'offline' : 'pending')
+
+            if (dv.lastReading) {
+              var humEl  = document.getElementById('govee-hum-'  + dv.id)
+              var tmpEl  = document.getElementById('govee-temp-' + dv.id)
+              var batEl  = document.getElementById('govee-bat-'  + dv.id)
+              var timeEl = document.getElementById('govee-time-' + dv.id)
+              if (humEl)  humEl.textContent  = dv.lastReading.humidity
+              if (tmpEl)  tmpEl.textContent  = dv.lastReading.temperature
+              if (batEl)  batEl.textContent  = dv.lastReading.battery + '%'
+              if (timeEl) timeEl.textContent = (dv.lastReading.receivedAt || '').replace('T',' ').slice(0,16)
+            }
+          })
+        }
+      })
+      .catch(function() {
+        if (icon) { icon.style.animation = '' }
+        var ts = document.getElementById('goveeLastUpdated')
+        if (ts) ts.textContent = 'Poll error'
+      })
+  }
+
+  // Auto-refresh Govee panel every 10 minutes
+  fetchGoveeDevices()
+  setInterval(fetchGoveeDevices, 600000)
   </script>`
 
   return c.html(adminLayout('Branch Monitor', 'branches', content, pendingCount))
@@ -4754,6 +5063,124 @@ app.get('/api/weather', async (c) => {
   } catch {
     return c.json(stub())
   }
+})
+
+// ══════════════════════════════════════════════════════════════════
+//  GOVEE H5075 BLE SENSOR INTEGRATION
+//  ─────────────────────────────────────────────────────────────────
+//  The H5075 is Bluetooth-only and cannot be queried via the Govee
+//  Developer REST API (Wi-Fi devices only). Data enters Qabban OS
+//  through a lightweight Python bridge script running on any
+//  Bluetooth-capable machine co-located with the sensor.
+//
+//  Bridge → POST /api/govee/push  (authenticated with X-Bridge-Secret)
+//  Admin  → GET  /api/govee/devices
+// ══════════════════════════════════════════════════════════════════
+
+// ── GET /api/govee/devices ────────────────────────────────────────
+// Returns the full registry of registered H5075 sensors with their
+// latest readings and online/offline status.
+// ─────────────────────────────────────────────────────────────────
+app.get('/api/govee/devices', (c) => {
+  const OFFLINE_THRESHOLD_MS = 20 * 60 * 1000  // 20 minutes
+
+  const devices = goveeDevices.map(dev => {
+    let computedStatus: GoveeDevice['status'] = dev.status
+    if (dev.status !== 'PENDING_SETUP' && dev.lastReading) {
+      const age = Date.now() - new Date(dev.lastReading.receivedAt).getTime()
+      computedStatus = age <= OFFLINE_THRESHOLD_MS ? 'ONLINE' : 'OFFLINE'
+    }
+    return { ...dev, status: computedStatus }
+  })
+
+  return c.json({ devices })
+})
+
+// ── POST /api/govee/push ──────────────────────────────────────────
+// Accepts a BLE reading from the Python bridge script and:
+//  1. Stores it on the matching GoveeDevice record
+//  2. Updates the linked Branch humidity + temperature
+//  3. Recalculates the branch riskStatus via classifyRiskForPreset
+//
+// Request headers:
+//   X-Bridge-Secret: <secret>   (must match GOVEE_BRIDGE_SECRET)
+//
+// Request body (JSON):
+//   {
+//     "macAddress":  "A4:C1:38:XX:XX:XX",
+//     "temperature": 28.5,
+//     "humidity":    67.3,
+//     "battery":     82
+//   }
+// ─────────────────────────────────────────────────────────────────
+app.post('/api/govee/push', async (c) => {
+  // ── 1. Authenticate the bridge ──────────────────────────────────
+  const envSecret = (c.env as Record<string,string> | undefined)?.GOVEE_BRIDGE_SECRET
+  const secret = envSecret ?? GOVEE_BRIDGE_SECRET_PLACEHOLDER
+  const incoming = c.req.header('X-Bridge-Secret') ?? ''
+
+  if (secret === GOVEE_BRIDGE_SECRET_PLACEHOLDER) {
+    // Secret not yet configured — log warning but allow push so setup is easy
+    // In production set wrangler pages secret put GOVEE_BRIDGE_SECRET
+    console.warn('[Govee] GOVEE_BRIDGE_SECRET not set — accepting unauthenticated push (dev mode)')
+  } else if (incoming !== secret) {
+    return c.json({ error: 'Unauthorized — invalid bridge secret' }, 401)
+  }
+
+  // ── 2. Parse & validate body ────────────────────────────────────
+  let body: Record<string, unknown>
+  try { body = await c.req.json() } catch { return c.json({ error: 'Invalid JSON' }, 400) }
+
+  const { macAddress, temperature, humidity, battery } = body as {
+    macAddress?: string; temperature?: number; humidity?: number; battery?: number
+  }
+
+  if (!macAddress || typeof temperature !== 'number' || typeof humidity !== 'number') {
+    return c.json({ error: 'Required fields: macAddress (string), temperature (number), humidity (number)' }, 400)
+  }
+
+  // ── 3. Find matching GoveeDevice ────────────────────────────────
+  const device = goveeDevices.find(
+    d => d.macAddress.toUpperCase() === macAddress.toUpperCase()
+  )
+  if (!device) {
+    return c.json({
+      error: `No device registered with MAC ${macAddress}. Register it in src/data.ts goveeDevices.`,
+    }, 404)
+  }
+
+  // ── 4. Update sensor last reading ───────────────────────────────
+  const now = new Date().toISOString()
+  device.lastReading = {
+    temperature: Math.round(temperature * 10) / 10,
+    humidity:    Math.round(humidity    * 10) / 10,
+    battery:     typeof battery === 'number' ? Math.round(battery) : 0,
+    receivedAt:  now,
+  }
+  device.status = 'ONLINE'
+
+  // ── 5. Push reading into the linked branch ──────────────────────
+  const branch = branches.find(b => b.id === device.branchId)
+  if (branch) {
+    branch.humidity    = Math.round(humidity * 10) / 10
+    branch.temperature = Math.round(temperature * 10) / 10
+    branch.riskStatus  = classifyRiskForPreset(branch.humidity, branch.climateType)
+    branch.lastChecked = now.replace('T', ' ').slice(0, 16)  // 'YYYY-MM-DD HH:MM'
+  }
+
+  return c.json({
+    ok:          true,
+    deviceId:    device.id,
+    branchId:    device.branchId,
+    branchName:  device.branchName,
+    reading: {
+      temperature: device.lastReading.temperature,
+      humidity:    device.lastReading.humidity,
+      battery:     device.lastReading.battery,
+    },
+    branchRiskStatus: branch?.riskStatus ?? 'UNKNOWN',
+    receivedAt:  now,
+  })
 })
 
 export default app
