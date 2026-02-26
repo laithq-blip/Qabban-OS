@@ -2166,7 +2166,7 @@ if __name__ == "__main__":
       <p style="color:var(--text-muted)">To run as a background service on Raspberry Pi: <code style="display:inline;padding:1px 5px;font-size:11px">nohup python3 govee_bridge.py &amp;</code></p>
 
       <h4>Step 5 — Test a manual push (curl)</h4>
-      <code>curl -X POST ${request ? `${new URL(request.url).origin}` : 'https://YOUR-APP.pages.dev'}/api/govee/push \\
+      <code>curl -X POST ${new URL(c.req.url).origin}/api/govee/push \\
   -H "Content-Type: application/json" \\
   -H "X-Bridge-Secret: CHANGE_ME_TO_A_STRONG_SECRET" \\
   -d '{"macAddress":"A4:C1:38:XX:XX:XX","temperature":28.5,"humidity":67.3,"battery":82}'</code>
