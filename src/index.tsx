@@ -702,13 +702,21 @@ const shell = (title: string, body: string) => `<!DOCTYPE html>
       margin-top:10px; padding-top:8px;
       border-top:1px solid var(--bg-3);
       display:flex; align-items:center; gap:4px;
-      letter-spacing:.3px;
+      letter-spacing:.3px; flex-wrap:wrap;
     }
-    .env-source i { color:var(--amber); font-size:8px; }
+    .env-source i { color:var(--amber); font-size:9px; }
+    .env-source-live {
+      font-family:var(--font-mono); font-weight:700;
+      color:var(--green); letter-spacing:.6px; font-size:9px;
+      text-transform:uppercase;
+    }
+    .env-source-time {
+      font-family:var(--font-mono); font-size:9px; color:var(--text-muted);
+    }
 
     .env-refresh-row {
-      display:flex; align-items:center; justify-content:space-between;
-      margin-bottom:10px;
+      display:flex; align-items:flex-start; justify-content:space-between;
+      margin-bottom:10px; gap:8px;
     }
     .env-last-updated {
       font-family:var(--font-mono); font-size:10px; color:var(--text-muted);
@@ -1304,7 +1312,10 @@ app.get('/admin', (c) => {
     </div>
 
     <div class="env-refresh-row">
-      <span class="env-last-updated" id="envLastUpdated">Fetching data…</span>
+      <div style="display:flex;flex-direction:column;gap:3px">
+        <span class="env-last-updated" id="envLastUpdated">Fetching live sensor data…</span>
+        <span id="envCountdown" style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted);letter-spacing:.3px"></span>
+      </div>
       <button class="env-refresh-btn" id="envRefreshBtn" onclick="fetchWeather()">
         <i class="fa fa-rotate-right" id="envRefreshIcon"></i> REFRESH
       </button>
@@ -1323,7 +1334,7 @@ app.get('/admin', (c) => {
           <div class="env-skeleton-line" style="width:75%"></div>
           <div class="env-skeleton-line" style="width:55%"></div>
         </div>
-        <div class="env-source"><i class="fa fa-signal"></i>Data provided by OpenWeather live stream.</div>
+        <div class="env-source"><i class="fa fa-satellite-dish"></i><span class="env-source-live">LIVE SENSOR DATA: REFRESHED</span></div>
       </div>`).join('')}
     </div>
   </div>
@@ -1331,7 +1342,7 @@ app.get('/admin', (c) => {
 
   <script>
   /* ── KSA Weather Feed ── */
-  var ENV_REFRESH_MS = 60000;  // auto-refresh every 60 s
+  var ENV_REFRESH_MS = 900000;  // auto-refresh every 15 minutes (900 s)
   var envTimer;
 
   /* danger thresholds */
@@ -1386,7 +1397,11 @@ app.get('/admin', (c) => {
       '</div>' +
       (danger ?
         '<div class="env-alert-tag"><i class="fa fa-triangle-exclamation"></i>' + danger.msg + '</div>' : '') +
-      '<div class="env-source"><i class="fa fa-signal"></i>Data provided by OpenWeather live stream.</div>';
+      '<div class="env-source" id="env-source-' + city + '">' +
+        '<i class="fa fa-satellite-dish"></i>' +
+        '<span class="env-source-live">LIVE SENSOR DATA: REFRESHED</span>' +
+        '<span class="env-source-time" id="env-src-time-' + city + '"></span>' +
+      '</div>';
   }
 
   function fetchWeather() {
@@ -1402,12 +1417,12 @@ app.get('/admin', (c) => {
         var badge = document.getElementById('envSourceBadge');
         if (badge) {
           if (d.source === 'live') {
-            badge.innerHTML = '● LIVE';
+            badge.innerHTML = '● LIVE DATA';
             badge.style.color = 'var(--green)';
             badge.style.borderColor = 'rgba(16,185,129,0.25)';
             badge.style.background  = 'rgba(16,185,129,0.12)';
           } else {
-            badge.innerHTML = '◌ SIMULATED';
+            badge.innerHTML = '◌ NO API KEY — SIMULATED';
             badge.style.color = 'var(--amber)';
             badge.style.borderColor = 'rgba(245,158,11,0.3)';
             badge.style.background  = 'rgba(245,158,11,0.10)';
@@ -1418,11 +1433,30 @@ app.get('/admin', (c) => {
           renderCard(item.city, item);
         });
         /* update timestamp */
+        var now = new Date();
+        var timeStr = now.toLocaleTimeString('en-SA', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
         var ts = document.getElementById('envLastUpdated');
         if (ts) {
-          var now = new Date();
-          ts.textContent = 'Last updated: ' + now.toLocaleTimeString('en-SA', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+          ts.textContent = (d.source === 'live' ? '🛰 LIVE — Last refreshed: ' : '⚙ SIMULATED — Last refreshed: ') + timeStr;
         }
+        /* stamp per-card source line with fetch time */
+        d.cities.forEach(function(item) {
+          var el = document.getElementById('env-src-time-' + item.city);
+          if (el) el.textContent = ' · ' + timeStr;
+        });
+        /* update next-refresh countdown */
+        clearInterval(_countdownTimer);
+        _countdownSec = ENV_REFRESH_MS / 1000;
+        _countdownTimer = setInterval(function() {
+          _countdownSec--;
+          var cd = document.getElementById('envCountdown');
+          if (cd) {
+            var m = Math.floor(_countdownSec / 60);
+            var s = _countdownSec % 60;
+            cd.textContent = 'Next refresh in ' + m + ':' + (s < 10 ? '0' : '') + s;
+          }
+          if (_countdownSec <= 0) clearInterval(_countdownTimer);
+        }, 1000);
       })
       .catch(function(){
         var ts = document.getElementById('envLastUpdated');
@@ -1434,7 +1468,11 @@ app.get('/admin', (c) => {
       });
   }
 
-  /* Initial load + auto-refresh */
+  /* countdown tracker */
+  var _countdownSec  = 0;
+  var _countdownTimer;
+
+  /* Initial load + auto-refresh every 15 min */
   fetchWeather();
   envTimer = setInterval(fetchWeather, ENV_REFRESH_MS);
   </script>
@@ -4630,12 +4668,25 @@ app.get('/api/recalls/:cafeId', (c) => {
 })
 
 // ── GET /api/weather  ──────────────────────────────────────────────
-// Server-side proxy to OpenWeatherMap so the API key never reaches
-// the browser.  Falls back to realistic KSA stub data when no key
-// is configured so the UI always renders something useful.
+// Server-side proxy to OpenWeatherMap — API key is NEVER sent to the browser.
+// Set your real key below or inject via Cloudflare secret OPENWEATHER_KEY.
+//
+// HOW TO USE:
+//   Option A — paste your key directly here (for local dev only):
+//              const WEATHER_API_KEY = 'your_real_key_here'
+//   Option B — set as Cloudflare secret (recommended for production):
+//              wrangler pages secret put OPENWEATHER_KEY
+//              (leave the constant below as the placeholder string)
+//
+// Get your free key at: https://openweathermap.org/api
 // City IDs: Riyadh=108410, Jeddah=105343, Dammam=110336
+// ─────────────────────────────────────────────────────────────────
+const WEATHER_API_KEY = 'PASTE_YOUR_OPENWEATHERMAP_KEY_HERE'
+
 app.get('/api/weather', async (c) => {
-  const key = (c.env as Record<string,string> | undefined)?.OPENWEATHER_KEY ?? ''
+  // Priority: Cloudflare secret → compile-time constant → stub
+  const key = (c.env as Record<string,string> | undefined)?.OPENWEATHER_KEY
+           || (WEATHER_API_KEY !== 'PASTE_YOUR_OPENWEATHERMAP_KEY_HERE' ? WEATHER_API_KEY : '')
 
   // ── KSA realistic fallback (no key / fetch error) ──────────────
   // Values mirror typical Feb conditions + slight randomisation
