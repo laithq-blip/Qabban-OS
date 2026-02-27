@@ -27,6 +27,9 @@ export interface CoffeeLot {
   recallInfo?: RecallInfo    // populated when status === 'RECALLED'
   labelImageUrl?: string     // optional sack-label photo (base64 data-URL or blob URL)
                              // stored as Label_Image_URL — SFDA Article 18 traceability
+  // ── Qabban Financial Intelligence fields ────────────────────────────────
+  costPerKg?: number        // Green bean purchase cost (SAR/kg) — used for True Roasted Cost
+  targetMargin?: number     // Target gross margin % (e.g. 35 = 35%) — drives Wholesale Price
 }
 
 // ─── Climate Presets ──────────────────────────────────────────────────────────
@@ -477,6 +480,8 @@ export const coffeeLots: CoffeeLot[] = [
     flavorNotes: ['Blueberry', 'Jasmine'],
     branch: 'Riyadh',
     gradeScore: 92,
+    costPerKg: 48,
+    targetMargin: 38,
   },
   // ── Colombia Huila ────────────────────────────────────────────────────────
   {
@@ -492,6 +497,8 @@ export const coffeeLots: CoffeeLot[] = [
     flavorNotes: ['Caramel', 'Red Apple'],
     branch: 'Jeddah',
     gradeScore: 89,
+    costPerKg: 42,
+    targetMargin: 35,
   },
   // ── Yemen Khawlani (Batch 1) — was Yemen Haraaz ───────────────────────────
   {
@@ -507,6 +514,8 @@ export const coffeeLots: CoffeeLot[] = [
     flavorNotes: ['Spices', 'Dried Fruits'],
     branch: 'Dammam',
     gradeScore: 88,
+    costPerKg: 65,
+    targetMargin: 40,
   },
   // ── Yemen Khawlani (Batch 2) — was Guatemala Antigua (CORRECTED) ──────────
   {
@@ -522,6 +531,8 @@ export const coffeeLots: CoffeeLot[] = [
     flavorNotes: ['Spices', 'Dried Fruits'],
     branch: 'Riyadh',
     gradeScore: 91,
+    costPerKg: 65,
+    targetMargin: 40,
   },
   // ── Kenya AA — was "Kenya AA Kiambu / Double Fermented" ───────────────────
   {
@@ -537,6 +548,8 @@ export const coffeeLots: CoffeeLot[] = [
     flavorNotes: ['Blackcurrant', 'Citrus'],
     branch: 'Dammam',
     gradeScore: 81,
+    costPerKg: 55,
+    targetMargin: 35,
   },
   // ── Brazil Cerrado ────────────────────────────────────────────────────────
   {
@@ -552,6 +565,8 @@ export const coffeeLots: CoffeeLot[] = [
     flavorNotes: ['Milk Chocolate', 'Almond'],
     branch: 'Jeddah',
     gradeScore: 87,
+    costPerKg: 32,
+    targetMargin: 32,
   },
   // ── Indonesia Sumatra (Batch 1) — was Costa Rica Tarrazú (CORRECTED) ──────
   {
@@ -567,6 +582,8 @@ export const coffeeLots: CoffeeLot[] = [
     flavorNotes: ['Cedar', 'Cocoa'],
     branch: 'Riyadh',
     gradeScore: 85,
+    costPerKg: 38,
+    targetMargin: 33,
   },
   // ── Indonesia Sumatra (Batch 2) ───────────────────────────────────────────
   {
@@ -582,6 +599,8 @@ export const coffeeLots: CoffeeLot[] = [
     flavorNotes: ['Cedar', 'Cocoa'],
     branch: 'Dammam',
     gradeScore: 84,
+    costPerKg: 38,
+    targetMargin: 33,
   },
 ]
 
@@ -671,3 +690,168 @@ export const beanRequests: BeanRequest[] = [
 
 // ─── In-memory roasting interest store (pre-orders for OUT OF STOCK) ───────
 export const roastingInterests: RoastingInterest[] = []
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  QABBAN FINANCIAL INTELLIGENCE ENGINE
+//  Connects real-time environmental data (Sponge Effect) to pricing & P&L.
+//
+//  True Roasted Cost  = Green Bean Cost (SAR/kg) ÷ Live Yield Coefficient
+//    → Accounts for actual shrinkage: if humidity raises yield, cost per
+//      roasted kg drops; if aridity lowers yield, cost per roasted kg rises.
+//
+//  Wholesale Price    = True Roasted Cost ÷ (1 − Target Gross Margin %)
+//    → Fixed to the BASELINE coefficient (0.82) so the price shown to cafes
+//      never fluctuates with weather — only internal P&L changes.
+//
+//  Live Inventory Value = Wholesale Price × Live Roasted Balance (Sponge-adj)
+//    → Uses the sponge-adjusted live weight so environmental gains/losses
+//      are reflected in the portfolio valuation.
+//
+//  Environmental P&L  = Σ (Sponge Adjustment kg) × Wholesale Price
+//    → The SAR value of kilograms gained or lost due to humidity rules.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Roastery-wide default target gross margin (%) — overridable per lot */
+export let defaultTargetMargin = 35   // 35 %
+
+/** Update the roastery-wide default margin (called from Finance settings) */
+export const setDefaultTargetMargin = (pct: number) => {
+  defaultTargetMargin = Math.max(1, Math.min(99, Math.round(pct * 10) / 10))
+}
+
+export interface LotFinancials {
+  lotId:             string
+  origin:            string
+  branch:            string
+  costPerKg:         number   // green bean purchase cost (SAR/kg)
+  targetMargin:      number   // target gross margin %
+  yieldCoeff:        number   // sponge-adjusted coefficient for this lot's branch
+  trueRoastedCost:   number   // costPerKg ÷ yieldCoeff  (SAR/kg roasted)
+  wholesalePrice:    number   // fixed on BASELINE 0.82 for stable cafe pricing
+  liveRoastedKg:     number   // sponge-adjusted live balance
+  liveInventoryValue:number   // wholesalePrice × liveRoastedKg
+  projectedProfit:   number   // (wholesalePrice − trueRoastedCost) × liveRoastedKg
+  spongeKgDelta:     number   // kg gained/lost vs baseline
+  environmentalPnL:  number   // spongeKgDelta × wholesalePrice
+}
+
+/**
+ * calcTrueRoastedCost
+ * True cost per kg of ROASTED coffee, accounting for humidity-adjusted shrinkage.
+ *
+ * @param costPerKgGreen  Green bean purchase cost (SAR/kg)
+ * @param humidity        Branch current RH (%) — drives sponge coefficient
+ */
+export const calcTrueRoastedCost = (costPerKgGreen: number, humidity: number): number => {
+  const coeff = spongeCoeffForBranch(humidity)
+  return Math.round((costPerKgGreen / coeff) * 100) / 100
+}
+
+/**
+ * calcWholesalePrice
+ * Wholesale price per kg of roasted coffee at the target gross margin.
+ * Uses BASELINE coefficient (0.82) so the price remains stable for cafes
+ * regardless of daily humidity fluctuations.
+ *
+ * @param costPerKgGreen  Green bean purchase cost (SAR/kg)
+ * @param targetMarginPct Target gross margin (e.g. 35 for 35 %)
+ */
+export const calcWholesalePrice = (costPerKgGreen: number, targetMarginPct: number): number => {
+  const baselineCost = costPerKgGreen / SPONGE_BASELINE_COEFFICIENT
+  const margin = Math.max(0.01, Math.min(0.99, targetMarginPct / 100))
+  return Math.round((baselineCost / (1 - margin)) * 100) / 100
+}
+
+/**
+ * calcLotFinancials
+ * Full financial profile for a single lot, given its branch humidity.
+ */
+export const calcLotFinancials = (
+  lot:         CoffeeLot,
+  liveBalance: LotLiveBalance,
+  branchHumidity: number,
+  globalDefaultMargin: number = defaultTargetMargin,
+): LotFinancials => {
+  const cost   = lot.costPerKg   ?? 0
+  const margin = lot.targetMargin ?? globalDefaultMargin
+  const coeff  = liveBalance.sponge.coefficient
+
+  const trueRoastedCost    = cost > 0 ? calcTrueRoastedCost(cost, branchHumidity) : 0
+  const wholesalePrice     = cost > 0 ? calcWholesalePrice(cost, margin) : 0
+  const liveRoastedKg      = liveBalance.liveRoastedKg
+  const baselineRoastedKg  = applyRoastShrinkage(liveBalance.liveGreenKg)
+  const spongeKgDelta      = Math.round((liveRoastedKg - baselineRoastedKg) * 10) / 10
+  const liveInventoryValue = Math.round(wholesalePrice * liveRoastedKg * 100) / 100
+  const projectedProfit    = Math.round((wholesalePrice - trueRoastedCost) * liveRoastedKg * 100) / 100
+  const environmentalPnL   = Math.round(spongeKgDelta * wholesalePrice * 100) / 100
+
+  return {
+    lotId:             lot.id,
+    origin:            lot.origin,
+    branch:            lot.branch,
+    costPerKg:         cost,
+    targetMargin:      margin,
+    yieldCoeff:        coeff,
+    trueRoastedCost,
+    wholesalePrice,
+    liveRoastedKg,
+    liveInventoryValue,
+    projectedProfit,
+    spongeKgDelta,
+    environmentalPnL,
+  }
+}
+
+export interface PortfolioFinancials {
+  totalInventoryValue:  number   // Σ liveInventoryValue across all lots with cost data
+  totalProjectedProfit: number   // Σ projectedProfit
+  totalEnvironmentalPnL:number   // Σ environmentalPnL (Sponge SAR impact)
+  totalSpongeKgDelta:   number   // Σ spongeKgDelta (total kg gained/lost)
+  lotsWithPricing:      number   // count of lots that have costPerKg set
+  byLot:                LotFinancials[]
+}
+
+/**
+ * calcPortfolioFinancials
+ * Aggregates financial intelligence across all non-recalled lots.
+ */
+export const calcPortfolioFinancials = (
+  lots:        CoffeeLot[],
+  balances:    AggregateBalance,
+  branchList:  Branch[] = branches,
+): PortfolioFinancials => {
+  const humidityByBranch = new Map<string, number>()
+  for (const b of branchList) humidityByBranch.set(b.name, b.humidity)
+
+  const activeLots = lots.filter(l => l.status !== 'RECALLED')
+  const byLot: LotFinancials[] = []
+  let totalInventoryValue   = 0
+  let totalProjectedProfit  = 0
+  let totalEnvironmentalPnL = 0
+  let totalSpongeKgDelta    = 0
+  let lotsWithPricing       = 0
+
+  for (const lot of activeLots) {
+    const lb      = balances.byLot.get(lot.id)
+    if (!lb) continue
+    const humidity = humidityByBranch.get(lot.branch) ?? 50
+    const fin      = calcLotFinancials(lot, lb, humidity)
+    byLot.push(fin)
+    if (lot.costPerKg && lot.costPerKg > 0) {
+      totalInventoryValue   += fin.liveInventoryValue
+      totalProjectedProfit  += fin.projectedProfit
+      lotsWithPricing++
+    }
+    totalEnvironmentalPnL += fin.environmentalPnL
+    totalSpongeKgDelta    += fin.spongeKgDelta
+  }
+
+  return {
+    totalInventoryValue:   Math.round(totalInventoryValue * 100) / 100,
+    totalProjectedProfit:  Math.round(totalProjectedProfit * 100) / 100,
+    totalEnvironmentalPnL: Math.round(totalEnvironmentalPnL * 100) / 100,
+    totalSpongeKgDelta:    Math.round(totalSpongeKgDelta * 10) / 10,
+    lotsWithPricing,
+    byLot,
+  }
+}

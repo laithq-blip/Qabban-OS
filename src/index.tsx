@@ -18,11 +18,16 @@ import {
   SPONGE_RH_LOW_THRESHOLD,
   SPONGE_HIGH_DELTA,
   SPONGE_LOW_DELTA,
+  calcWholesalePrice,
+  calcPortfolioFinancials,
+  defaultTargetMargin,
+  setDefaultTargetMargin,
   type SpongeCoeffResult,
   type CoffeeLot,
   type Branch,
   type ClimateType,
   type RoastingInterest,
+  type PortfolioFinancials,
 } from './data'
 
 const app = new Hono()
@@ -1229,6 +1234,42 @@ const shell = (title: string, body: string) => `<!DOCTYPE html>
       'misc.pre.orders.desc':'Cafes submitted these pre-orders for origins that are currently OUT OF STOCK. Use this to plan your next roast schedule.',
       'misc.no.preorders':   'No pre-orders yet — cafes will submit Roasting Interest requests when an origin is out of stock.',
       'misc.sponge.adjusted':'⬡ SPONGE-ADJUSTED',
+
+      /* ── FINANCIAL INTELLIGENCE ── */
+      'fin.module':           '⬡ Qabban Financial Intelligence',
+      'fin.nav':              'Finance',
+      'fin.page.title':       'Financial Intelligence',
+      'fin.page.sub':         'True costs · Wholesale pricing · Environmental P&L',
+      'fin.impact.card':      'Financial Impact',
+      'fin.portfolio.value':  'Total Portfolio Value',
+      'fin.env.pnl':          'Environmental P&L',
+      'fin.env.pnl.desc':     'SAR value of Sponge Adjustment',
+      'fin.proj.profit':      'Projected Profit',
+      'fin.lots.priced':      'Lots with Pricing',
+      'fin.sponge.kg':        'Sponge Δ kg',
+      'fin.default.margin':   'Default Target Margin',
+      'fin.set.margin':       'SET',
+      'fin.margin.saved':     'Default margin updated',
+      'fin.table.title':      'Lot-Level Financial Breakdown',
+      'fin.true.cost':        'True Roasted Cost',
+      'fin.wholesale':        'Wholesale Price',
+      'fin.live.value':       'Live Inventory Value',
+      'fin.proj.profit.col':  'Projected Profit',
+      'fin.env.col':          'Env. P&L',
+      'fin.coeff.col':        'Yield Coeff.',
+      'fin.no.cost':          'No cost data',
+      'fin.sar':              'SAR',
+      'fin.per.kg':           '/kg',
+      'fin.add.cost':         'Green Bean Cost (SAR/kg)',
+      'fin.add.margin':       'Target Gross Margin (%)',
+      'fin.add.cost.ph':      'e.g. 45',
+      'fin.add.margin.ph':    'e.g. 35',
+      'fin.true.cost.formula':'True Roasted Cost = Green Cost ÷ Yield Coeff.',
+      'fin.wholesale.formula':'Wholesale Price = True Cost ÷ (1 − Margin %)',
+      'fin.cafe.price.label': 'Wholesale',
+      'fin.cafe.price.badge': '⬡ PRICED',
+      'fin.env.gain':         '⬡ ENV GAIN',
+      'fin.env.loss':         '⬡ ENV LOSS',
     },
 
     ar: {
@@ -1458,6 +1499,42 @@ const shell = (title: string, body: string) => `<!DOCTYPE html>
       'misc.pre.orders.desc':'قدّمت المقاهي هذه الطلبات المسبقة للأصول غير المتوفرة. استخدمها لتخطيط جدول التحميص القادم.',
       'misc.no.preorders':   'لا توجد طلبات مسبقة بعد — ستُرسِل المقاهي طلبات اهتمام التحميص عند نفاد المخزون.',
       'misc.sponge.adjusted':'⬡ معدَّل بتأثير الإسفنج',
+
+      /* ── الذكاء المالي ── */
+      'fin.module':           '⬡ الذكاء المالي - قبّان',
+      'fin.nav':              'المالية',
+      'fin.page.title':       'الذكاء المالي',
+      'fin.page.sub':         'التكاليف الحقيقية · أسعار الجملة · الأثر البيئي',
+      'fin.impact.card':      'الأثر المالي',
+      'fin.portfolio.value':  'إجمالي قيمة المحفظة',
+      'fin.env.pnl':          'الأثر البيئي (ر.س)',
+      'fin.env.pnl.desc':     'قيمة تعديل تأثير الإسفنج بالريال',
+      'fin.proj.profit':      'الربح المتوقع',
+      'fin.lots.priced':      'دفعات مُسعَّرة',
+      'fin.sponge.kg':        'فرق الإسفنج (كغ)',
+      'fin.default.margin':   'هامش الربح الافتراضي',
+      'fin.set.margin':       'حفظ',
+      'fin.margin.saved':     'تم تحديث الهامش الافتراضي',
+      'fin.table.title':      'التحليل المالي لكل دفعة',
+      'fin.true.cost':        'التكلفة الحقيقية للمحمص',
+      'fin.wholesale':        'سعر الجملة',
+      'fin.live.value':       'القيمة المباشرة للمخزون',
+      'fin.proj.profit.col':  'الربح المتوقع',
+      'fin.env.col':          'الأثر البيئي',
+      'fin.coeff.col':        'معامل الإنتاج',
+      'fin.no.cost':          'لا توجد بيانات تكلفة',
+      'fin.sar':              'ر.س',
+      'fin.per.kg':           '/كغ',
+      'fin.add.cost':         'تكلفة البن الأخضر (ر.س/كغ)',
+      'fin.add.margin':       'هامش الربح المستهدف (%)',
+      'fin.add.cost.ph':      'مثال: 45',
+      'fin.add.margin.ph':    'مثال: 35',
+      'fin.true.cost.formula':'التكلفة الحقيقية = التكلفة الخضراء ÷ معامل الإنتاج',
+      'fin.wholesale.formula':'سعر الجملة = التكلفة الحقيقية ÷ (1 − الهامش %)',
+      'fin.cafe.price.label': 'جملة',
+      'fin.cafe.price.badge': '⬡ مُسعَّر',
+      'fin.env.gain':         '⬡ مكسب بيئي',
+      'fin.env.loss':         '⬡ خسارة بيئية',
     }
   };
 
@@ -1691,6 +1768,7 @@ function adminLayout(pageTitle: string, activeNav: string, content: string, pend
     { href: '/admin',           icon: 'fa-gauge',         label: 'Overview',      id: 'overview',   i18n: 'nav.overview'  },
     { href: '/admin/inventory', icon: 'fa-boxes-stacked', label: 'Inventory',     id: 'inventory',  i18n: 'nav.inventory' },
     { href: '/admin/branches',  icon: 'fa-building',      label: 'Branches',      id: 'branches',   i18n: 'nav.branches'  },
+    { href: '/admin/finance',   icon: 'fa-chart-line',    label: 'Finance',       id: 'finance',    i18n: 'fin.nav'       },
     { href: '/admin/requests',  icon: 'fa-bell',          label: 'Bean Requests', id: 'requests',   i18n: 'nav.requests'  },
   ]
   const body = `
@@ -1927,6 +2005,16 @@ app.get('/admin', (c) => {
   // ── Live Balance: deduct all DISPATCHED orders from purchased totals ──
   const bal = calcLiveBalance(coffeeLots, beanRequests, branches)
 
+  // ── Financial Intelligence ──────────────────────────────────────
+  const portfolio = calcPortfolioFinancials(coffeeLots, bal, branches)
+  const portValueFmt = portfolio.totalInventoryValue.toLocaleString('en-SA', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
+  const portProfitFmt = portfolio.totalProjectedProfit.toLocaleString('en-SA', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
+  const envPnlFmt = portfolio.totalEnvironmentalPnL.toLocaleString('en-SA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  const envPnlSign  = portfolio.totalEnvironmentalPnL >= 0 ? '+' : ''
+  const envPnlColor = portfolio.totalEnvironmentalPnL > 0 ? 'var(--green)' : portfolio.totalEnvironmentalPnL < 0 ? 'var(--red)' : 'var(--text-muted)'
+  const spongeKgSign  = portfolio.totalSpongeKgDelta >= 0 ? '+' : ''
+  const spongeKgColor = portfolio.totalSpongeKgDelta > 0 ? 'var(--green)' : portfolio.totalSpongeKgDelta < 0 ? 'var(--red)' : 'var(--text-muted)'
+
   // ── Sponge Effect: compute per-branch coefficients ──────────────────
   const spongeBranches = branches.map(b => {
     const sc = calcSpongeCoefficient(b.humidity)
@@ -1968,6 +2056,45 @@ app.get('/admin', (c) => {
         ${pendingCount}
       </div>
       <div class="stat-unit" data-i18n="stat.awaiting">awaiting confirmation</div>
+    </div>
+  </div>
+
+  <!-- ══ FINANCIAL IMPACT CARD ══ -->
+  <div class="card" style="margin-bottom:28px;border-color:rgba(245,158,11,0.35);background:linear-gradient(135deg,var(--bg-1) 0%,rgba(245,158,11,0.04) 100%)">
+    <div class="card-title" style="margin-bottom:16px">
+      <i class="fa fa-chart-line" style="color:var(--amber)"></i>
+      <span data-i18n="fin.impact.card">Financial Impact</span>
+      <span style="font-family:var(--font-mono);font-size:9px;padding:2px 7px;border-radius:2px;background:rgba(245,158,11,0.10);color:var(--amber);border:1px solid rgba(245,158,11,0.25);margin-left:8px;letter-spacing:.4px">⬡ QFI ENGINE</span>
+      <a href="/admin/finance" style="margin-left:auto;font-family:var(--font-mono);font-size:10px;color:var(--amber);text-decoration:none;border:1px solid rgba(245,158,11,0.35);padding:3px 10px;border-radius:2px">
+        <i class="fa fa-arrow-right"></i> Finance Tab
+      </a>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px">
+      <div style="background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:16px">
+        <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px" data-i18n="fin.portfolio.value">Total Portfolio Value</div>
+        <div style="font-family:var(--font-mono);font-size:22px;color:var(--amber);font-weight:700">${portValueFmt}</div>
+        <div style="font-size:10px;color:var(--text-muted);margin-top:2px;font-family:var(--font-mono)">SAR · live roasted stock</div>
+      </div>
+      <div style="background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:16px">
+        <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px" data-i18n="fin.proj.profit">Projected Profit</div>
+        <div style="font-family:var(--font-mono);font-size:22px;font-weight:700;color:${parseInt(portProfitFmt.replace(/,/g,'')) >= 0 ? 'var(--green)' : 'var(--red)'}">
+          ${portfolio.totalProjectedProfit >= 0 ? '+' : ''}${portProfitFmt}
+        </div>
+        <div style="font-size:10px;color:var(--text-muted);margin-top:2px;font-family:var(--font-mono)">SAR · at wholesale price</div>
+      </div>
+      <div style="background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:16px;border-color:rgba(245,158,11,0.25)">
+        <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px" data-i18n="fin.env.pnl">Environmental P&L</div>
+        <div style="font-family:var(--font-mono);font-size:22px;font-weight:700;color:${envPnlColor}">${envPnlSign}${envPnlFmt}</div>
+        <div style="font-size:10px;color:${spongeKgColor};margin-top:2px;font-family:var(--font-mono)">
+          SAR · ${spongeKgSign}${portfolio.totalSpongeKgDelta} kg sponge Δ
+        </div>
+        <div style="font-size:9px;color:var(--text-muted);margin-top:3px" data-i18n="fin.env.pnl.desc">SAR value of Sponge Adjustment</div>
+      </div>
+      <div style="background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:16px">
+        <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px" data-i18n="fin.lots.priced">Lots with Pricing</div>
+        <div style="font-family:var(--font-mono);font-size:22px;color:var(--text-pri);font-weight:700">${portfolio.lotsWithPricing}</div>
+        <div style="font-size:10px;color:var(--text-muted);margin-top:2px;font-family:var(--font-mono)">${coffeeLots.filter(l=>l.status!=='RECALLED').length} active lots total</div>
+      </div>
     </div>
   </div>
 
@@ -3134,6 +3261,7 @@ app.post('/admin/inventory/add', async (c) => {
     branch, greenWeightRaw, arrivalDate,
     grade: gradeRaw, flavor1, flavor2, notes,
     labelImageUrl,
+    costPerKg: costRaw, targetMargin: marginRaw,
   } = body
 
   // ── Required field validation ─────────────────────────────────
@@ -3200,6 +3328,9 @@ app.post('/admin/inventory/add', async (c) => {
     branch:          branch as 'Riyadh' | 'Jeddah' | 'Dammam',
     gradeScore:      grade,
     ...(safeImageUrl ? { labelImageUrl: safeImageUrl } : {}),
+    // ── Financial Intelligence ────────────────────────────────────
+    ...(costRaw   ? { costPerKg:    Math.round(parseFloat(costRaw)   * 100) / 100 } : {}),
+    ...(marginRaw ? { targetMargin: Math.round(parseFloat(marginRaw) * 10)  / 10  } : {}),
   }
 
   coffeeLots.push(newLot)
@@ -4092,6 +4223,37 @@ app.get('/admin/inventory', (c) => {
               </div>
             </div>
 
+            <!-- ── FINANCIAL INTELLIGENCE FIELDS ── -->
+            <div>
+              <label class="addlot-label">
+                <i class="fa fa-coins" style="color:var(--amber)"></i>
+                <span data-i18n="fin.add.cost">Green Bean Cost (SAR/kg)</span>
+                <span class="req">*</span>
+              </label>
+              <input class="addlot-input" type="number" name="costPerKg" id="addLotCost"
+                placeholder="e.g. 45" min="0" step="0.01"
+                data-i18n-ph="fin.add.cost.ph"
+                oninput="addLotUpdateFinancials()"/>
+              <div style="font-size:10px;color:var(--text-muted);margin-top:3px;font-family:var(--font-mono)">
+                Purchase cost per kg of green beans
+              </div>
+            </div>
+            <div>
+              <label class="addlot-label">
+                <i class="fa fa-percent" style="color:var(--amber)"></i>
+                <span data-i18n="fin.add.margin">Target Gross Margin (%)</span>
+                <span class="req">*</span>
+              </label>
+              <input class="addlot-input" type="number" name="targetMargin" id="addLotMargin"
+                placeholder="e.g. 35" min="1" max="99" step="0.1"
+                data-i18n-ph="fin.add.margin.ph"
+                oninput="addLotUpdateFinancials()"/>
+              <div style="font-size:10px;margin-top:4px;font-family:var(--font-mono)" id="finPreview">
+                <span style="color:var(--text-muted)">Wholesale price preview: </span>
+                <span id="wholesalePreview" style="color:var(--amber)">— SAR/kg</span>
+              </div>
+            </div>
+
             <!-- Flavor Notes -->
             <div>
               <label class="addlot-label"><i class="fa fa-mug-hot"></i> Flavor Notes</label>
@@ -4340,6 +4502,23 @@ app.get('/admin/inventory', (c) => {
     preview.style.display = 'flex';
   }
 
+  // ── Financial Intelligence: live wholesale price preview ───────
+  function addLotUpdateFinancials() {
+    var costEl   = document.getElementById('addLotCost');
+    var marginEl = document.getElementById('addLotMargin');
+    var preview  = document.getElementById('wholesalePreview');
+    if (!costEl || !marginEl || !preview) return;
+    var cost   = parseFloat(costEl.value);
+    var margin = parseFloat(marginEl.value);
+    if (isNaN(cost) || cost <= 0 || isNaN(margin) || margin <= 0 || margin >= 100) {
+      preview.textContent = '— SAR/kg';
+      return;
+    }
+    var baselineCost = cost / 0.82;
+    var wholesale    = baselineCost / (1 - margin / 100);
+    preview.textContent = wholesale.toFixed(2) + ' SAR/kg';
+  }
+
   // ── Grade → auto status badge ──────────────────────────────────
   function addLotUpdateStatus(val) {
     var g = parseInt(val, 10);
@@ -4420,6 +4599,8 @@ app.get('/admin/inventory', (c) => {
       flavor1:        fd.get('flavor1'),
       flavor2:        fd.get('flavor2'),
       labelImageUrl:  _imgDataUrl || undefined,
+      costPerKg:      fd.get('costPerKg')    || undefined,
+      targetMargin:   fd.get('targetMargin') || undefined,
     };
 
     btn.disabled = true;
@@ -4868,6 +5049,191 @@ app.get('/admin/inventory', (c) => {
   return c.html(adminLayout('Inventory Ledger', 'inventory', content, pendingCount))
 })
 
+// ── GET /admin/finance ──────────────────────────────────────────
+app.get('/admin/finance', (c) => {
+  const pendingCount = beanRequests.filter(r => r.status === 'PENDING').length
+  const bal          = calcLiveBalance(coffeeLots, beanRequests, branches)
+  const portfolio    = calcPortfolioFinancials(coffeeLots, bal, branches)
+
+  const portValueFmt  = portfolio.totalInventoryValue.toLocaleString('en-SA', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
+  const portProfitFmt = portfolio.totalProjectedProfit.toLocaleString('en-SA', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
+  const envPnlFmt     = portfolio.totalEnvironmentalPnL.toLocaleString('en-SA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  const envPnlSign    = portfolio.totalEnvironmentalPnL >= 0 ? '+' : ''
+  const envPnlColor   = portfolio.totalEnvironmentalPnL > 0 ? 'var(--green)' : portfolio.totalEnvironmentalPnL < 0 ? 'var(--red)' : 'var(--text-muted)'
+  const spongeKgSign  = portfolio.totalSpongeKgDelta >= 0 ? '+' : ''
+  const spongeKgColor = portfolio.totalSpongeKgDelta > 0 ? 'var(--green)' : portfolio.totalSpongeKgDelta < 0 ? 'var(--red)' : 'var(--text-muted)'
+
+  const content = `
+  <div class="page-title" style="margin-bottom:4px" data-i18n="fin.page.title">Financial Intelligence</div>
+  <div class="page-sub" style="margin-bottom:24px" data-i18n="fin.page.sub">True costs · Wholesale pricing · Environmental P&L</div>
+
+  <!-- ── Portfolio Summary Cards ── -->
+  <div class="stat-grid" style="margin-bottom:28px">
+    <div class="stat-card" style="border-color:rgba(245,158,11,0.35)">
+      <div class="stat-label" data-i18n="fin.portfolio.value">Total Portfolio Value</div>
+      <div class="stat-value" style="color:var(--amber)">${portValueFmt}</div>
+      <div class="stat-unit" data-i18n="fin.sar">SAR</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label" data-i18n="fin.proj.profit">Projected Profit</div>
+      <div class="stat-value" style="color:${portfolio.totalProjectedProfit >= 0 ? 'var(--green)' : 'var(--red)'}">
+        ${portfolio.totalProjectedProfit >= 0 ? '+' : ''}${portProfitFmt}
+      </div>
+      <div class="stat-unit" data-i18n="fin.sar">SAR</div>
+    </div>
+    <div class="stat-card" style="border-color:rgba(245,158,11,0.25)">
+      <div class="stat-label" data-i18n="fin.env.pnl">Environmental P&L</div>
+      <div class="stat-value" style="color:${envPnlColor}">${envPnlSign}${envPnlFmt}</div>
+      <div class="stat-unit" style="color:${spongeKgColor}">${spongeKgSign}${portfolio.totalSpongeKgDelta} kg sponge Δ</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label" data-i18n="fin.lots.priced">Lots with Pricing</div>
+      <div class="stat-value">${portfolio.lotsWithPricing}</div>
+      <div class="stat-unit">${coffeeLots.filter(l=>l.status!=='RECALLED').length} total active lots</div>
+    </div>
+  </div>
+
+  <!-- ── Default Margin Setting ── -->
+  <div class="card" style="margin-bottom:28px">
+    <div class="card-title">
+      <i class="fa fa-sliders" style="color:var(--amber)"></i>
+      <span data-i18n="fin.default.margin">Default Target Margin</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+      <div style="flex:1;min-width:220px">
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:6px">
+          Applied to lots that have no individual margin set. Current value:
+          <span style="color:var(--amber);font-family:var(--font-mono);font-weight:700" id="curMarginDisplay">${defaultTargetMargin}%</span>
+        </div>
+        <div style="font-size:10px;color:var(--text-muted);font-family:var(--font-mono)">
+          Wholesale Price = (Green Cost ÷ 0.82) ÷ (1 − Margin %)
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input id="defaultMarginInput" type="number" min="1" max="99" step="0.1"
+          value="${defaultTargetMargin}"
+          style="width:80px;background:var(--bg-2);border:1px solid rgba(245,158,11,0.4);border-radius:var(--radius);padding:8px 10px;color:var(--text-pri);font-family:var(--font-mono);font-size:14px;text-align:center"/>
+        <span style="font-family:var(--font-mono);color:var(--amber)">%</span>
+        <button onclick="saveDefaultMargin()" style="padding:8px 18px;background:rgba(245,158,11,0.15);border:1px solid rgba(245,158,11,0.4);border-radius:var(--radius);font-family:var(--font-mono);font-size:12px;font-weight:700;color:var(--amber);cursor:pointer;letter-spacing:.5px" data-i18n="fin.set.margin">
+          SET
+        </button>
+      </div>
+      <div id="marginSavedMsg" style="font-family:var(--font-mono);font-size:11px;color:var(--green);display:none">
+        <i class="fa fa-circle-check"></i> <span data-i18n="fin.margin.saved">Default margin updated</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Lot-Level Financial Breakdown Table ── -->
+  <div class="card">
+    <div class="card-title" style="margin-bottom:16px">
+      <i class="fa fa-table" style="color:var(--amber)"></i>
+      <span data-i18n="fin.table.title">Lot-Level Financial Breakdown</span>
+      <span style="font-family:var(--font-mono);font-size:9px;padding:2px 7px;border-radius:2px;background:rgba(245,158,11,0.10);color:var(--amber);border:1px solid rgba(245,158,11,0.25);margin-left:6px">⬡ QFI ENGINE</span>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Lot ID</th>
+            <th>Origin</th>
+            <th>Branch</th>
+            <th data-i18n="fin.true.cost">True Roasted Cost</th>
+            <th data-i18n="fin.wholesale">Wholesale Price</th>
+            <th>Live Stock</th>
+            <th data-i18n="fin.live.value">Live Inventory Value</th>
+            <th data-i18n="fin.proj.profit.col">Projected Profit</th>
+            <th data-i18n="fin.env.col">Env. P&L</th>
+            <th data-i18n="fin.coeff.col">Yield Coeff.</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${portfolio.byLot.map(fin => {
+            const hasCost    = fin.costPerKg > 0
+            const profitColor = fin.projectedProfit >= 0 ? 'var(--green)' : 'var(--red)'
+            const envColor    = fin.environmentalPnL > 0 ? 'var(--green)' : fin.environmentalPnL < 0 ? 'var(--red)' : 'var(--text-muted)'
+            const coeffColor  = fin.yieldCoeff > SPONGE_BASELINE_COEFFICIENT ? '#38bdf8' :
+                                fin.yieldCoeff < SPONGE_BASELINE_COEFFICIENT ? '#fb923c' : 'var(--text-sec)'
+            const coeffIcon   = fin.yieldCoeff > SPONGE_BASELINE_COEFFICIENT ? '▲' :
+                                fin.yieldCoeff < SPONGE_BASELINE_COEFFICIENT ? '▼' : '—'
+            const lot         = coffeeLots.find(l => l.id === fin.lotId)
+            return `
+          <tr>
+            <td class="mono" style="color:var(--amber)">${fin.lotId}</td>
+            <td style="font-weight:500">${fin.origin}</td>
+            <td style="font-size:12px;color:var(--text-sec)">${fin.branch}</td>
+            <td class="mono">${hasCost
+              ? `<span style="color:var(--text-pri)">${fin.trueRoastedCost.toFixed(2)}</span> <span style="font-size:10px;color:var(--text-muted)">SAR/kg</span>`
+              : `<span style="color:var(--text-muted);font-size:11px" data-i18n="fin.no.cost">No cost data</span>`
+            }</td>
+            <td class="mono">${hasCost
+              ? `<span style="color:var(--amber);font-weight:700">${fin.wholesalePrice.toFixed(2)}</span> <span style="font-size:10px;color:var(--text-muted)">SAR/kg</span>`
+              : `<span style="color:var(--text-muted)">—</span>`
+            }</td>
+            <td class="mono" style="color:var(--text-sec)">${fin.liveRoastedKg} kg</td>
+            <td class="mono">${hasCost
+              ? `<span style="color:var(--amber)">${fin.liveInventoryValue.toLocaleString('en-SA', {minimumFractionDigits:0,maximumFractionDigits:0})}</span> <span style="font-size:10px;color:var(--text-muted)">SAR</span>`
+              : `<span style="color:var(--text-muted)">—</span>`
+            }</td>
+            <td class="mono" style="color:${profitColor}">${hasCost
+              ? `${fin.projectedProfit >= 0 ? '+' : ''}${fin.projectedProfit.toLocaleString('en-SA', {minimumFractionDigits:0,maximumFractionDigits:0})} SAR`
+              : `<span style="color:var(--text-muted)">—</span>`
+            }</td>
+            <td class="mono" style="color:${envColor}">${hasCost
+              ? `${fin.environmentalPnL >= 0 ? '+' : ''}${fin.environmentalPnL.toFixed(2)} SAR`
+              : `<span style="color:var(--text-muted)">—</span>`
+            }</td>
+            <td>
+              <span style="font-family:var(--font-mono);font-size:12px;font-weight:700;color:${coeffColor}">${coeffIcon} ${(fin.yieldCoeff * 100).toFixed(1)}%</span>
+              <div style="font-size:9px;color:var(--text-muted);margin-top:2px">margin: ${fin.targetMargin}%</div>
+            </td>
+          </tr>`
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+  function saveDefaultMargin() {
+    var val = parseFloat(document.getElementById('defaultMarginInput').value);
+    if (isNaN(val) || val < 1 || val > 99) {
+      alert('Please enter a margin between 1 and 99.');
+      return;
+    }
+    fetch('/api/finance/set-margin', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ margin: val })
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (d.ok) {
+        document.getElementById('curMarginDisplay').textContent = d.margin + '%';
+        var msg = document.getElementById('marginSavedMsg');
+        msg.style.display = 'inline-flex';
+        setTimeout(function(){ msg.style.display = 'none'; }, 3000);
+      }
+    });
+  }
+  </script>`
+
+  return c.html(adminLayout('Financial Intelligence', 'finance', content, pendingCount))
+})
+
+// ── POST /api/finance/set-margin ────────────────────────────────
+app.post('/api/finance/set-margin', async (c) => {
+  try {
+    const { margin } = await c.req.json()
+    const val = parseFloat(margin)
+    if (isNaN(val) || val < 1 || val > 99) return c.json({ error: 'margin must be 1–99' }, 400)
+    setDefaultTargetMargin(val)
+    return c.json({ ok: true, margin: defaultTargetMargin })
+  } catch {
+    return c.json({ error: 'Invalid request' }, 400)
+  }
+})
+
 // ── GET /admin/requests ─────────────────────────────────────────
 app.get('/admin/requests', (c) => {
   const pendingCount = beanRequests.filter(r => r.status === 'PENDING').length
@@ -5120,6 +5486,19 @@ app.get('/cafe', (c) => {
     if (lots.length > 0) bestLotMap.set(cat.key, lots[0])
   }
 
+  // ── Wholesale price per origin — fixed to BASELINE 0.82 so price never fluctuates
+  // Uses the best (highest-grade) lot's costPerKg and targetMargin for the batch price.
+  const wholesalePriceMap = new Map<string, number | null>()
+  for (const cat of CATALOG_ORIGINS) {
+    const best = bestLotMap.get(cat.key)
+    if (best && best.costPerKg && best.costPerKg > 0) {
+      const margin = best.targetMargin ?? defaultTargetMargin
+      wholesalePriceMap.set(cat.key, calcWholesalePrice(best.costPerKg, margin))
+    } else {
+      wholesalePriceMap.set(cat.key, null)
+    }
+  }
+
   const inStockCount  = CATALOG_ORIGINS.filter(c => (originBalanceMap.get(c.key) ?? 0) > 0).length
   const outOfStockCount = CATALOG_ORIGINS.length - inStockCount
 
@@ -5158,6 +5537,7 @@ app.get('/cafe', (c) => {
       const isInStock   = liveRoasted > 0
       const bestLot     = bestLotMap.get(cat.key)
       const isRecalled  = coffeeLots.some(l => l.origin === cat.key && l.status === 'RECALLED')
+      const wprice      = wholesalePriceMap.get(cat.key) ?? null
 
       return `
     <div class="lot-card${isInStock ? '' : ' oos'}" style="position:relative">
@@ -5210,6 +5590,13 @@ app.get('/cafe', (c) => {
           <div class="lot-metric-value" style="font-size:12px">${bestLot.expiryDate}</div>
         </div>
       </div>
+      <!-- ⬡ Wholesale Price badge — fixed to baseline 0.82, never fluctuates -->
+      ${wprice !== null ? `
+      <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.25);border-radius:var(--radius);margin-bottom:12px">
+        <span style="font-family:var(--font-mono);font-size:9px;color:var(--amber);letter-spacing:.4px;font-weight:700">⬡ WHOLESALE</span>
+        <span style="flex:1;font-family:var(--font-mono);font-size:16px;font-weight:700;color:var(--amber)">${wprice.toFixed(2)} <span style="font-size:11px;font-weight:400;color:var(--text-muted)">SAR/kg</span></span>
+        <span style="font-family:var(--font-mono);font-size:9px;color:var(--text-muted)">fixed · batch price</span>
+      </div>` : ''}
       <div class="lot-footer">
         <button class="btn-request"
           onclick="openModal('${bestLot.id}','${cat.displayName.replace(/'/g, "\\'")}',${liveRoasted})">
