@@ -105,13 +105,15 @@ export interface Branch {
   totalGreenKg: number
 }
 
+export type ClientTier = 'Silver' | 'Gold' | 'Platinum'
+
 export interface CafeClient {
   id: string
   username: string
   password: string
   name: string
   branch: string    // widened — supports runtime-added branches
-  tier: 'Gold' | 'Silver' | 'Bronze'
+  tier: ClientTier
 }
 
 export interface BeanRequest {
@@ -646,9 +648,9 @@ export const branches: Branch[] = [
 
 // ─── Mock cafe clients ──────────────────────────────────────────────────────
 export const cafeClients: CafeClient[] = [
-  { id: 'CAF-001', username: 'alnokhba',    password: 'cafe123', name: 'Al Nokhba Specialty', branch: 'Riyadh', tier: 'Gold'   },
-  { id: 'CAF-002', username: 'qahwa_bahr',  password: 'cafe123', name: 'Qahwa Al Bahr',        branch: 'Jeddah', tier: 'Silver' },
-  { id: 'CAF-003', username: 'pearl_roast', password: 'cafe123', name: 'Pearl Roast Café',      branch: 'Dammam', tier: 'Bronze' },
+  { id: 'CAF-001', username: 'alnokhba',    password: 'cafe123', name: 'Al Nokhba Specialty', branch: 'Riyadh', tier: 'Gold'     },
+  { id: 'CAF-002', username: 'qahwa_bahr',  password: 'cafe123', name: 'Qahwa Al Bahr',        branch: 'Jeddah', tier: 'Silver'   },
+  { id: 'CAF-003', username: 'pearl_roast', password: 'cafe123', name: 'Pearl Roast Café',      branch: 'Dammam', tier: 'Platinum' },
 ]
 
 // ─── In-memory bean requests store ────────────────────────────────────────
@@ -719,6 +721,39 @@ export const setDefaultTargetMargin = (pct: number) => {
   defaultTargetMargin = Math.max(1, Math.min(99, Math.round(pct * 10) / 10))
 }
 
+// ─── Tier-based Margin Settings ──────────────────────────────────────────────
+// Each client tier gets its own gross margin %, applied when calculating the
+// wholesale price shown to that tier's cafes.
+// Silver = entry-level (higher margin for roastery)
+// Gold   = mid-tier
+// Platinum = top-tier / VIP (lowest margin = best price for client)
+export interface TierMargins {
+  Silver:   number   // e.g. 40
+  Gold:     number   // e.g. 35
+  Platinum: number   // e.g. 28
+}
+
+export let tierMargins: TierMargins = {
+  Silver:   40,
+  Gold:     35,
+  Platinum: 28,
+}
+
+/** Update one or all tier margins (called from Finance settings) */
+export const setTierMargins = (updates: Partial<TierMargins>) => {
+  for (const key of Object.keys(updates) as Array<keyof TierMargins>) {
+    const val = updates[key]
+    if (val !== undefined) {
+      tierMargins[key] = Math.max(1, Math.min(99, Math.round(val * 10) / 10))
+    }
+  }
+}
+
+/** Get the effective margin for a given client tier */
+export const marginForTier = (tier: ClientTier): number => {
+  return tierMargins[tier] ?? defaultTargetMargin
+}
+
 export interface LotFinancials {
   lotId:             string
   origin:            string
@@ -771,9 +806,10 @@ export const calcLotFinancials = (
   liveBalance: LotLiveBalance,
   branchHumidity: number,
   globalDefaultMargin: number = defaultTargetMargin,
+  forceMargin?: number,          // when set, overrides both lot.targetMargin AND globalDefault
 ): LotFinancials => {
-  const cost   = lot.costPerKg   ?? 0
-  const margin = lot.targetMargin ?? globalDefaultMargin
+  const cost   = lot.costPerKg ?? 0
+  const margin = forceMargin !== undefined ? forceMargin : (lot.targetMargin ?? globalDefaultMargin)
   const coeff  = liveBalance.sponge.coefficient
 
   const trueRoastedCost    = cost > 0 ? calcTrueRoastedCost(cost, branchHumidity) : 0
@@ -819,6 +855,8 @@ export const calcPortfolioFinancials = (
   lots:        CoffeeLot[],
   balances:    AggregateBalance,
   branchList:  Branch[] = branches,
+  overrideDefaultMargin?: number,
+  forceMargin?: number,           // when set, overrides ALL per-lot targetMargins
 ): PortfolioFinancials => {
   const humidityByBranch = new Map<string, number>()
   for (const b of branchList) humidityByBranch.set(b.name, b.humidity)
@@ -835,7 +873,7 @@ export const calcPortfolioFinancials = (
     const lb      = balances.byLot.get(lot.id)
     if (!lb) continue
     const humidity = humidityByBranch.get(lot.branch) ?? 50
-    const fin      = calcLotFinancials(lot, lb, humidity)
+    const fin      = calcLotFinancials(lot, lb, humidity, overrideDefaultMargin ?? defaultTargetMargin, forceMargin)
     byLot.push(fin)
     if (lot.costPerKg && lot.costPerKg > 0) {
       totalInventoryValue   += fin.liveInventoryValue

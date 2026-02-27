@@ -22,12 +22,16 @@ import {
   calcPortfolioFinancials,
   defaultTargetMargin,
   setDefaultTargetMargin,
+  tierMargins,
+  setTierMargins,
+  marginForTier,
   type SpongeCoeffResult,
   type CoffeeLot,
   type Branch,
   type ClimateType,
   type RoastingInterest,
   type PortfolioFinancials,
+  type ClientTier,
 } from './data'
 
 const app = new Hono()
@@ -1942,8 +1946,8 @@ function cafeLayout(pageTitle: string, activeNav: string, content: string, clien
         '<div class="modal-row"><span class="modal-row-label">Origin</span><span class="modal-row-val">' + origin + '</span></div>' +
         '<div class="modal-row" style="margin-bottom:' + (_modalWholesalePrice ? '0' : '16px') + '"><span class="modal-row-label">Available</span><span class="modal-row-val" style="color:var(--amber)">' + available + ' kg</span></div>' +
         (_modalWholesalePrice
-          ? '<div class="modal-row" style="margin-bottom:16px"><span class="modal-row-label">Unit Price</span>' +
-            '<span class="modal-row-val" style="color:var(--amber)">' + _modalWholesalePrice.toFixed(2) + ' <span style="font-size:10px;color:var(--text-muted)">SAR/kg</span></span></div>'
+          ? '<div class="modal-row" style="margin-bottom:16px" data-modal-unit-price><span class="modal-row-label">Unit Price</span>' +
+            '<span class="modal-row-val" style="color:' + (typeof _tierColor !== \'undefined\' ? _tierColor : \'var(--amber)\') + '">' + _modalWholesalePrice.toFixed(2) + ' <span style="font-size:10px;color:var(--text-muted)">SAR/kg</span></span></div>'
           : '');
       document.getElementById('orderTotalRow').style.display = 'none';
       document.getElementById('orderTotalOverStock').style.display = 'none';
@@ -1973,9 +1977,10 @@ function cafeLayout(pageTitle: string, activeNav: string, content: string, clien
         valEl.style.color     = 'var(--red)';
       } else {
         overEl.style.display  = 'none';
-        row.style.borderColor = 'rgba(245,158,11,0.25)';
-        row.style.background  = 'rgba(245,158,11,0.07)';
-        valEl.style.color     = 'var(--amber)';
+        var _tc = (typeof _tierColor !== 'undefined') ? _tierColor : 'var(--amber)';
+        row.style.borderColor = _tc === '#a78bfa' ? 'rgba(167,139,250,0.30)' : _tc === '#94a3b8' ? 'rgba(148,163,184,0.30)' : 'rgba(245,158,11,0.25)';
+        row.style.background  = _tc === '#a78bfa' ? 'rgba(167,139,250,0.07)' : _tc === '#94a3b8' ? 'rgba(148,163,184,0.07)' : 'rgba(245,158,11,0.07)';
+        valEl.style.color     = _tc;
       }
     }
 
@@ -2063,8 +2068,8 @@ app.get('/admin', (c) => {
   // ── Live Balance: deduct all DISPATCHED orders from purchased totals ──
   const bal = calcLiveBalance(coffeeLots, beanRequests, branches)
 
-  // ── Financial Intelligence ──────────────────────────────────────
-  const portfolio = calcPortfolioFinancials(coffeeLots, bal, branches)
+  // ── Financial Intelligence — use Gold-tier margin forced across all lots ──
+  const portfolio = calcPortfolioFinancials(coffeeLots, bal, branches, undefined, tierMargins.Gold)
   const portValueFmt = portfolio.totalInventoryValue.toLocaleString('en-SA', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
   const portProfitFmt = portfolio.totalProjectedProfit.toLocaleString('en-SA', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
   const envPnlFmt = portfolio.totalEnvironmentalPnL.toLocaleString('en-SA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -2127,34 +2132,103 @@ app.get('/admin', (c) => {
         <i class="fa fa-arrow-right"></i> Finance Tab
       </a>
     </div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px">
-      <div style="background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:16px">
-        <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px" data-i18n="fin.portfolio.value">Total Portfolio Value</div>
-        <div style="font-family:var(--font-mono);font-size:22px;color:var(--amber);font-weight:700">${portValueFmt}</div>
-        <div style="font-size:10px;color:var(--text-muted);margin-top:2px;font-family:var(--font-mono)">SAR · live roasted stock</div>
+
+    <!-- Per-tier value + profit rows -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px;margin-bottom:16px">
+
+      <!-- Silver -->
+      <div style="background:var(--bg-2);border:1px solid rgba(148,163,184,0.30);border-radius:var(--radius);padding:14px">
+        <div style="font-size:9px;color:#94a3b8;text-transform:uppercase;letter-spacing:.8px;margin-bottom:4px;font-family:var(--font-mono)">★ Silver — Portfolio</div>
+        <div style="font-family:var(--font-mono);font-size:18px;color:#94a3b8;font-weight:700" id="ov-qfi-value-silver">${Math.round(calcPortfolioFinancials(coffeeLots, bal, branches, undefined, tierMargins.Silver).totalInventoryValue).toLocaleString('en-SA')}</div>
+        <div style="font-size:10px;color:var(--text-muted);margin-top:2px;font-family:var(--font-mono)">SAR &nbsp;·&nbsp; <span id="ov-qfi-profit-silver"></span></div>
       </div>
-      <div style="background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:16px">
-        <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px" data-i18n="fin.proj.profit">Projected Profit</div>
-        <div style="font-family:var(--font-mono);font-size:22px;font-weight:700;color:${parseInt(portProfitFmt.replace(/,/g,'')) >= 0 ? 'var(--green)' : 'var(--red)'}">
-          ${portfolio.totalProjectedProfit >= 0 ? '+' : ''}${portProfitFmt}
-        </div>
-        <div style="font-size:10px;color:var(--text-muted);margin-top:2px;font-family:var(--font-mono)">SAR · at wholesale price</div>
+
+      <!-- Gold (reference) -->
+      <div style="background:var(--bg-2);border:1px solid rgba(245,158,11,0.35);border-radius:var(--radius);padding:14px">
+        <div style="font-size:9px;color:var(--amber);text-transform:uppercase;letter-spacing:.8px;margin-bottom:4px;font-family:var(--font-mono)">★ Gold — Portfolio</div>
+        <div style="font-family:var(--font-mono);font-size:18px;color:var(--amber);font-weight:700" id="ov-qfi-value">${portValueFmt}</div>
+        <div style="font-size:10px;color:var(--text-muted);margin-top:2px;font-family:var(--font-mono)">SAR &nbsp;·&nbsp; <span id="ov-qfi-profit" style="color:${portfolio.totalProjectedProfit >= 0 ? 'var(--green)' : 'var(--red)'}">${portfolio.totalProjectedProfit >= 0 ? '+' : ''}${portProfitFmt} profit</span></div>
       </div>
-      <div style="background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:16px;border-color:rgba(245,158,11,0.25)">
-        <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px" data-i18n="fin.env.pnl">Environmental P&L</div>
-        <div style="font-family:var(--font-mono);font-size:22px;font-weight:700;color:${envPnlColor}">${envPnlSign}${envPnlFmt}</div>
-        <div style="font-size:10px;color:${spongeKgColor};margin-top:2px;font-family:var(--font-mono)">
-          SAR · ${spongeKgSign}${portfolio.totalSpongeKgDelta} kg sponge Δ
-        </div>
-        <div style="font-size:9px;color:var(--text-muted);margin-top:3px" data-i18n="fin.env.pnl.desc">SAR value of Sponge Adjustment</div>
+
+      <!-- Platinum -->
+      <div style="background:var(--bg-2);border:1px solid rgba(167,139,250,0.30);border-radius:var(--radius);padding:14px">
+        <div style="font-size:9px;color:#a78bfa;text-transform:uppercase;letter-spacing:.8px;margin-bottom:4px;font-family:var(--font-mono)">★ Platinum — Portfolio</div>
+        <div style="font-family:var(--font-mono);font-size:18px;color:#a78bfa;font-weight:700" id="ov-qfi-value-platinum">${Math.round(calcPortfolioFinancials(coffeeLots, bal, branches, undefined, tierMargins.Platinum).totalInventoryValue).toLocaleString('en-SA')}</div>
+        <div style="font-size:10px;color:var(--text-muted);margin-top:2px;font-family:var(--font-mono)">SAR &nbsp;·&nbsp; <span id="ov-qfi-profit-platinum"></span></div>
       </div>
-      <div style="background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:16px">
-        <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px" data-i18n="fin.lots.priced">Lots with Pricing</div>
-        <div style="font-family:var(--font-mono);font-size:22px;color:var(--text-pri);font-weight:700">${portfolio.lotsWithPricing}</div>
-        <div style="font-size:10px;color:var(--text-muted);margin-top:2px;font-family:var(--font-mono)">${coffeeLots.filter(l=>l.status!=='RECALLED').length} active lots total</div>
+
+      <!-- Env P&L -->
+      <div style="background:var(--bg-2);border:1px solid rgba(245,158,11,0.25);border-radius:var(--radius);padding:14px">
+        <div style="font-size:9px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:4px" data-i18n="fin.env.pnl">Environmental P&L</div>
+        <div style="font-family:var(--font-mono);font-size:18px;font-weight:700;color:${envPnlColor}" id="ov-qfi-env">${envPnlSign}${envPnlFmt}</div>
+        <div style="font-size:10px;color:${spongeKgColor};margin-top:2px;font-family:var(--font-mono)">SAR · ${spongeKgSign}${portfolio.totalSpongeKgDelta} kg sponge Δ</div>
       </div>
     </div>
   </div>
+  <script>
+  /* Refresh Overview Financial Impact card whenever tier margins change on Finance tab */
+  (function ovQfiRefresh(){
+    function applySnapshot(d){
+      /* Gold-tier (primary / backward-compat) */
+      var vEl  = document.getElementById('ov-qfi-value');
+      var pEl  = document.getElementById('ov-qfi-profit');
+      var eEl  = document.getElementById('ov-qfi-env');
+      var tv   = d.totals && d.totals.Gold ? d.totals.Gold.inventoryValue   : d.totalInventoryValue;
+      var tp   = d.totals && d.totals.Gold ? d.totals.Gold.projectedProfit  : d.totalProjectedProfit;
+      var te   = d.totals && d.totals.Gold ? d.totals.Gold.environmentalPnL : d.totalEnvironmentalPnL;
+      if(vEl) vEl.textContent = Math.round(tv).toLocaleString('en-SA');
+      if(pEl){
+        pEl.style.color = tp >= 0 ? 'var(--green)' : 'var(--red)';
+        pEl.textContent = (tp>=0?'+':'') + Math.round(tp).toLocaleString('en-SA') + ' profit';
+      }
+      if(eEl){
+        eEl.style.color = te>0?'var(--green)':te<0?'var(--red)':'var(--text-muted)';
+        eEl.textContent = (te>=0?'+':'') + te.toFixed(2);
+      }
+      /* Silver */
+      if(d.totals && d.totals.Silver){
+        var svEl = document.getElementById('ov-qfi-value-silver');
+        var spEl = document.getElementById('ov-qfi-profit-silver');
+        if(svEl) svEl.textContent = Math.round(d.totals.Silver.inventoryValue).toLocaleString('en-SA');
+        if(spEl){
+          var sp = d.totals.Silver.projectedProfit;
+          spEl.style.color = sp>=0?'var(--green)':'var(--red)';
+          spEl.textContent = (sp>=0?'+':'') + Math.round(sp).toLocaleString('en-SA') + ' profit';
+        }
+      }
+      /* Platinum */
+      if(d.totals && d.totals.Platinum){
+        var pvEl = document.getElementById('ov-qfi-value-platinum');
+        var ppEl = document.getElementById('ov-qfi-profit-platinum');
+        if(pvEl) pvEl.textContent = Math.round(d.totals.Platinum.inventoryValue).toLocaleString('en-SA');
+        if(ppEl){
+          var pp = d.totals.Platinum.projectedProfit;
+          ppEl.style.color = pp>=0?'var(--green)':'var(--red)';
+          ppEl.textContent = (pp>=0?'+':'') + Math.round(pp).toLocaleString('en-SA') + ' profit';
+        }
+      }
+    }
+    function poll(){
+      fetch('/api/finance/snapshot')
+        .then(function(r){ return r.json(); })
+        .then(applySnapshot).catch(function(){});
+    }
+    /* Listen for instant broadcast from Finance tab when tier margins are saved */
+    if (typeof BroadcastChannel !== 'undefined') {
+      var _ch = new BroadcastChannel('qabban_margin');
+      _ch.onmessage = function(ev) {
+        if (ev.data && (ev.data.type === 'margin_changed' || ev.data.type === 'tier_margins_changed')) {
+          /* Fetch snapshot with new tier margins right away */
+          fetch('/api/finance/snapshot')
+            .then(function(r){ return r.json(); })
+            .then(applySnapshot).catch(function(){});
+        }
+      };
+    }
+    /* Poll every 10s so if the Finance tab is open in another window, Overview stays in sync */
+    setInterval(poll, 10000);
+  })();
+  </script>
 
   <!-- Live balance breakdown banner -->
   <div style="background:var(--bg-2);border:1px solid var(--border);border-left:3px solid var(--amber);border-radius:var(--radius);padding:12px 16px;margin-bottom:16px;display:flex;flex-wrap:wrap;gap:24px;align-items:center">
@@ -5111,10 +5185,12 @@ app.get('/admin/inventory', (c) => {
 app.get('/admin/finance', (c) => {
   const pendingCount = beanRequests.filter(r => r.status === 'PENDING').length
   const bal          = calcLiveBalance(coffeeLots, beanRequests, branches)
-  const portfolio    = calcPortfolioFinancials(coffeeLots, bal, branches)
+  // Compute per-tier portfolios so the Finance summary cards start with the right values
+  const portSilver   = calcPortfolioFinancials(coffeeLots, bal, branches, undefined, tierMargins.Silver)
+  const portGold     = calcPortfolioFinancials(coffeeLots, bal, branches, undefined, tierMargins.Gold)
+  const portPlatinum = calcPortfolioFinancials(coffeeLots, bal, branches, undefined, tierMargins.Platinum)
+  const portfolio    = portGold  // Gold is the reference tier for env / sponge display
 
-  const portValueFmt  = portfolio.totalInventoryValue.toLocaleString('en-SA', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
-  const portProfitFmt = portfolio.totalProjectedProfit.toLocaleString('en-SA', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
   const envPnlFmt     = portfolio.totalEnvironmentalPnL.toLocaleString('en-SA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
   const envPnlSign    = portfolio.totalEnvironmentalPnL >= 0 ? '+' : ''
   const envPnlColor   = portfolio.totalEnvironmentalPnL > 0 ? 'var(--green)' : portfolio.totalEnvironmentalPnL < 0 ? 'var(--red)' : 'var(--text-muted)'
@@ -5127,57 +5203,112 @@ app.get('/admin/finance', (c) => {
 
   <!-- ── Portfolio Summary Cards ── -->
   <div class="stat-grid" style="margin-bottom:28px">
-    <div class="stat-card" style="border-color:rgba(245,158,11,0.35)">
-      <div class="stat-label" data-i18n="fin.portfolio.value">Total Portfolio Value</div>
-      <div class="stat-value" style="color:var(--amber)">${portValueFmt}</div>
-      <div class="stat-unit" data-i18n="fin.sar">SAR</div>
+
+    <!-- Silver tier totals -->
+    <div class="stat-card" style="border-color:rgba(148,163,184,0.35)">
+      <div class="stat-label" style="color:#94a3b8">★ Silver — Portfolio Value</div>
+      <div class="stat-value" style="color:#94a3b8" id="qfi-total-value-silver">${Math.round(portSilver.totalInventoryValue).toLocaleString('en-SA')}</div>
+      <div class="stat-unit">SAR &nbsp;·&nbsp; <span id="qfi-total-profit-silver" style="color:${portSilver.totalProjectedProfit >= 0 ? 'var(--green)' : 'var(--red)'}">${portSilver.totalProjectedProfit >= 0 ? '+' : ''}${Math.round(portSilver.totalProjectedProfit).toLocaleString('en-SA')} profit</span></div>
     </div>
-    <div class="stat-card">
-      <div class="stat-label" data-i18n="fin.proj.profit">Projected Profit</div>
-      <div class="stat-value" style="color:${portfolio.totalProjectedProfit >= 0 ? 'var(--green)' : 'var(--red)'}">
-        ${portfolio.totalProjectedProfit >= 0 ? '+' : ''}${portProfitFmt}
-      </div>
-      <div class="stat-unit" data-i18n="fin.sar">SAR</div>
+
+    <!-- Gold tier totals (reference) -->
+    <div class="stat-card" style="border-color:rgba(245,158,11,0.45)">
+      <div class="stat-label" style="color:var(--amber)">★ Gold — Portfolio Value</div>
+      <div class="stat-value" style="color:var(--amber)" id="qfi-total-value">${Math.round(portGold.totalInventoryValue).toLocaleString('en-SA')}</div>
+      <div class="stat-unit">SAR &nbsp;·&nbsp; <span id="qfi-total-profit" style="color:${portGold.totalProjectedProfit >= 0 ? 'var(--green)' : 'var(--red)'}">${portGold.totalProjectedProfit >= 0 ? '+' : ''}${Math.round(portGold.totalProjectedProfit).toLocaleString('en-SA')} profit</span></div>
     </div>
+
+    <!-- Platinum tier totals -->
+    <div class="stat-card" style="border-color:rgba(167,139,250,0.35)">
+      <div class="stat-label" style="color:#a78bfa">★ Platinum — Portfolio Value</div>
+      <div class="stat-value" style="color:#a78bfa" id="qfi-total-value-platinum">${Math.round(portPlatinum.totalInventoryValue).toLocaleString('en-SA')}</div>
+      <div class="stat-unit">SAR &nbsp;·&nbsp; <span id="qfi-total-profit-platinum" style="color:${portPlatinum.totalProjectedProfit >= 0 ? 'var(--green)' : 'var(--red)'}">${portPlatinum.totalProjectedProfit >= 0 ? '+' : ''}${Math.round(portPlatinum.totalProjectedProfit).toLocaleString('en-SA')} profit</span></div>
+    </div>
+
+    <!-- Environmental P&L + Lots -->
     <div class="stat-card" style="border-color:rgba(245,158,11,0.25)">
       <div class="stat-label" data-i18n="fin.env.pnl">Environmental P&L</div>
-      <div class="stat-value" style="color:${envPnlColor}">${envPnlSign}${envPnlFmt}</div>
-      <div class="stat-unit" style="color:${spongeKgColor}">${spongeKgSign}${portfolio.totalSpongeKgDelta} kg sponge Δ</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-label" data-i18n="fin.lots.priced">Lots with Pricing</div>
-      <div class="stat-value">${portfolio.lotsWithPricing}</div>
-      <div class="stat-unit">${coffeeLots.filter(l=>l.status!=='RECALLED').length} total active lots</div>
+      <div class="stat-value" style="color:${envPnlColor}" id="qfi-env-pnl">${envPnlSign}${envPnlFmt}</div>
+      <div class="stat-unit" style="color:${spongeKgColor}">${spongeKgSign}${portfolio.totalSpongeKgDelta} kg sponge Δ &nbsp;·&nbsp; ${portfolio.lotsWithPricing} lots priced</div>
     </div>
   </div>
 
-  <!-- ── Default Margin Setting ── -->
+  <!-- ── Tier Margin Settings ── -->
   <div class="card" style="margin-bottom:28px">
-    <div class="card-title">
-      <i class="fa fa-sliders" style="color:var(--amber)"></i>
-      <span data-i18n="fin.default.margin">Default Target Margin</span>
+    <div class="card-title" style="margin-bottom:4px">
+      <i class="fa fa-layer-group" style="color:var(--amber)"></i>
+      <span>Client Tier Pricing</span>
+      <span style="font-family:var(--font-mono);font-size:9px;padding:2px 7px;border-radius:2px;background:rgba(245,158,11,0.10);color:var(--amber);border:1px solid rgba(245,158,11,0.25);margin-left:8px">⬡ QFI ENGINE</span>
     </div>
-    <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
-      <div style="flex:1;min-width:220px">
-        <div style="font-size:12px;color:var(--text-muted);margin-bottom:6px">
-          Applied to lots that have no individual margin set. Current value:
-          <span style="color:var(--amber);font-family:var(--font-mono);font-weight:700" id="curMarginDisplay">${defaultTargetMargin}%</span>
+    <div style="font-size:11px;color:var(--text-muted);margin-bottom:18px;font-family:var(--font-mono)">
+      Wholesale Price = (Green Cost ÷ 0.82) ÷ (1 − Tier Margin %) &nbsp;·&nbsp;
+      <span style="color:rgba(245,158,11,0.8)">Type any value to simulate · click SET ALL to save &amp; broadcast to cafe portals</span>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px;margin-bottom:16px">
+
+      <!-- Silver -->
+      <div style="background:var(--bg-2);border:1px solid rgba(148,163,184,0.35);border-radius:var(--radius);padding:16px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+          <span style="font-family:var(--font-mono);font-size:11px;color:#94a3b8;font-weight:700;padding:2px 8px;border:1px solid rgba(148,163,184,0.4);border-radius:2px">★ SILVER</span>
+          <span style="font-size:10px;color:var(--text-muted)">entry tier</span>
         </div>
-        <div style="font-size:10px;color:var(--text-muted);font-family:var(--font-mono)">
-          Wholesale Price = (Green Cost ÷ 0.82) ÷ (1 − Margin %)
+        <div style="display:flex;align-items:center;gap:8px">
+          <input id="marginSilver" type="number" min="1" max="99" step="0.1"
+            value="${tierMargins.Silver}"
+            style="width:72px;background:var(--bg-1);border:1px solid rgba(148,163,184,0.4);border-radius:var(--radius);padding:7px 8px;color:var(--text-pri);font-family:var(--font-mono);font-size:15px;font-weight:700;text-align:center"/>
+          <span style="font-family:var(--font-mono);color:#94a3b8;font-size:13px">%</span>
+          <span style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted);margin-left:auto" id="cur-silver">${tierMargins.Silver}% saved</span>
+        </div>
+        <div style="font-size:10px;color:var(--text-muted);margin-top:8px;font-family:var(--font-mono)" id="sim-silver-wp">
+          — preview prices below —
         </div>
       </div>
-      <div style="display:flex;gap:8px;align-items:center">
-        <input id="defaultMarginInput" type="number" min="1" max="99" step="0.1"
-          value="${defaultTargetMargin}"
-          style="width:80px;background:var(--bg-2);border:1px solid rgba(245,158,11,0.4);border-radius:var(--radius);padding:8px 10px;color:var(--text-pri);font-family:var(--font-mono);font-size:14px;text-align:center"/>
-        <span style="font-family:var(--font-mono);color:var(--amber)">%</span>
-        <button onclick="saveDefaultMargin()" style="padding:8px 18px;background:rgba(245,158,11,0.15);border:1px solid rgba(245,158,11,0.4);border-radius:var(--radius);font-family:var(--font-mono);font-size:12px;font-weight:700;color:var(--amber);cursor:pointer;letter-spacing:.5px" data-i18n="fin.set.margin">
-          SET
-        </button>
+
+      <!-- Gold -->
+      <div style="background:var(--bg-2);border:1px solid rgba(245,158,11,0.35);border-radius:var(--radius);padding:16px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+          <span style="font-family:var(--font-mono);font-size:11px;color:var(--amber);font-weight:700;padding:2px 8px;border:1px solid rgba(245,158,11,0.4);border-radius:2px">★ GOLD</span>
+          <span style="font-size:10px;color:var(--text-muted)">standard tier</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <input id="marginGold" type="number" min="1" max="99" step="0.1"
+            value="${tierMargins.Gold}"
+            style="width:72px;background:var(--bg-1);border:1px solid rgba(245,158,11,0.4);border-radius:var(--radius);padding:7px 8px;color:var(--text-pri);font-family:var(--font-mono);font-size:15px;font-weight:700;text-align:center"/>
+          <span style="font-family:var(--font-mono);color:var(--amber);font-size:13px">%</span>
+          <span style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted);margin-left:auto" id="cur-gold">${tierMargins.Gold}% saved</span>
+        </div>
+        <div style="font-size:10px;color:var(--text-muted);margin-top:8px;font-family:var(--font-mono)" id="sim-gold-wp">
+          — preview prices below —
+        </div>
       </div>
-      <div id="marginSavedMsg" style="font-family:var(--font-mono);font-size:11px;color:var(--green);display:none">
-        <i class="fa fa-circle-check"></i> <span data-i18n="fin.margin.saved">Default margin updated</span>
+
+      <!-- Platinum -->
+      <div style="background:var(--bg-2);border:1px solid rgba(167,139,250,0.35);border-radius:var(--radius);padding:16px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+          <span style="font-family:var(--font-mono);font-size:11px;color:#a78bfa;font-weight:700;padding:2px 8px;border:1px solid rgba(167,139,250,0.4);border-radius:2px">★ PLATINUM</span>
+          <span style="font-size:10px;color:var(--text-muted)">VIP tier</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <input id="marginPlatinum" type="number" min="1" max="99" step="0.1"
+            value="${tierMargins.Platinum}"
+            style="width:72px;background:var(--bg-1);border:1px solid rgba(167,139,250,0.4);border-radius:var(--radius);padding:7px 8px;color:var(--text-pri);font-family:var(--font-mono);font-size:15px;font-weight:700;text-align:center"/>
+          <span style="font-family:var(--font-mono);color:#a78bfa;font-size:13px">%</span>
+          <span style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted);margin-left:auto" id="cur-platinum">${tierMargins.Platinum}% saved</span>
+        </div>
+        <div style="font-size:10px;color:var(--text-muted);margin-top:8px;font-family:var(--font-mono)" id="sim-platinum-wp">
+          — preview prices below —
+        </div>
+      </div>
+
+    </div>
+
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <button onclick="saveTierMargins()" style="padding:9px 22px;background:rgba(245,158,11,0.15);border:1px solid rgba(245,158,11,0.4);border-radius:var(--radius);font-family:var(--font-mono);font-size:12px;font-weight:700;color:var(--amber);cursor:pointer;letter-spacing:.5px">
+        <i class="fa fa-satellite-dish"></i> &nbsp;SET ALL &amp; BROADCAST
+      </button>
+      <div id="tierSavedMsg" style="font-family:var(--font-mono);font-size:11px;color:var(--green);display:none">
+        <i class="fa fa-circle-check"></i> Tier margins saved &amp; broadcast to all cafe portals
       </div>
     </div>
   </div>
@@ -5189,6 +5320,17 @@ app.get('/admin/finance', (c) => {
       <span data-i18n="fin.table.title">Lot-Level Financial Breakdown</span>
       <span style="font-family:var(--font-mono);font-size:9px;padding:2px 7px;border-radius:2px;background:rgba(245,158,11,0.10);color:var(--amber);border:1px solid rgba(245,158,11,0.25);margin-left:6px">⬡ QFI ENGINE</span>
     </div>
+    <div style="font-size:10px;color:var(--text-muted);font-family:var(--font-mono);margin-bottom:12px">
+      Wholesale prices shown below are at <strong style="color:var(--amber)">Gold tier margin (${tierMargins.Gold}%)</strong> as reference.
+      Silver and Platinum prices are computed per tier.
+    </div>
+
+    <!-- PREVIEW MODE banner — shown when any margin input is being changed -->
+    <div id="qfi-preview-banner" style="display:none;align-items:center;gap:10px;padding:8px 14px;margin-bottom:14px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.35);border-radius:var(--radius);font-family:var(--font-mono);font-size:11px;color:var(--amber)">
+      <i class="fa fa-eye"></i>
+      <span>PORTFOLIO SIMULATION — values shown at typed tier margins. Click SET ALL to save.</span>
+      <button onclick="resetTierPreview()" style="margin-left:auto;padding:3px 10px;font-family:var(--font-mono);font-size:10px;background:transparent;border:1px solid rgba(245,158,11,0.4);color:var(--amber);border-radius:2px;cursor:pointer">RESET</button>
+    </div>
     <div class="table-wrap">
       <table>
         <thead>
@@ -5196,54 +5338,67 @@ app.get('/admin/finance', (c) => {
             <th>Lot ID</th>
             <th>Origin</th>
             <th>Branch</th>
-            <th data-i18n="fin.true.cost">True Roasted Cost</th>
-            <th data-i18n="fin.wholesale">Wholesale Price</th>
+            <th>True Roasted Cost</th>
+            <th style="color:#94a3b8">★ Silver Price</th>
+            <th style="color:var(--amber)">★ Gold Price</th>
+            <th style="color:#a78bfa">★ Platinum Price</th>
             <th>Live Stock</th>
-            <th data-i18n="fin.live.value">Live Inventory Value</th>
-            <th data-i18n="fin.proj.profit.col">Projected Profit</th>
-            <th data-i18n="fin.env.col">Env. P&L</th>
-            <th data-i18n="fin.coeff.col">Yield Coeff.</th>
+            <th>Live Inv. Value <span style="font-size:9px;font-weight:400;color:var(--text-muted)">(Gold)</span></th>
+            <th>Projected Profit <span style="font-size:9px;font-weight:400;color:var(--text-muted)">(Gold)</span></th>
+            <th>Env. P&L</th>
+            <th>Yield Coeff.</th>
           </tr>
         </thead>
         <tbody>
           ${portfolio.byLot.map(fin => {
-            const hasCost    = fin.costPerKg > 0
+            const hasCost     = fin.costPerKg > 0
             const profitColor = fin.projectedProfit >= 0 ? 'var(--green)' : 'var(--red)'
             const envColor    = fin.environmentalPnL > 0 ? 'var(--green)' : fin.environmentalPnL < 0 ? 'var(--red)' : 'var(--text-muted)'
             const coeffColor  = fin.yieldCoeff > SPONGE_BASELINE_COEFFICIENT ? '#38bdf8' :
                                 fin.yieldCoeff < SPONGE_BASELINE_COEFFICIENT ? '#fb923c' : 'var(--text-sec)'
             const coeffIcon   = fin.yieldCoeff > SPONGE_BASELINE_COEFFICIENT ? '▲' :
                                 fin.yieldCoeff < SPONGE_BASELINE_COEFFICIENT ? '▼' : '—'
-            const lot         = coffeeLots.find(l => l.id === fin.lotId)
+            // Server-rendered prices per tier (use lot's own costPerKg with each tier margin)
+            const wpSilver   = hasCost ? calcWholesalePrice(fin.costPerKg, tierMargins.Silver)   : null
+            const wpGold     = hasCost ? calcWholesalePrice(fin.costPerKg, tierMargins.Gold)     : null
+            const wpPlatinum = hasCost ? calcWholesalePrice(fin.costPerKg, tierMargins.Platinum) : null
             return `
-          <tr>
+          <tr data-lot-id="${fin.lotId}">
             <td class="mono" style="color:var(--amber)">${fin.lotId}</td>
             <td style="font-weight:500">${fin.origin}</td>
             <td style="font-size:12px;color:var(--text-sec)">${fin.branch}</td>
-            <td class="mono">${hasCost
+            <td class="mono" id="qfi-true-${fin.lotId}">${hasCost
               ? `<span style="color:var(--text-pri)">${fin.trueRoastedCost.toFixed(2)}</span> <span style="font-size:10px;color:var(--text-muted)">SAR/kg</span>`
-              : `<span style="color:var(--text-muted);font-size:11px" data-i18n="fin.no.cost">No cost data</span>`
+              : `<span style="color:var(--text-muted);font-size:11px">No cost data</span>`
             }</td>
-            <td class="mono">${hasCost
-              ? `<span style="color:var(--amber);font-weight:700">${fin.wholesalePrice.toFixed(2)}</span> <span style="font-size:10px;color:var(--text-muted)">SAR/kg</span>`
+            <td class="mono" id="qfi-wp-silver-${fin.lotId}">${wpSilver !== null
+              ? `<span style="color:#94a3b8;font-weight:700">${wpSilver.toFixed(2)}</span> <span style="font-size:10px;color:var(--text-muted)">SAR/kg</span>`
+              : `<span style="color:var(--text-muted)">—</span>`
+            }</td>
+            <td class="mono" id="qfi-wp-gold-${fin.lotId}">${wpGold !== null
+              ? `<span style="color:var(--amber);font-weight:700">${wpGold.toFixed(2)}</span> <span style="font-size:10px;color:var(--text-muted)">SAR/kg</span>`
+              : `<span style="color:var(--text-muted)">—</span>`
+            }</td>
+            <td class="mono" id="qfi-wp-platinum-${fin.lotId}">${wpPlatinum !== null
+              ? `<span style="color:#a78bfa;font-weight:700">${wpPlatinum.toFixed(2)}</span> <span style="font-size:10px;color:var(--text-muted)">SAR/kg</span>`
               : `<span style="color:var(--text-muted)">—</span>`
             }</td>
             <td class="mono" style="color:var(--text-sec)">${fin.liveRoastedKg} kg</td>
-            <td class="mono">${hasCost
+            <td class="mono" id="qfi-iv-${fin.lotId}">${hasCost
               ? `<span style="color:var(--amber)">${fin.liveInventoryValue.toLocaleString('en-SA', {minimumFractionDigits:0,maximumFractionDigits:0})}</span> <span style="font-size:10px;color:var(--text-muted)">SAR</span>`
               : `<span style="color:var(--text-muted)">—</span>`
             }</td>
-            <td class="mono" style="color:${profitColor}">${hasCost
+            <td class="mono" id="qfi-pp-${fin.lotId}" style="color:${profitColor}">${hasCost
               ? `${fin.projectedProfit >= 0 ? '+' : ''}${fin.projectedProfit.toLocaleString('en-SA', {minimumFractionDigits:0,maximumFractionDigits:0})} SAR`
               : `<span style="color:var(--text-muted)">—</span>`
             }</td>
-            <td class="mono" style="color:${envColor}">${hasCost
+            <td class="mono" id="qfi-ep-${fin.lotId}" style="color:${envColor}">${hasCost
               ? `${fin.environmentalPnL >= 0 ? '+' : ''}${fin.environmentalPnL.toFixed(2)} SAR`
               : `<span style="color:var(--text-muted)">—</span>`
             }</td>
             <td>
               <span style="font-family:var(--font-mono);font-size:12px;font-weight:700;color:${coeffColor}">${coeffIcon} ${(fin.yieldCoeff * 100).toFixed(1)}%</span>
-              <div style="font-size:9px;color:var(--text-muted);margin-top:2px">margin: ${fin.targetMargin}%</div>
+              <div style="font-size:9px;color:var(--text-muted);margin-top:2px" id="qfi-margin-${fin.lotId}">cost: ${fin.costPerKg > 0 ? fin.costPerKg + ' SAR/kg' : '—'}</div>
             </td>
           </tr>`
           }).join('')}
@@ -5253,22 +5408,200 @@ app.get('/admin/finance', (c) => {
   </div>
 
   <script>
-  function saveDefaultMargin() {
-    var val = parseFloat(document.getElementById('defaultMarginInput').value);
-    if (isNaN(val) || val < 1 || val > 99) {
-      alert('Please enter a margin between 1 and 99.');
-      return;
+  /* ── QFI REACTIVE ENGINE (TIER-BASED) ───────────────────────────────────────
+     Recalculates wholesale prices per tier in real-time as the admin types.
+     Formula: Wholesale Price = (costPerKg / 0.82) / (1 - tierMargin/100)
+  ─────────────────────────────────────────────────────────────────────────── */
+
+  var BASELINE = ${SPONGE_BASELINE_COEFFICIENT};
+
+  /* Per-lot raw data — costPerKg is the only immutable input for WP calc */
+  var LOT_DATA = ${JSON.stringify(portfolio.byLot.map(fin => ({
+    id:              fin.lotId,
+    costPerKg:       fin.costPerKg,
+    liveRoasted:     fin.liveRoastedKg,
+    spongeKgDelta:   fin.spongeKgDelta,
+    trueRoastedCost: fin.trueRoastedCost,
+  })))};
+
+  /* Current saved tier margins — kept in sync with server */
+  var _tierMargins = { Silver: ${tierMargins.Silver}, Gold: ${tierMargins.Gold}, Platinum: ${tierMargins.Platinum} };
+
+  /* Helper: compute WP for a cost + margin */
+  function _wp(cost, marginPct) {
+    var m = Math.max(0.01, Math.min(0.99, marginPct / 100));
+    return Math.round((cost / BASELINE) / (1 - m) * 100) / 100;
+  }
+
+  /* ── Core recalculation — updates all 3 tier columns + summary cards ── */
+  function qfiCalc(silverM, goldM, platinumM, isPreview) {
+    var totValueSilver   = 0; var totProfitSilver   = 0;
+    var totValueGold     = 0; var totProfitGold     = 0;
+    var totValuePlatinum = 0; var totProfitPlatinum = 0;
+    var totEnvPnL        = 0;
+
+    LOT_DATA.forEach(function(lot) {
+      if (!lot.costPerKg || lot.costPerKg <= 0) return;
+
+      var wpS = _wp(lot.costPerKg, silverM);
+      var wpG = _wp(lot.costPerKg, goldM);
+      var wpP = _wp(lot.costPerKg, platinumM);
+
+      var ivS = wpS * lot.liveRoasted;  var ppS = (wpS - lot.trueRoastedCost) * lot.liveRoasted;
+      var ivG = wpG * lot.liveRoasted;  var ppG = (wpG - lot.trueRoastedCost) * lot.liveRoasted;
+      var ivP = wpP * lot.liveRoasted;  var ppP = (wpP - lot.trueRoastedCost) * lot.liveRoasted;
+      var ep  = lot.spongeKgDelta * wpG;
+
+      totValueSilver   += ivS;  totProfitSilver   += ppS;
+      totValueGold     += ivG;  totProfitGold     += ppG;
+      totValuePlatinum += ivP;  totProfitPlatinum += ppP;
+      totEnvPnL        += ep;
+
+      /* Silver column */
+      var wsEl = document.getElementById('qfi-wp-silver-' + lot.id);
+      if (wsEl) wsEl.innerHTML =
+        '<span style="color:#94a3b8;font-weight:700">' + wpS.toFixed(2) + '</span>' +
+        ' <span style="font-size:10px;color:var(--text-muted)">SAR/kg</span>';
+
+      /* Gold column */
+      var wgEl = document.getElementById('qfi-wp-gold-' + lot.id);
+      if (wgEl) wgEl.innerHTML =
+        '<span style="color:var(--amber);font-weight:700">' + wpG.toFixed(2) + '</span>' +
+        ' <span style="font-size:10px;color:var(--text-muted)">SAR/kg</span>';
+
+      /* Platinum column */
+      var wpEl = document.getElementById('qfi-wp-platinum-' + lot.id);
+      if (wpEl) wpEl.innerHTML =
+        '<span style="color:#a78bfa;font-weight:700">' + wpP.toFixed(2) + '</span>' +
+        ' <span style="font-size:10px;color:var(--text-muted)">SAR/kg</span>';
+
+      /* Inventory Value (Gold) */
+      var ivEl = document.getElementById('qfi-iv-' + lot.id);
+      if (ivEl) ivEl.innerHTML =
+        '<span style="color:var(--amber)">' + Math.round(ivG).toLocaleString('en-SA') + '</span>' +
+        ' <span style="font-size:10px;color:var(--text-muted)">SAR</span>';
+
+      /* Projected Profit (Gold) */
+      var ppEl = document.getElementById('qfi-pp-' + lot.id);
+      if (ppEl) {
+        ppEl.style.color = ppG >= 0 ? 'var(--green)' : 'var(--red)';
+        ppEl.textContent = (ppG >= 0 ? '+' : '') + Math.round(ppG).toLocaleString('en-SA') + ' SAR';
+      }
+
+      /* Environmental P&L */
+      var epEl = document.getElementById('qfi-ep-' + lot.id);
+      if (epEl) {
+        epEl.style.color = ep > 0 ? 'var(--green)' : ep < 0 ? 'var(--red)' : 'var(--text-muted)';
+        epEl.textContent = (ep >= 0 ? '+' : '') + ep.toFixed(2) + ' SAR';
+      }
+    });
+
+    /* Summary cards — per tier */
+    /* Silver */
+    var tvSEl = document.getElementById('qfi-total-value-silver');
+    var tpSEl = document.getElementById('qfi-total-profit-silver');
+    if (tvSEl) tvSEl.textContent = Math.round(totValueSilver).toLocaleString('en-SA');
+    if (tpSEl) {
+      tpSEl.style.color = totProfitSilver >= 0 ? 'var(--green)' : 'var(--red)';
+      tpSEl.textContent = (totProfitSilver >= 0 ? '+' : '') + Math.round(totProfitSilver).toLocaleString('en-SA') + ' profit';
     }
-    fetch('/api/finance/set-margin', {
+    /* Gold */
+    var tvEl = document.getElementById('qfi-total-value');
+    var tpEl = document.getElementById('qfi-total-profit');
+    if (tvEl) tvEl.textContent = Math.round(totValueGold).toLocaleString('en-SA');
+    if (tpEl) {
+      tpEl.style.color = totProfitGold >= 0 ? 'var(--green)' : 'var(--red)';
+      tpEl.textContent = (totProfitGold >= 0 ? '+' : '') + Math.round(totProfitGold).toLocaleString('en-SA') + ' profit';
+    }
+    /* Platinum */
+    var tvPEl = document.getElementById('qfi-total-value-platinum');
+    var tpPEl = document.getElementById('qfi-total-profit-platinum');
+    if (tvPEl) tvPEl.textContent = Math.round(totValuePlatinum).toLocaleString('en-SA');
+    if (tpPEl) {
+      tpPEl.style.color = totProfitPlatinum >= 0 ? 'var(--green)' : 'var(--red)';
+      tpPEl.textContent = (totProfitPlatinum >= 0 ? '+' : '') + Math.round(totProfitPlatinum).toLocaleString('en-SA') + ' profit';
+    }
+    /* Environmental P&L (always Gold-tier reference) */
+    var enEl = document.getElementById('qfi-env-pnl');
+    if (enEl) {
+      enEl.style.color = totEnvPnL > 0 ? 'var(--green)' : totEnvPnL < 0 ? 'var(--red)' : 'var(--text-muted)';
+      enEl.textContent = (totEnvPnL >= 0 ? '+' : '') + totEnvPnL.toFixed(2);
+    }
+
+    /* Update tier card preview hints */
+    var sEl = document.getElementById('sim-silver-wp');
+    var gEl = document.getElementById('sim-gold-wp');
+    var pEl = document.getElementById('sim-platinum-wp');
+    if (sEl && LOT_DATA.length) {
+      var sample = LOT_DATA.find(function(l){ return l.costPerKg > 0; });
+      if (sample) {
+        sEl.textContent = 'e.g. ' + _wp(sample.costPerKg, silverM).toFixed(2) + ' SAR/kg (' + sample.id + ')';
+        gEl.textContent = 'e.g. ' + _wp(sample.costPerKg, goldM).toFixed(2)   + ' SAR/kg (' + sample.id + ')';
+        pEl.textContent = 'e.g. ' + _wp(sample.costPerKg, platinumM).toFixed(2) + ' SAR/kg (' + sample.id + ')';
+      }
+    }
+
+    /* Preview banner */
+    var banner = document.getElementById('qfi-preview-banner');
+    if (banner) banner.style.display = isPreview ? 'flex' : 'none';
+  }
+
+  /* ── Wire up live-preview on each tier input ── */
+  function _getInputMargin(id, fallback) {
+    var v = parseFloat(document.getElementById(id).value);
+    return (!isNaN(v) && v >= 1 && v <= 99) ? v : fallback;
+  }
+  function _onTierInput() {
+    qfiCalc(
+      _getInputMargin('marginSilver',   _tierMargins.Silver),
+      _getInputMargin('marginGold',     _tierMargins.Gold),
+      _getInputMargin('marginPlatinum', _tierMargins.Platinum),
+      true
+    );
+  }
+  document.getElementById('marginSilver').addEventListener('input',   _onTierInput);
+  document.getElementById('marginGold').addEventListener('input',     _onTierInput);
+  document.getElementById('marginPlatinum').addEventListener('input', _onTierInput);
+
+  /* ── Reset preview to saved values ── */
+  function resetTierPreview() {
+    document.getElementById('marginSilver').value   = _tierMargins.Silver;
+    document.getElementById('marginGold').value     = _tierMargins.Gold;
+    document.getElementById('marginPlatinum').value = _tierMargins.Platinum;
+    qfiCalc(_tierMargins.Silver, _tierMargins.Gold, _tierMargins.Platinum, false);
+  }
+
+  /* ── BroadcastChannel ── */
+  var _qfiChannel = (typeof BroadcastChannel !== 'undefined') ? new BroadcastChannel('qabban_margin') : null;
+
+  /* ── SET ALL: persist tier margins to server + broadcast ── */
+  function saveTierMargins() {
+    var s = _getInputMargin('marginSilver',   _tierMargins.Silver);
+    var g = _getInputMargin('marginGold',     _tierMargins.Gold);
+    var p = _getInputMargin('marginPlatinum', _tierMargins.Platinum);
+
+    fetch('/api/finance/set-tier-margins', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ margin: val })
+      body: JSON.stringify({ Silver: s, Gold: g, Platinum: p })
     })
     .then(function(r) { return r.json(); })
     .then(function(d) {
       if (d.ok) {
-        document.getElementById('curMarginDisplay').textContent = d.margin + '%';
-        var msg = document.getElementById('marginSavedMsg');
+        _tierMargins = d.tierMargins;
+        document.getElementById('cur-silver').textContent   = d.tierMargins.Silver   + '% saved';
+        document.getElementById('cur-gold').textContent     = d.tierMargins.Gold     + '% saved';
+        document.getElementById('cur-platinum').textContent = d.tierMargins.Platinum + '% saved';
+
+        /* Re-run with confirmed server values */
+        qfiCalc(d.tierMargins.Silver, d.tierMargins.Gold, d.tierMargins.Platinum, false);
+
+        /* Broadcast to all open tabs (Overview + Cafe portals) */
+        if (_qfiChannel) {
+          _qfiChannel.postMessage({ type: 'tier_margins_changed', tierMargins: d.tierMargins });
+        }
+
+        var msg = document.getElementById('tierSavedMsg');
         msg.style.display = 'inline-flex';
         setTimeout(function(){ msg.style.display = 'none'; }, 3000);
       }
@@ -5279,7 +5612,23 @@ app.get('/admin/finance', (c) => {
   return c.html(adminLayout('Financial Intelligence', 'finance', content, pendingCount))
 })
 
-// ── POST /api/finance/set-margin ────────────────────────────────
+// ── POST /api/finance/set-tier-margins ──────────────────────────
+app.post('/api/finance/set-tier-margins', async (c) => {
+  try {
+    const body = await c.req.json()
+    const updates: Record<string, number> = {}
+    for (const tier of ['Silver', 'Gold', 'Platinum'] as const) {
+      const val = parseFloat(body[tier])
+      if (!isNaN(val) && val >= 1 && val <= 99) updates[tier] = val
+    }
+    setTierMargins(updates)
+    return c.json({ ok: true, tierMargins })
+  } catch {
+    return c.json({ error: 'Invalid request' }, 400)
+  }
+})
+
+// ── POST /api/finance/set-margin (legacy — kept for compatibility) ───────────
 app.post('/api/finance/set-margin', async (c) => {
   try {
     const { margin } = await c.req.json()
@@ -5290,6 +5639,57 @@ app.post('/api/finance/set-margin', async (c) => {
   } catch {
     return c.json({ error: 'Invalid request' }, 400)
   }
+})
+
+// ── GET /api/finance/snapshot ───────────────────────────────────
+// Returns current portfolio financials + per-lot wholesale prices per tier.
+// Portfolio totals are computed three times — once per tier — so that the
+// Admin Overview and Finance page always reflect the correct tier-adjusted values.
+// Called by the Overview page, Finance tab, and Cafe portal.
+app.get('/api/finance/snapshot', (c) => {
+  const bal = calcLiveBalance(coffeeLots, beanRequests, branches)
+
+  // Compute portfolio totals using each tier's margin forced across ALL lots.
+  // This ensures lots that have their own targetMargin still reflect tier pricing.
+  const portSilver   = calcPortfolioFinancials(coffeeLots, bal, branches, undefined, tierMargins.Silver)
+  const portGold     = calcPortfolioFinancials(coffeeLots, bal, branches, undefined, tierMargins.Gold)
+  const portPlatinum = calcPortfolioFinancials(coffeeLots, bal, branches, undefined, tierMargins.Platinum)
+
+  // Gold is the reference / default for Overview totals
+  return c.json({
+    tierMargins,
+    defaultMargin:         defaultTargetMargin,
+
+    // Gold-tier portfolio totals (reference values shown on Overview & Finance summary cards)
+    totalInventoryValue:   portGold.totalInventoryValue,
+    totalProjectedProfit:  portGold.totalProjectedProfit,
+    totalEnvironmentalPnL: portGold.totalEnvironmentalPnL,
+    totalSpongeKgDelta:    portGold.totalSpongeKgDelta,
+    lotsWithPricing:       portGold.lotsWithPricing,
+
+    // Per-tier portfolio totals (used by Finance page tier summary cards)
+    totals: {
+      Silver:   { inventoryValue: portSilver.totalInventoryValue,   projectedProfit: portSilver.totalProjectedProfit,   environmentalPnL: portSilver.totalEnvironmentalPnL },
+      Gold:     { inventoryValue: portGold.totalInventoryValue,     projectedProfit: portGold.totalProjectedProfit,     environmentalPnL: portGold.totalEnvironmentalPnL },
+      Platinum: { inventoryValue: portPlatinum.totalInventoryValue, projectedProfit: portPlatinum.totalProjectedProfit, environmentalPnL: portPlatinum.totalEnvironmentalPnL },
+    },
+
+    // Per-lot data: costPerKg for client-side recalc + per-tier wholesale prices
+    byLot: portGold.byLot.map(fin => ({
+      lotId:             fin.lotId,
+      costPerKg:         fin.costPerKg,
+      trueRoastedCost:   fin.trueRoastedCost,
+      liveRoastedKg:     fin.liveRoastedKg,
+      // Gold-tier lot financials (for backward compat)
+      liveInventoryValue:fin.liveInventoryValue,
+      projectedProfit:   fin.projectedProfit,
+      environmentalPnL:  fin.environmentalPnL,
+      // Per-tier wholesale prices for this lot
+      wpSilver:   fin.costPerKg > 0 ? calcWholesalePrice(fin.costPerKg, tierMargins.Silver)   : null,
+      wpGold:     fin.costPerKg > 0 ? calcWholesalePrice(fin.costPerKg, tierMargins.Gold)     : null,
+      wpPlatinum: fin.costPerKg > 0 ? calcWholesalePrice(fin.costPerKg, tierMargins.Platinum) : null,
+    })),
+  })
 })
 
 // ── GET /admin/requests ─────────────────────────────────────────
@@ -5544,14 +5944,14 @@ app.get('/cafe', (c) => {
     if (lots.length > 0) bestLotMap.set(cat.key, lots[0])
   }
 
-  // ── Wholesale price per origin — fixed to BASELINE 0.82 so price never fluctuates
-  // Uses the best (highest-grade) lot's costPerKg and targetMargin for the batch price.
+  // ── Wholesale price per origin — tier-specific, fixed to BASELINE 0.82
+  // Uses the best (highest-grade) lot's costPerKg with this client's tier margin.
+  const clientTierMargin = marginForTier(client.tier as ClientTier)
   const wholesalePriceMap = new Map<string, number | null>()
   for (const cat of CATALOG_ORIGINS) {
     const best = bestLotMap.get(cat.key)
     if (best && best.costPerKg && best.costPerKg > 0) {
-      const margin = best.targetMargin ?? defaultTargetMargin
-      wholesalePriceMap.set(cat.key, calcWholesalePrice(best.costPerKg, margin))
+      wholesalePriceMap.set(cat.key, calcWholesalePrice(best.costPerKg, clientTierMargin))
     } else {
       wholesalePriceMap.set(cat.key, null)
     }
@@ -5648,16 +6048,29 @@ app.get('/cafe', (c) => {
           <div class="lot-metric-value" style="font-size:12px">${bestLot.expiryDate}</div>
         </div>
       </div>
-      <!-- ⬡ Wholesale Price badge — fixed to baseline 0.82, never fluctuates -->
+      <!-- ⬡ Wholesale Price badge — tier-specific, fixed to baseline 0.82 -->
       ${wprice !== null ? `
-      <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.25);border-radius:var(--radius);margin-bottom:12px">
-        <span style="font-family:var(--font-mono);font-size:9px;color:var(--amber);letter-spacing:.4px;font-weight:700">⬡ WHOLESALE</span>
-        <span style="flex:1;font-family:var(--font-mono);font-size:16px;font-weight:700;color:var(--amber)">${wprice.toFixed(2)} <span style="font-size:11px;font-weight:400;color:var(--text-muted)">SAR/kg</span></span>
-        <span style="font-family:var(--font-mono);font-size:9px;color:var(--text-muted)">fixed · batch price</span>
-      </div>` : ''}
+      <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:${
+        client.tier === 'Platinum' ? 'rgba(167,139,250,0.08)' : client.tier === 'Silver' ? 'rgba(148,163,184,0.08)' : 'rgba(245,158,11,0.08)'
+      };border:1px solid ${
+        client.tier === 'Platinum' ? 'rgba(167,139,250,0.30)' : client.tier === 'Silver' ? 'rgba(148,163,184,0.30)' : 'rgba(245,158,11,0.25)'
+      };border-radius:var(--radius);margin-bottom:12px" id="wp-badge-${cat.key.replace(/\s+/g,'-')}">
+        <span style="font-family:var(--font-mono);font-size:9px;color:${
+          client.tier === 'Platinum' ? '#a78bfa' : client.tier === 'Silver' ? '#94a3b8' : 'var(--amber)'
+        };letter-spacing:.4px;font-weight:700">⬡ ${client.tier.toUpperCase()} PRICE</span>
+        <span style="flex:1;font-family:var(--font-mono);font-size:16px;font-weight:700;color:${
+          client.tier === 'Platinum' ? '#a78bfa' : client.tier === 'Silver' ? '#94a3b8' : 'var(--amber)'
+        }" id="wp-val-${cat.key.replace(/\s+/g,'-')}">${wprice.toFixed(2)} <span style="font-size:11px;font-weight:400;color:var(--text-muted)">SAR/kg</span></span>
+        <span style="font-family:var(--font-mono);font-size:9px;color:var(--text-muted)">★ ${client.tier}</span>
+      </div>` : `
+      <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:rgba(113,113,122,0.06);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:12px" id="wp-badge-${cat.key.replace(/\s+/g,'-')}">
+        <span style="font-family:var(--font-mono);font-size:9px;color:var(--text-muted);letter-spacing:.4px">PRICE</span>
+        <span style="flex:1;font-family:var(--font-mono);font-size:14px;color:var(--text-muted)" id="wp-val-${cat.key.replace(/\s+/g,'-')}">— SAR/kg</span>
+        <span style="font-family:var(--font-mono);font-size:9px;color:var(--text-muted)">no cost data</span>
+      </div>`}
       <div class="lot-footer">
         <button class="btn-request"
-          onclick="openModal('${bestLot.id}','${cat.displayName.replace(/'/g, "\\'")}',${liveRoasted},${wprice !== null ? wprice : 'null'})">
+          onclick="openModal('${bestLot.id}','${cat.displayName.replace(/'/g, "\\'")}',${liveRoasted},(_originWP&&_originWP['${cat.key.replace(/'/g,"\\'")}'])?_originWP['${cat.key.replace(/'/g,"\\'")}'].wp:null)">
           <i class="fa fa-basket-shopping"></i> REQUEST BEANS
         </button>
       </div>
@@ -5734,6 +6147,126 @@ app.get('/cafe', (c) => {
     document.getElementById('roastingModal').addEventListener('click', function(e) {
       if (e.target === this) closeRoastingModal();
     });
+
+    /* ── TIER-AWARE WHOLESALE PRICE LIVE REFRESH ── */
+    var _CAFE_BASELINE = 0.82;
+
+    // This client's tier (injected from server)
+    var _clientTier = '${client.tier}';
+
+    // Maps origin key → { lotId, wp (tier-specific), costPerKg }
+    var _originWP = ${JSON.stringify(Object.fromEntries(CATALOG_ORIGINS.map(cat => {
+      const best = bestLotMap.get(cat.key)
+      const wp   = wholesalePriceMap.get(cat.key) ?? null
+      return [cat.key, {
+        lotId:     best?.id ?? null,
+        wp,
+        costPerKg: best?.costPerKg ?? null,
+      }]
+    })))};
+
+    // Current tier margins from server (kept in sync)
+    var _tierMargins = { Silver: ${tierMargins.Silver}, Gold: ${tierMargins.Gold}, Platinum: ${tierMargins.Platinum} };
+
+    // Tier color for DOM updates
+    var _tierColor = _clientTier === 'Platinum' ? '#a78bfa' : _clientTier === 'Silver' ? '#94a3b8' : 'var(--amber)';
+
+    /* Compute WP for this client's tier */
+    function _calcTierWP(costPerKg) {
+      var m = _tierMargins[_clientTier];
+      if (!m) m = _tierMargins['Gold'];
+      var marginFrac = Math.max(0.01, Math.min(0.99, m / 100));
+      return Math.round((costPerKg / _CAFE_BASELINE) / (1 - marginFrac) * 100) / 100;
+    }
+
+    /* Apply updated prices to the DOM + open modal if visible */
+    function _applyWholesalePrices(wpByOrigin) {
+      Object.keys(wpByOrigin).forEach(function(originKey) {
+        var newWp = wpByOrigin[originKey];
+        if (newWp == null) return;
+        var entry = _originWP[originKey];
+        if (entry) entry.wp = newWp;
+
+        var slug  = originKey.replace(/\s+/g, '-');
+        var valEl = document.getElementById('wp-val-' + slug);
+        var badge = document.getElementById('wp-badge-' + slug);
+        if (!valEl) return;
+
+        valEl.innerHTML =
+          '<span style="font-family:var(--font-mono);font-size:16px;font-weight:700;color:' + _tierColor + '">' +
+          newWp.toFixed(2) + '</span> <span style="font-size:11px;font-weight:400;color:var(--text-muted)">SAR/kg</span>';
+      });
+
+      /* If the Request Beans modal is open, refresh its Unit Price + Order Total */
+      var openLotId = document.getElementById('modalLotId') && document.getElementById('modalLotId').value;
+      if (openLotId && document.getElementById('requestModal').classList.contains('open')) {
+        Object.keys(_originWP).forEach(function(originKey) {
+          var entry = _originWP[originKey];
+          if (entry && entry.lotId === openLotId && wpByOrigin[originKey] != null) {
+            _modalWholesalePrice = wpByOrigin[originKey];
+            var modalContent = document.getElementById('modalContent');
+            if (modalContent) {
+              var upRow = modalContent.querySelector('[data-modal-unit-price]');
+              if (upRow) {
+                upRow.innerHTML =
+                  '<span class="modal-row-label">Unit Price</span>' +
+                  '<span class="modal-row-val" style="color:' + _tierColor + '">' +
+                  _modalWholesalePrice.toFixed(2) + ' <span style="font-size:10px;color:var(--text-muted)">SAR/kg</span></span>';
+              }
+            }
+            if (typeof updateOrderTotal === 'function') updateOrderTotal();
+          }
+        });
+      }
+    }
+
+    /* Recalculate from updated tier margins (client-side, no round-trip) */
+    function _recalcFromTierMargins(newTierMargins) {
+      _tierMargins = newTierMargins;
+      var result = {};
+      Object.keys(_originWP).forEach(function(originKey) {
+        var entry = _originWP[originKey];
+        if (!entry.costPerKg || entry.costPerKg <= 0) return;
+        result[originKey] = _calcTierWP(entry.costPerKg);
+      });
+      return result;
+    }
+
+    /* Fetch fresh prices from server (fallback / initial sync) */
+    function refreshWholesalePrices() {
+      fetch('/api/finance/snapshot')
+        .then(function(r){ return r.json(); })
+        .then(function(d){
+          if (d.tierMargins) _tierMargins = d.tierMargins;
+          // Pick the right wp key for this tier
+          var wpKey = 'wp' + _clientTier;   // e.g. 'wpGold', 'wpSilver', 'wpPlatinum'
+          var lotWpMap = {};
+          (d.byLot || []).forEach(function(l){ if (l[wpKey] != null) lotWpMap[l.lotId] = l[wpKey]; });
+
+          var wpByOrigin = {};
+          Object.keys(_originWP).forEach(function(originKey) {
+            var entry = _originWP[originKey];
+            if (!entry.lotId) return;
+            var newWp = lotWpMap[entry.lotId];
+            if (newWp !== undefined) wpByOrigin[originKey] = newWp;
+          });
+          _applyWholesalePrices(wpByOrigin);
+        }).catch(function(){});
+    }
+
+    /* Listen for instant broadcast from Finance tab */
+    if (typeof BroadcastChannel !== 'undefined') {
+      var _cafeCh = new BroadcastChannel('qabban_margin');
+      _cafeCh.onmessage = function(ev) {
+        if (ev.data && ev.data.type === 'tier_margins_changed' && ev.data.tierMargins) {
+          var wpByOrigin = _recalcFromTierMargins(ev.data.tierMargins);
+          _applyWholesalePrices(wpByOrigin);
+        }
+      };
+    }
+
+    // Poll every 10s as fallback
+    setInterval(refreshWholesalePrices, 10000);
   </script>`
 
   return c.html(cafeLayout('Coffee Catalog', 'lots', content, { name: client.name, tier: client.tier, branch: client.branch, id: client.id }))
