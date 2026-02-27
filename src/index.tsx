@@ -1900,7 +1900,21 @@ function cafeLayout(pageTitle: string, activeNav: string, content: string, clien
         <input type="hidden" name="lotId" id="modalLotId"/>
         <div class="form-group" style="margin-bottom:16px">
           <label class="form-label" data-i18n="modal.qty.label">Quantity (kg)</label>
-          <input class="form-input" type="number" name="quantity" id="modalQty" min="1" max="500" data-i18n-ph="modal.qty.label" placeholder="Enter kg" required/>
+          <input class="form-input" type="number" name="quantity" id="modalQty" min="1" max="500" data-i18n-ph="modal.qty.label" placeholder="Enter kg" required
+            oninput="updateOrderTotal()"/>
+          <!-- Order Total live display -->
+          <div id="orderTotalRow" style="display:none;margin-top:10px;padding:10px 14px;border-radius:var(--radius);background:rgba(245,158,11,0.07);border:1px solid rgba(245,158,11,0.25)">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <div>
+                <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:2px">Order Total</div>
+                <div style="font-size:9px;color:var(--text-muted);font-family:var(--font-mono)" id="orderTotalFormula"></div>
+              </div>
+              <div style="font-family:var(--font-mono);font-size:20px;font-weight:700;color:var(--amber)" id="orderTotalValue">—</div>
+            </div>
+            <div id="orderTotalOverStock" style="display:none;margin-top:6px;font-size:10px;color:var(--red);font-family:var(--font-mono)">
+              <i class="fa fa-triangle-exclamation"></i> Exceeds available stock
+            </div>
+          </div>
         </div>
         <div class="form-group" style="margin-bottom:16px">
           <label class="form-label" data-i18n="modal.notes.label">Notes (optional)</label>
@@ -1914,17 +1928,61 @@ function cafeLayout(pageTitle: string, activeNav: string, content: string, clien
     </div>
   </div>
   <script>
-    function openModal(lotId, origin, available) {
+    var _modalWholesalePrice = null;
+    var _modalAvailable = 0;
+
+    function openModal(lotId, origin, available, wholesalePrice) {
+      _modalWholesalePrice = (typeof wholesalePrice === 'number' && wholesalePrice > 0) ? wholesalePrice : null;
+      _modalAvailable = available;
       document.getElementById('modalLotId').value = lotId;
       document.getElementById('modalQty').max = available;
+      document.getElementById('modalQty').value = '';
       document.getElementById('modalContent').innerHTML =
         '<div class="modal-row"><span class="modal-row-label">Lot</span><span class="modal-row-val">' + lotId + '</span></div>' +
         '<div class="modal-row"><span class="modal-row-label">Origin</span><span class="modal-row-val">' + origin + '</span></div>' +
-        '<div class="modal-row" style="margin-bottom:16px"><span class="modal-row-label">Available</span><span class="modal-row-val" style="color:var(--amber)">' + available + ' kg</span></div>';
+        '<div class="modal-row" style="margin-bottom:' + (_modalWholesalePrice ? '0' : '16px') + '"><span class="modal-row-label">Available</span><span class="modal-row-val" style="color:var(--amber)">' + available + ' kg</span></div>' +
+        (_modalWholesalePrice
+          ? '<div class="modal-row" style="margin-bottom:16px"><span class="modal-row-label">Unit Price</span>' +
+            '<span class="modal-row-val" style="color:var(--amber)">' + _modalWholesalePrice.toFixed(2) + ' <span style="font-size:10px;color:var(--text-muted)">SAR/kg</span></span></div>'
+          : '');
+      document.getElementById('orderTotalRow').style.display = 'none';
+      document.getElementById('orderTotalOverStock').style.display = 'none';
       document.getElementById('requestModal').classList.add('open');
+      setTimeout(function(){ document.getElementById('modalQty').focus(); }, 80);
     }
+
+    function updateOrderTotal() {
+      var qty    = parseFloat(document.getElementById('modalQty').value);
+      var row    = document.getElementById('orderTotalRow');
+      var valEl  = document.getElementById('orderTotalValue');
+      var fmEl   = document.getElementById('orderTotalFormula');
+      var overEl = document.getElementById('orderTotalOverStock');
+
+      if (!_modalWholesalePrice || isNaN(qty) || qty <= 0) {
+        row.style.display = 'none';
+        return;
+      }
+      var total = qty * _modalWholesalePrice;
+      valEl.textContent = total.toLocaleString('en-SA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' SAR';
+      fmEl.textContent  = qty.toFixed(1) + ' kg × ' + _modalWholesalePrice.toFixed(2) + ' SAR/kg';
+      row.style.display = 'block';
+      if (qty > _modalAvailable) {
+        overEl.style.display  = 'block';
+        row.style.borderColor = 'rgba(239,68,68,0.35)';
+        row.style.background  = 'rgba(239,68,68,0.06)';
+        valEl.style.color     = 'var(--red)';
+      } else {
+        overEl.style.display  = 'none';
+        row.style.borderColor = 'rgba(245,158,11,0.25)';
+        row.style.background  = 'rgba(245,158,11,0.07)';
+        valEl.style.color     = 'var(--amber)';
+      }
+    }
+
     function closeModal() {
       document.getElementById('requestModal').classList.remove('open');
+      document.getElementById('modalQty').value = '';
+      document.getElementById('orderTotalRow').style.display = 'none';
     }
     document.getElementById('requestModal').addEventListener('click', function(e) {
       if (e.target === this) closeModal();
@@ -5599,7 +5657,7 @@ app.get('/cafe', (c) => {
       </div>` : ''}
       <div class="lot-footer">
         <button class="btn-request"
-          onclick="openModal('${bestLot.id}','${cat.displayName.replace(/'/g, "\\'")}',${liveRoasted})">
+          onclick="openModal('${bestLot.id}','${cat.displayName.replace(/'/g, "\\'")}',${liveRoasted},${wprice !== null ? wprice : 'null'})">
           <i class="fa fa-basket-shopping"></i> REQUEST BEANS
         </button>
       </div>
