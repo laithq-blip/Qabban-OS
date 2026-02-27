@@ -137,12 +137,135 @@ export interface RoastingInterest {
   status: 'NEW' | 'SEEN' | 'SCHEDULED'
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+//  SPONGE EFFECT DYNAMIC COEFFICIENT ENGINE
+//  Floating Yield Coefficient that adjusts the 0.82 shrinkage baseline
+//  based on real-time or branch-level relative humidity (RH).
+//
+//  Rule A — Coastal / High Humidity (RH > 70 %)
+//    Green beans absorb atmospheric moisture → effective "green equivalent"
+//    weight is heavier → increase coefficient by +0.5 % (adds 0.005)
+//    Effect: more of the purchased green weight is actually usable roasted product
+//
+//  Rule B — Inland / Arid (RH < 20 %)
+//    Green beans lose moisture faster via evaporation → usable weight shrinks
+//    more than baseline → decrease coefficient by −0.3 % (subtracts 0.003)
+//    Effect: less roasted product per kg of purchased green
+//
+//  When 20 % ≤ RH ≤ 70 % the baseline 0.82 coefficient is used as-is.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const SPONGE_BASELINE_COEFFICIENT = 0.82
+
+/** Thresholds that trigger Sponge Effect adjustments */
+export const SPONGE_RH_HIGH_THRESHOLD = 70   // % — Rule A: moisture absorption
+export const SPONGE_RH_LOW_THRESHOLD  = 20   // % — Rule B: evaporation loss
+
+/** Magnitude of each adjustment (as decimal fractions) */
+export const SPONGE_HIGH_DELTA = +0.005  // +0.5 %
+export const SPONGE_LOW_DELTA  = -0.003  // −0.3 %
+
+/** Human-readable label for each active rule */
+export type SpongeRule = 'BASELINE' | 'MOISTURE_ABSORPTION' | 'EVAPORATION_LOSS'
+
+export interface SpongeCoeffResult {
+  /** The final yield coefficient to apply (e.g. 0.825 or 0.817) */
+  coefficient:   number
+  /** Which rule is active */
+  rule:          SpongeRule
+  /** Relative humidity that was evaluated */
+  humidity:      number
+  /** Short diagnostic label for UI display */
+  label:         string
+  /** Delta applied vs baseline (+0.005, −0.003, or 0) */
+  delta:         number
+  /** Percentage representation of the coefficient (e.g. "82.5%") */
+  pct:           string
+}
+
+/**
+ * calcSpongeCoefficient
+ * Core Sponge Effect engine. Given a branch's current relative humidity (RH),
+ * returns the adjusted Floating Yield Coefficient and diagnostic metadata.
+ *
+ * @param humidity  Current RH reading (0–100 %)
+ */
+export const calcSpongeCoefficient = (humidity: number): SpongeCoeffResult => {
+  if (humidity > SPONGE_RH_HIGH_THRESHOLD) {
+    // Rule A — Coastal: moisture absorption adds weight → higher yield
+    const coefficient = Math.round((SPONGE_BASELINE_COEFFICIENT + SPONGE_HIGH_DELTA) * 10000) / 10000
+    return {
+      coefficient,
+      rule:    'MOISTURE_ABSORPTION',
+      humidity,
+      delta:   SPONGE_HIGH_DELTA,
+      label:   `Rule A — Coastal High Humidity (RH ${humidity}% > ${SPONGE_RH_HIGH_THRESHOLD}%)`,
+      pct:     (coefficient * 100).toFixed(1) + '%',
+    }
+  }
+
+  if (humidity < SPONGE_RH_LOW_THRESHOLD) {
+    // Rule B — Arid: evaporation loss reduces yield → lower coefficient
+    const coefficient = Math.round((SPONGE_BASELINE_COEFFICIENT + SPONGE_LOW_DELTA) * 10000) / 10000
+    return {
+      coefficient,
+      rule:    'EVAPORATION_LOSS',
+      humidity,
+      delta:   SPONGE_LOW_DELTA,
+      label:   `Rule B — Inland Arid (RH ${humidity}% < ${SPONGE_RH_LOW_THRESHOLD}%)`,
+      pct:     (coefficient * 100).toFixed(1) + '%',
+    }
+  }
+
+  // Within normal range — baseline coefficient applies
+  return {
+    coefficient: SPONGE_BASELINE_COEFFICIENT,
+    rule:        'BASELINE',
+    humidity,
+    delta:       0,
+    label:       `Baseline — Normal RH (${SPONGE_RH_LOW_THRESHOLD}% ≤ RH ${humidity}% ≤ ${SPONGE_RH_HIGH_THRESHOLD}%)`,
+    pct:         (SPONGE_BASELINE_COEFFICIENT * 100).toFixed(1) + '%',
+  }
+}
+
+/**
+ * Convenience: given a branch object (or just its humidity + city name),
+ * return the Sponge coefficient. Used in balance calculations.
+ */
+export const spongeCoeffForBranch = (humidity: number): number =>
+  calcSpongeCoefficient(humidity).coefficient
+
 // ─── Shrinkage formula ─────────────────────────────────────────────────────
+// The baseline formula always uses 0.82.
+// For humidity-adjusted calculations use applyRoastShrinkageWithSponge().
 export const applyRoastShrinkage = (greenKg: number): number =>
-  Math.round(greenKg * 0.82 * 10) / 10
+  Math.round(greenKg * SPONGE_BASELINE_COEFFICIENT * 10) / 10
+
+/**
+ * applyRoastShrinkageWithSponge
+ * Applies the Sponge Effect coefficient instead of the flat 0.82 baseline.
+ * Use this wherever live balance is calculated and a humidity reading exists.
+ *
+ * @param greenKg   Green coffee weight (kg)
+ * @param humidity  Branch current RH (%)
+ */
+export const applyRoastShrinkageWithSponge = (greenKg: number, humidity: number): number => {
+  const coeff = spongeCoeffForBranch(humidity)
+  return Math.round(greenKg * coeff * 10) / 10
+}
 
 export const roastedToGreenEquiv = (roastedKg: number): number =>
-  Math.round((roastedKg / 0.82) * 10) / 10
+  Math.round((roastedKg / SPONGE_BASELINE_COEFFICIENT) * 10) / 10
+
+/**
+ * roastedToGreenEquivWithSponge
+ * Reverse of applyRoastShrinkageWithSponge — converts a roasted qty back to
+ * its green equivalent using the humidity-adjusted coefficient.
+ */
+export const roastedToGreenEquivWithSponge = (roastedKg: number, humidity: number): number => {
+  const coeff = spongeCoeffForBranch(humidity)
+  return Math.round((roastedKg / coeff) * 10) / 10
+}
 
 // ─── Humidity risk classifier (LEGACY — Inland thresholds only) ────────────
 // ⚠️  DEPRECATED: Use classifyRiskForPreset(humidity, climateType) instead.
@@ -169,6 +292,8 @@ export interface LotLiveBalance {
   dispatchedGreenEquiv: number
   liveGreenKg:          number
   liveRoastedKg:        number
+  /** Sponge Effect metadata for this lot's branch */
+  sponge:               SpongeCoeffResult
 }
 
 export interface AggregateBalance {
@@ -179,12 +304,23 @@ export interface AggregateBalance {
   liveGreenKg:          number
   liveRoastedKg:        number
   byLot: Map<string, LotLiveBalance>
+  /** Baseline (no Sponge) roasted total — for delta comparison in UI */
+  baselineRoastedKg:    number
+  /** Sponge-adjusted total − baseline total (can be positive or negative) */
+  spongeAdjustmentKg:   number
 }
 
 export const calcLiveBalance = (
-  lots: CoffeeLot[],
-  requests: BeanRequest[]
+  lots:     CoffeeLot[],
+  requests: BeanRequest[],
+  branchList: Branch[] = branches
 ): AggregateBalance => {
+  // Build a humidity lookup by branch name
+  const humidityByBranch = new Map<string, number>()
+  for (const b of branchList) {
+    humidityByBranch.set(b.name, b.humidity)
+  }
+
   const dispatchedByLot = new Map<string, number>()
   for (const r of requests) {
     if (r.status === 'DISPATCHED') {
@@ -197,12 +333,20 @@ export const calcLiveBalance = (
   let totPurchasedRoasted  = 0
   let totDispatchedRoasted = 0
   let totDispatchedGreen   = 0
+  let totBaselineRoasted   = 0
+  let totSpongeRoasted     = 0
 
   for (const lot of lots) {
+    // Resolve this lot's branch humidity (fallback to 50 % if not found)
+    const branchHumidity = humidityByBranch.get(lot.branch) ?? 50
+    const sponge         = calcSpongeCoefficient(branchHumidity)
+
     const dispatchedRoasted = Math.round((dispatchedByLot.get(lot.id) ?? 0) * 10) / 10
-    const dispatchedGreen   = roastedToGreenEquiv(dispatchedRoasted)
+    // Use humidity-adjusted coefficient for the green equivalent reverse calc
+    const dispatchedGreen   = roastedToGreenEquivWithSponge(dispatchedRoasted, branchHumidity)
     const liveGreen         = Math.round(Math.max(0, lot.greenWeightKg - dispatchedGreen) * 10) / 10
-    const liveRoasted       = applyRoastShrinkage(liveGreen)
+    // Live roasted balance uses the Sponge-adjusted coefficient
+    const liveRoasted       = applyRoastShrinkageWithSponge(liveGreen, branchHumidity)
 
     byLot.set(lot.id, {
       lotId:                lot.id,
@@ -212,13 +356,19 @@ export const calcLiveBalance = (
       dispatchedGreenEquiv: dispatchedGreen,
       liveGreenKg:          liveGreen,
       liveRoastedKg:        liveRoasted,
+      sponge,
     })
 
     totPurchasedGreen    += lot.greenWeightKg
     totPurchasedRoasted  += lot.roastedWeightKg
     totDispatchedRoasted += dispatchedRoasted
     totDispatchedGreen   += dispatchedGreen
+    // Track baseline (0.82) vs sponge-adjusted totals for the delta display
+    totBaselineRoasted   += applyRoastShrinkage(liveGreen)
+    totSpongeRoasted     += liveRoasted
   }
+
+  const spongeAdjustmentKg = Math.round((totSpongeRoasted - totBaselineRoasted) * 10) / 10
 
   return {
     purchasedGreenKg:     Math.round(totPurchasedGreen * 10) / 10,
@@ -226,7 +376,9 @@ export const calcLiveBalance = (
     dispatchedRoastedKg:  Math.round(totDispatchedRoasted * 10) / 10,
     dispatchedGreenEquiv: Math.round(totDispatchedGreen * 10) / 10,
     liveGreenKg:          Math.round((totPurchasedGreen  - totDispatchedGreen) * 10) / 10,
-    liveRoastedKg:        Math.round((totPurchasedRoasted - totDispatchedRoasted) * 10) / 10,
+    liveRoastedKg:        Math.round(totSpongeRoasted * 10) / 10,
+    baselineRoastedKg:    Math.round(totBaselineRoasted * 10) / 10,
+    spongeAdjustmentKg,
     byLot,
   }
 }

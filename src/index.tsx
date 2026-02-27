@@ -6,11 +6,19 @@ import {
   beanRequests,
   roastingInterests,
   applyRoastShrinkage,
+  applyRoastShrinkageWithSponge,
   calcLiveBalance,
   getFifoLot,
   CATALOG_ORIGINS,
   CLIMATE_PRESETS,
   classifyRiskForPreset,
+  calcSpongeCoefficient,
+  SPONGE_BASELINE_COEFFICIENT,
+  SPONGE_RH_HIGH_THRESHOLD,
+  SPONGE_RH_LOW_THRESHOLD,
+  SPONGE_HIGH_DELTA,
+  SPONGE_LOW_DELTA,
+  type SpongeCoeffResult,
   type CoffeeLot,
   type Branch,
   type ClimateType,
@@ -1244,7 +1252,16 @@ app.get('/admin', (c) => {
   const criticalBranches  = branches.filter(b => b.riskStatus === 'CRITICAL' || b.riskStatus === 'HIGH').length
 
   // ── Live Balance: deduct all DISPATCHED orders from purchased totals ──
-  const bal = calcLiveBalance(coffeeLots, beanRequests)
+  const bal = calcLiveBalance(coffeeLots, beanRequests, branches)
+
+  // ── Sponge Effect: compute per-branch coefficients ──────────────────
+  const spongeBranches = branches.map(b => {
+    const sc = calcSpongeCoefficient(b.humidity)
+    return { ...b, sponge: sc }
+  })
+  const spongeAdj      = bal.spongeAdjustmentKg
+  const spongeAdjSign  = spongeAdj >= 0 ? '+' : ''
+  const spongeAdjColor = spongeAdj > 0 ? 'var(--green)' : spongeAdj < 0 ? 'var(--red)' : 'var(--text-muted)'
 
   const content = `
   ${criticalBranches > 0 ? `
@@ -1259,10 +1276,13 @@ app.get('/admin', (c) => {
       <div class="stat-value">${bal.liveGreenKg.toLocaleString()}</div>
       <div class="stat-unit">kg available</div>
     </div>
-    <div class="stat-card">
+    <div class="stat-card" style="border-color:rgba(245,158,11,0.35);position:relative;overflow:hidden">
+      <div style="position:absolute;top:0;right:0;font-family:var(--font-mono);font-size:9px;padding:2px 8px;background:rgba(245,158,11,0.1);color:var(--amber);border-left:1px solid rgba(245,158,11,0.25);border-bottom:1px solid rgba(245,158,11,0.25);border-radius:0 0 0 4px;letter-spacing:.4px">
+        ⬡ SPONGE
+      </div>
       <div class="stat-label">Live Roasted Balance</div>
       <div class="stat-value">${bal.liveRoastedKg.toLocaleString()}</div>
-      <div class="stat-unit">kg available</div>
+      <div class="stat-unit">kg · <span style="color:${spongeAdjColor};font-family:var(--font-mono)">${spongeAdjSign}${spongeAdj} kg sponge adj.</span></div>
     </div>
     <div class="stat-card">
       <div class="stat-label">OPTIMAL Lots</div>
@@ -1279,7 +1299,7 @@ app.get('/admin', (c) => {
   </div>
 
   <!-- Live balance breakdown banner -->
-  <div style="background:var(--bg-2);border:1px solid var(--border);border-left:3px solid var(--amber);border-radius:var(--radius);padding:12px 16px;margin-bottom:24px;display:flex;flex-wrap:wrap;gap:24px;align-items:center">
+  <div style="background:var(--bg-2);border:1px solid var(--border);border-left:3px solid var(--amber);border-radius:var(--radius);padding:12px 16px;margin-bottom:16px;display:flex;flex-wrap:wrap;gap:24px;align-items:center">
     <div style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted);letter-spacing:1px;text-transform:uppercase;flex-shrink:0">
       <i class="fa fa-scale-balanced" style="color:var(--amber)"></i>&nbsp; Live Balance Formula
     </div>
@@ -1300,6 +1320,106 @@ app.get('/admin', (c) => {
       </span>
     </div>
   </div>
+
+  <!-- ══ SPONGE EFFECT ENGINE PANEL ══ -->
+  <div class="card" style="margin-bottom:28px;border-color:rgba(245,158,11,0.30);background:linear-gradient(135deg,var(--bg-1) 0%,rgba(245,158,11,0.03) 100%)">
+    <div class="card-title">
+      <i class="fa fa-droplet" style="color:var(--amber)"></i>
+      Sponge Effect — Dynamic Yield Coefficient Engine
+      <span style="font-family:var(--font-mono);font-size:9px;padding:2px 8px;border-radius:2px;background:rgba(245,158,11,0.10);color:var(--amber);border:1px solid rgba(245,158,11,0.30);letter-spacing:.5px">
+        ⬡ ACTIVE
+      </span>
+    </div>
+
+    <!-- Engine explanation row -->
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:20px">
+      <div style="padding:14px;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius-lg);border-top:2px solid var(--text-muted)">
+        <div style="font-family:var(--font-mono);font-size:9px;color:var(--text-muted);letter-spacing:1.2px;text-transform:uppercase;margin-bottom:8px">Baseline Coefficient</div>
+        <div style="font-family:var(--font-mono);font-size:28px;font-weight:700;color:var(--text-sec)">82.0<span style="font-size:14px">%</span></div>
+        <div style="font-size:10px;color:var(--text-muted);margin-top:4px">20% ≤ RH ≤ 70%</div>
+        <div style="font-size:10px;color:var(--text-muted);margin-top:2px">No adjustment</div>
+      </div>
+      <div style="padding:14px;background:var(--bg-2);border:1px solid rgba(56,189,248,0.25);border-radius:var(--radius-lg);border-top:2px solid #38bdf8">
+        <div style="font-family:var(--font-mono);font-size:9px;color:#38bdf8;letter-spacing:1.2px;text-transform:uppercase;margin-bottom:8px">Rule A — Coastal</div>
+        <div style="font-family:var(--font-mono);font-size:28px;font-weight:700;color:#38bdf8">82.5<span style="font-size:14px">%</span></div>
+        <div style="font-size:10px;color:var(--text-muted);margin-top:4px">RH &gt; 70% · +0.5%</div>
+        <div style="font-size:10px;color:#38bdf8;margin-top:2px">Moisture absorption → heavier green weight</div>
+      </div>
+      <div style="padding:14px;background:var(--bg-2);border:1px solid rgba(251,146,60,0.25);border-radius:var(--radius-lg);border-top:2px solid #fb923c">
+        <div style="font-family:var(--font-mono);font-size:9px;color:#fb923c;letter-spacing:1.2px;text-transform:uppercase;margin-bottom:8px">Rule B — Arid</div>
+        <div style="font-family:var(--font-mono);font-size:28px;font-weight:700;color:#fb923c">81.7<span style="font-size:14px">%</span></div>
+        <div style="font-size:10px;color:var(--text-muted);margin-top:4px">RH &lt; 20% · −0.3%</div>
+        <div style="font-size:10px;color:#fb923c;margin-top:2px">Evaporation loss → lighter green weight</div>
+      </div>
+    </div>
+
+    <!-- Per-branch coefficient table -->
+    <div style="margin-bottom:16px">
+      <div style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:10px;display:flex;align-items:center;gap:8px">
+        <i class="fa fa-building" style="color:var(--amber)"></i> Live Coefficients by Branch
+      </div>
+      <div style="display:grid;gap:8px">
+        ${spongeBranches.map(b => {
+          const ruleColor =
+            b.sponge.rule === 'MOISTURE_ABSORPTION' ? '#38bdf8' :
+            b.sponge.rule === 'EVAPORATION_LOSS'    ? '#fb923c' : 'var(--text-sec)'
+          const ruleIcon =
+            b.sponge.rule === 'MOISTURE_ABSORPTION' ? 'fa-water' :
+            b.sponge.rule === 'EVAPORATION_LOSS'    ? 'fa-sun' : 'fa-minus'
+          const ruleBg =
+            b.sponge.rule === 'MOISTURE_ABSORPTION' ? 'rgba(56,189,248,0.08)' :
+            b.sponge.rule === 'EVAPORATION_LOSS'    ? 'rgba(251,146,60,0.08)' : 'var(--bg-2)'
+          const ruleBorder =
+            b.sponge.rule === 'MOISTURE_ABSORPTION' ? 'rgba(56,189,248,0.25)' :
+            b.sponge.rule === 'EVAPORATION_LOSS'    ? 'rgba(251,146,60,0.25)' : 'var(--border)'
+          const deltaStr = b.sponge.delta === 0 ? '—' :
+            (b.sponge.delta > 0 ? '+' : '') + (b.sponge.delta * 100).toFixed(1) + '%'
+          return `
+        <div style="display:flex;align-items:center;gap:14px;padding:12px 16px;background:${ruleBg};border:1px solid ${ruleBorder};border-radius:var(--radius);flex-wrap:wrap">
+          <div style="font-family:var(--font-mono);font-weight:700;font-size:13px;color:var(--text-pri);min-width:80px">${b.name}</div>
+          <div style="display:flex;align-items:center;gap:5px;min-width:72px">
+            <i class="fa fa-droplet" style="font-size:10px;color:${ruleColor}"></i>
+            <span style="font-family:var(--font-mono);font-size:11px;color:var(--text-sec)">${b.humidity}% RH</span>
+          </div>
+          <div style="flex:1;min-width:180px;font-size:11px;color:${ruleColor}">
+            <i class="fa ${ruleIcon}" style="margin-right:5px"></i>${b.sponge.label}
+          </div>
+          <div style="display:flex;align-items:center;gap:16px;font-family:var(--font-mono);font-size:12px">
+            <span style="color:var(--text-muted)">
+              Baseline <span style="color:var(--text-sec)">82.0%</span>
+            </span>
+            <span style="color:var(--text-muted)">→</span>
+            <span style="font-size:18px;font-weight:700;color:${ruleColor}">${b.sponge.pct}</span>
+            <span style="font-size:10px;padding:2px 7px;border-radius:2px;border:1px solid ${ruleBorder};color:${ruleColor};background:${ruleBg}">${deltaStr}</span>
+          </div>
+        </div>`}).join('')}
+      </div>
+    </div>
+
+    <!-- Portfolio-level impact summary -->
+    <div style="padding:14px 16px;background:var(--bg-2);border:1px solid var(--border);border-left:3px solid var(--amber);border-radius:var(--radius);display:flex;flex-wrap:wrap;gap:24px;align-items:center">
+      <div style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted);letter-spacing:1px;text-transform:uppercase;flex-shrink:0">
+        <i class="fa fa-sigma" style="color:var(--amber)"></i>&nbsp; Portfolio Impact
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:20px;font-family:var(--font-mono);font-size:12px">
+        <span>
+          <span style="color:var(--text-muted)">Baseline Roasted (0.82): </span>
+          <span style="color:var(--text-sec)">${bal.baselineRoastedKg.toLocaleString()} kg</span>
+        </span>
+        <span style="color:var(--text-muted)">→</span>
+        <span>
+          <span style="color:var(--text-muted)">Sponge-Adjusted: </span>
+          <span style="color:var(--amber);font-weight:700">${bal.liveRoastedKg.toLocaleString()} kg</span>
+        </span>
+        <span style="color:var(--text-muted)">·</span>
+        <span>
+          <span style="color:var(--text-muted)">Net Δ: </span>
+          <span style="color:${spongeAdjColor};font-weight:700">${spongeAdjSign}${spongeAdj} kg</span>
+        </span>
+      </div>
+    </div>
+  </div>
+  <!-- ══ end SPONGE EFFECT ENGINE ══ -->
 
   <!-- ══ KSA ENVIRONMENTAL LIVE FEED ══ -->
   <div class="card" style="margin-bottom:28px" id="envFeedCard">
@@ -1518,7 +1638,7 @@ app.get('/admin', (c) => {
   </div>
 
   <div class="card">
-    <div class="card-title">Inventory Shrinkage Summary — All Branches</div>
+    <div class="card-title">Inventory Shrinkage Summary — All Branches <span style="font-family:var(--font-mono);font-size:9px;padding:2px 7px;border-radius:2px;background:rgba(245,158,11,0.10);color:var(--amber);border:1px solid rgba(245,158,11,0.25);margin-left:6px">⬡ SPONGE-ADJUSTED</span></div>
     <div class="table-wrap">
       <table>
         <thead>
@@ -1527,6 +1647,7 @@ app.get('/admin', (c) => {
             <th>Purchased Green</th><th>Purchased Roasted</th>
             <th>Dispatched</th>
             <th>Live Green Balance</th><th>Live Roasted Balance</th>
+            <th>⬡ Yield Coeff.</th>
             <th>Status</th><th>Grade</th>
           </tr>
         </thead>
@@ -1534,6 +1655,13 @@ app.get('/admin', (c) => {
           ${coffeeLots.map(l => {
             const lb = bal.byLot.get(l.id)!
             const hasDispatch = lb.dispatchedRoastedKg > 0
+            const sc = lb.sponge
+            const coeffColor =
+              sc.rule === 'MOISTURE_ABSORPTION' ? '#38bdf8' :
+              sc.rule === 'EVAPORATION_LOSS'    ? '#fb923c' : 'var(--text-sec)'
+            const coeffIcon =
+              sc.rule === 'MOISTURE_ABSORPTION' ? '▲' :
+              sc.rule === 'EVAPORATION_LOSS'    ? '▼' : '—'
             return `
           <tr>
             <td class="mono" style="color:var(--amber)">${l.id}</td>
@@ -1546,6 +1674,10 @@ app.get('/admin', (c) => {
             </td>
             <td class="mono" style="color:var(--amber);font-weight:600">${lb.liveGreenKg} kg</td>
             <td class="mono" style="color:var(--amber)">${lb.liveRoastedKg} kg</td>
+            <td>
+              <span style="font-family:var(--font-mono);font-size:12px;font-weight:700;color:${coeffColor}">${coeffIcon} ${sc.pct}</span>
+              <div style="font-size:9px;color:var(--text-muted);margin-top:2px">${sc.humidity}% RH</div>
+            </td>
             <td><span class="badge badge-${l.status}">${l.status}</span></td>
             <td>
               <div class="score-bar">
@@ -1575,7 +1707,7 @@ app.get('/admin/branches', (c) => {
   }
 
   // aggregate balance for whole inventory (used in stat cards)
-  const bal = calcLiveBalance(coffeeLots, beanRequests)
+  const bal = calcLiveBalance(coffeeLots, beanRequests, branches)
 
   // helper: risk colour
   const riskColor = (r: string) =>
@@ -2421,7 +2553,7 @@ app.get('/admin/inventory', (c) => {
   const pendingCount = beanRequests.filter(r => r.status === 'PENDING').length
 
   // ── Live Balance ──────────────────────────────────────────────
-  const bal            = calcLiveBalance(coffeeLots, beanRequests)
+  const bal            = calcLiveBalance(coffeeLots, beanRequests, branches)
   const totalShrinkage = bal.liveGreenKg - bal.liveRoastedKg   // shrinkage on live stock only
 
   // ── FIFO: list unique non-recalled origins for the Log New Roast selector
@@ -2694,26 +2826,29 @@ app.get('/admin/inventory', (c) => {
       <div class="stat-value">${bal.liveGreenKg.toLocaleString()}</div>
       <div class="stat-unit">kg available</div>
     </div>
-    <div class="stat-card">
+    <div class="stat-card" style="border-color:rgba(245,158,11,0.35);position:relative;overflow:hidden">
+      <div style="position:absolute;top:0;right:0;font-family:var(--font-mono);font-size:9px;padding:2px 8px;background:rgba(245,158,11,0.1);color:var(--amber);border-left:1px solid rgba(245,158,11,0.25);border-bottom:1px solid rgba(245,158,11,0.25);border-radius:0 0 0 4px;letter-spacing:.4px">
+        ⬡ SPONGE
+      </div>
       <div class="stat-label">Live Roasted Balance</div>
       <div class="stat-value">${bal.liveRoastedKg.toLocaleString()}</div>
-      <div class="stat-unit">kg available</div>
+      <div class="stat-unit">kg · <span style="color:${bal.spongeAdjustmentKg >= 0 ? 'var(--green)' : 'var(--red)'};font-family:var(--font-mono)">${bal.spongeAdjustmentKg >= 0 ? '+' : ''}${bal.spongeAdjustmentKg} kg adj.</span></div>
     </div>
     <div class="stat-card">
       <div class="stat-label">Total Dispatched</div>
       <div class="stat-value" style="color:var(--red)">${bal.dispatchedRoastedKg.toLocaleString()}</div>
       <div class="stat-unit">kg roasted sent out</div>
     </div>
-    <div class="stat-card">
+    <div class="stat-card" style="border-color:rgba(245,158,11,0.25)">
       <div class="stat-label">Yield Rate</div>
-      <div class="stat-value">82%</div>
-      <div class="stat-unit">Roasted = Green × 0.82</div>
+      <div class="stat-value" style="font-size:20px">82.0–82.5%</div>
+      <div class="stat-unit">Sponge-adjusted per branch</div>
     </div>
   </div>
 
   <!-- Balance equation card -->
   <div class="card" style="margin-bottom:20px">
-    <div class="card-title">Live Balance Formula</div>
+    <div class="card-title">Live Balance Formula <span style="font-family:var(--font-mono);font-size:9px;padding:2px 7px;border-radius:2px;background:rgba(245,158,11,0.10);color:var(--amber);border:1px solid rgba(245,158,11,0.25);margin-left:6px">⬡ SPONGE-ADJUSTED</span></div>
     <div style="padding:16px;background:var(--bg-2);border-radius:var(--radius);font-family:var(--font-mono);font-size:13px;letter-spacing:0.4px;line-height:2">
       <div>
         <span style="color:var(--text-muted)">Purchased Green:    </span>
@@ -2722,13 +2857,18 @@ app.get('/admin/inventory', (c) => {
       <div>
         <span style="color:var(--text-muted)">Dispatched (roasted): </span>
         <span style="color:var(--red)">− ${bal.dispatchedRoastedKg.toLocaleString()} kg roasted</span>
-        <span style="color:var(--text-muted);font-size:11px"> (÷ 0.82 = ${bal.dispatchedGreenEquiv.toLocaleString()} kg green equiv.)</span>
+        <span style="color:var(--text-muted);font-size:11px"> (÷ sponge coeff. = ${bal.dispatchedGreenEquiv.toLocaleString()} kg green equiv.)</span>
       </div>
       <div style="border-top:1px solid var(--border);margin-top:4px;padding-top:4px">
         <span style="color:var(--amber)">Live Green Balance: </span>
         <span style="color:var(--amber);font-weight:700">${bal.liveGreenKg.toLocaleString()} kg</span>
-        <span style="color:var(--text-muted);font-size:11px"> × 0.82 = </span>
+        <span style="color:var(--text-muted);font-size:11px"> × sponge coeff. = </span>
         <span style="color:var(--amber)">${bal.liveRoastedKg.toLocaleString()} kg roasted</span>
+      </div>
+      <div style="font-size:10px;color:var(--text-muted);border-top:1px solid var(--border);margin-top:6px;padding-top:6px">
+        Baseline (0.82): ${bal.baselineRoastedKg.toLocaleString()} kg &nbsp;·&nbsp;
+        <span style="color:${bal.spongeAdjustmentKg >= 0 ? 'var(--green)' : 'var(--red)'}">Sponge Δ: ${bal.spongeAdjustmentKg >= 0 ? '+' : ''}${bal.spongeAdjustmentKg} kg</span>
+        &nbsp;·&nbsp; Rule A (RH&gt;70%): +0.5% · Rule B (RH&lt;20%): −0.3%
       </div>
     </div>
   </div>
@@ -4283,7 +4423,7 @@ app.post('/admin/inventory/:lotId/recall', async (c) => {
 // ── GET /cafe ────────────────────────────────────────────────────
 app.get('/cafe', (c) => {
   const client      = resolveCafeClient(c.req.query('cid') ?? null)
-  const bal         = calcLiveBalance(coffeeLots, beanRequests)
+  const bal         = calcLiveBalance(coffeeLots, beanRequests, branches)
 
   // ── Per-origin live roasted balance (summed across all lots for that origin)
   // Includes ALL non-RECALLED lots (OPTIMAL, MONITOR, CRITICAL) with remaining stock.
@@ -4759,6 +4899,79 @@ app.get('/api/weather', async (c) => {
   } catch {
     return c.json(stub())
   }
+})
+
+// ── GET /api/sponge  ────────────────────────────────────────────
+// Returns the current Sponge Effect coefficients for all branches
+// plus the aggregate portfolio impact. Called by the live dashboard
+// to refresh the Sponge panel without a full page reload.
+app.get('/api/sponge', (c) => {
+  const bal = calcLiveBalance(coffeeLots, beanRequests, branches)
+
+  const branchCoefficients = branches.map(b => {
+    const sc = calcSpongeCoefficient(b.humidity)
+    return {
+      branchId:    b.id,
+      branchName:  b.name,
+      humidity:    b.humidity,
+      climateType: b.climateType,
+      coefficient: sc.coefficient,
+      pct:         sc.pct,
+      rule:        sc.rule,
+      label:       sc.label,
+      delta:       sc.delta,
+    }
+  })
+
+  return c.json({
+    baseline:            SPONGE_BASELINE_COEFFICIENT,
+    highThreshold:       SPONGE_RH_HIGH_THRESHOLD,
+    lowThreshold:        SPONGE_RH_LOW_THRESHOLD,
+    highDelta:           SPONGE_HIGH_DELTA,
+    lowDelta:            SPONGE_LOW_DELTA,
+    branches:            branchCoefficients,
+    portfolio: {
+      baselineRoastedKg:  bal.baselineRoastedKg,
+      spongeRoastedKg:    bal.liveRoastedKg,
+      adjustmentKg:       bal.spongeAdjustmentKg,
+      liveGreenKg:        bal.liveGreenKg,
+    },
+    computedAt: new Date().toISOString(),
+  })
+})
+
+// ── POST /api/sponge/simulate  ─────────────────────────────────
+// Simulate the Sponge coefficient for any humidity value.
+// Body: { humidity: number }
+// Returns the coefficient + rule without affecting live state.
+app.post('/api/sponge/simulate', async (c) => {
+  let body: { humidity?: number }
+  try {
+    body = await c.req.json()
+  } catch {
+    return c.json({ error: 'Invalid JSON body' }, 400)
+  }
+
+  const { humidity } = body
+  if (typeof humidity !== 'number' || humidity < 0 || humidity > 100) {
+    return c.json({ error: 'humidity must be a number between 0 and 100' }, 400)
+  }
+
+  const sc = calcSpongeCoefficient(humidity)
+
+  // Also show what the roasted yield would be for common green weights
+  const examples = [100, 250, 500, 1000].map(greenKg => ({
+    greenKg,
+    baselineRoastedKg: Math.round(greenKg * SPONGE_BASELINE_COEFFICIENT * 10) / 10,
+    spongeRoastedKg:   Math.round(greenKg * sc.coefficient * 10) / 10,
+    deltaKg:           Math.round((greenKg * sc.coefficient - greenKg * SPONGE_BASELINE_COEFFICIENT) * 10) / 10,
+  }))
+
+  return c.json({
+    input:       { humidity },
+    result:      sc,
+    examples,
+  })
 })
 
 export default app
