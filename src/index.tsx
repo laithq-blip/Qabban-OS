@@ -1875,14 +1875,31 @@ function cafeLayout(pageTitle: string, activeNav: string, content: string, clien
       var banner = document.createElement('div');
       banner.className = 'recall-urgent-banner';
       banner.id = 'recall-banner-' + recall.lotId;
-      banner.innerHTML =
-        '<i class="fa fa-triangle-exclamation recall-banner-icon"></i>' +
-        '<div class="recall-banner-body">' +
-          '<div class="recall-banner-title">⚠ URGENT RECALL — SFDA AUDIT SHIELD</div>' +
-          '<div class="recall-banner-lot">Lot: ' + recall.lotId + ' · ' + recall.lotOrigin + ' · Initiated: ' + recall.initiatedAt + '</div>' +
-          '<div class="recall-banner-instructions"><strong>Instructions from Roaster:</strong> ' + recall.instructions + '</div>' +
-        '</div>' +
-        '<button class="recall-banner-close" onclick="dismissRecallBanner(\'' + recall.lotId + '\')">ACKNOWLEDGE</button>';
+      /* Build DOM nodes directly to avoid any string-escaping issues */
+      var icon = document.createElement('i');
+      icon.className = 'fa fa-triangle-exclamation recall-banner-icon';
+      var body = document.createElement('div');
+      body.className = 'recall-banner-body';
+      var titleEl = document.createElement('div');
+      titleEl.className = 'recall-banner-title';
+      titleEl.textContent = '\u26a0 URGENT RECALL \u2014 SFDA AUDIT SHIELD';
+      var lotEl = document.createElement('div');
+      lotEl.className = 'recall-banner-lot';
+      lotEl.textContent = 'Lot: ' + recall.lotId + ' \u00b7 ' + recall.lotOrigin + ' \u00b7 Initiated: ' + recall.initiatedAt;
+      var instrEl = document.createElement('div');
+      instrEl.className = 'recall-banner-instructions';
+      instrEl.innerHTML = '<strong>Instructions from Roaster:</strong> ' + recall.instructions;
+      body.appendChild(titleEl);
+      body.appendChild(lotEl);
+      body.appendChild(instrEl);
+      var btn = document.createElement('button');
+      btn.className = 'recall-banner-close';
+      btn.textContent = 'ACKNOWLEDGE';
+      btn.setAttribute('data-lot', recall.lotId);
+      btn.addEventListener('click', function() { dismissRecallBanner(this.getAttribute('data-lot')); });
+      banner.appendChild(icon);
+      banner.appendChild(body);
+      banner.appendChild(btn);
       document.body.insertBefore(banner, document.body.firstChild.nextSibling || document.body.firstChild);
     }
 
@@ -4994,14 +5011,14 @@ app.get('/admin/requests', (c) => {
 app.post('/admin/requests/:id/confirm', (c) => {
   const req = beanRequests.find(r => r.id === c.req.param('id'))
   if (req) req.status = 'CONFIRMED'
-  return c.redirect('/admin/requests')
+  return c.redirect('/admin/requests', 303)
 })
 
 // ── POST /admin/requests/:id/dispatch ──────────────────────────
 app.post('/admin/requests/:id/dispatch', (c) => {
   const req = beanRequests.find(r => r.id === c.req.param('id'))
   if (req) req.status = 'DISPATCHED'
-  return c.redirect('/admin/requests')
+  return c.redirect('/admin/requests', 303)
 })
 
 // ── POST /admin/requests/:id/cancel ────────────────────────────
@@ -5010,21 +5027,21 @@ app.post('/admin/requests/:id/dispatch', (c) => {
 app.post('/admin/requests/:id/cancel', (c) => {
   const req = beanRequests.find(r => r.id === c.req.param('id'))
   if (req) req.status = 'CANCELLED'
-  return c.redirect('/admin/requests')
+  return c.redirect('/admin/requests', 303)
 })
 
 // ── POST /admin/interests/:id/seen ─────────────────────────────
 app.post('/admin/interests/:id/seen', (c) => {
   const ri = roastingInterests.find(r => r.id === c.req.param('id'))
   if (ri) ri.status = 'SEEN'
-  return c.redirect('/admin/requests')
+  return c.redirect('/admin/requests', 303)
 })
 
 // ── POST /admin/interests/:id/schedule ─────────────────────────
 app.post('/admin/interests/:id/schedule', (c) => {
   const ri = roastingInterests.find(r => r.id === c.req.param('id'))
   if (ri) ri.status = 'SCHEDULED'
-  return c.redirect('/admin/requests')
+  return c.redirect('/admin/requests', 303)
 })
 
 // ── POST /admin/inventory/:lotId/recall ────────────────────────
@@ -5288,7 +5305,7 @@ app.post('/cafe/request', async (c) => {
   const lot    = coffeeLots.find(l => l.id === lotId && l.status !== 'RECALLED')  // RECALLED lots blocked
   const client = resolveCafeClient(cafeId)
 
-  if (!lot || isNaN(quantity) || quantity <= 0) return c.redirect('/cafe')
+  if (!lot || isNaN(quantity) || quantity <= 0) return c.redirect('/cafe', 303)
 
   const reqId = `REQ-${String(beanRequests.length + 1).padStart(3, '0')}`
   const now   = new Date().toISOString().replace('T', ' ').slice(0, 16)
@@ -5304,7 +5321,7 @@ app.post('/cafe/request', async (c) => {
     notes,
   })
 
-  return c.redirect('/cafe/orders?success=1&cid=' + client.id)
+  return c.redirect('/cafe/orders?success=1&cid=' + client.id, 303)
 })
 
 // ── POST /cafe/roasting-interest ─────────────────────────────────
@@ -5317,7 +5334,7 @@ app.post('/cafe/roasting-interest', async (c) => {
   const cafeId       = (form.get('cafeId') as string) || ''
   const client       = resolveCafeClient(cafeId)
 
-  if (!origin || isNaN(interestedKg) || interestedKg <= 0) return c.redirect('/cafe')
+  if (!origin || isNaN(interestedKg) || interestedKg <= 0) return c.redirect('/cafe', 303)
 
   const now  = new Date().toISOString().replace('T', ' ').slice(0, 16)
   const riId = `RI-${String(roastingInterests.length + 1).padStart(3, '0')}`
@@ -5333,7 +5350,7 @@ app.post('/cafe/roasting-interest', async (c) => {
     status:       'NEW',
   })
 
-  return c.redirect('/cafe/orders?preorder=1&cid=' + client.id)
+  return c.redirect('/cafe/orders?preorder=1&cid=' + client.id, 303)
 })
 
 // ── GET /cafe/orders ─────────────────────────────────────────────
