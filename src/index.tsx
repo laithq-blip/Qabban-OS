@@ -874,10 +874,666 @@ const shell = (title: string, body: string) => `<!DOCTYPE html>
       .mobile-nav { display:block; }
       .main { padding-bottom:72px; }
     }
+
+    /* ══ RTL / ARABIC LAYOUT ══════════════════════════════════════ */
+    [dir="rtl"] body { font-family: 'IBM Plex Arabic', 'Noto Sans Arabic', 'Segoe UI', var(--font-sans); }
+    [dir="rtl"] .topbar { flex-direction: row-reverse; }
+    [dir="rtl"] .topbar-brand { flex-direction: row-reverse; }
+    [dir="rtl"] .topbar-right { flex-direction: row-reverse; }
+    [dir="rtl"] .layout { flex-direction: row-reverse; }
+    [dir="rtl"] .sidebar { border-right: none; border-left: 1px solid var(--border); }
+    [dir="rtl"] .sidebar-link { border-left: none; border-right: 2px solid transparent; flex-direction: row-reverse; }
+    [dir="rtl"] .sidebar-link.active { border-left-color: transparent; border-right-color: var(--amber); }
+    [dir="rtl"] .sidebar-label { text-align: right; }
+    [dir="rtl"] .card-title { flex-direction: row-reverse; }
+    [dir="rtl"] .card-title::after { display:none; }
+    [dir="rtl"] .card-title::before { content:''; flex:1; height:1px; background:var(--border); }
+    [dir="rtl"] table { direction: rtl; }
+    [dir="rtl"] th, [dir="rtl"] td { text-align: right; }
+    [dir="rtl"] .badge { flex-direction: row-reverse; }
+    [dir="rtl"] .stat-grid { direction: rtl; }
+    [dir="rtl"] .branch-grid { direction: rtl; }
+    [dir="rtl"] .lot-grid { direction: rtl; }
+    [dir="rtl"] .page-title { direction: rtl; text-align: right; }
+    [dir="rtl"] .page-sub { direction: rtl; text-align: right; }
+    [dir="rtl"] .alert { flex-direction: row-reverse; text-align: right; }
+    [dir="rtl"] .mobile-nav-item { flex-direction: column; }
+    [dir="rtl"] .modal-title { flex-direction: row-reverse; }
+    [dir="rtl"] .modal-row { flex-direction: row-reverse; }
+    [dir="rtl"] .modal-actions { flex-direction: row-reverse; }
+    [dir="rtl"] .form-label { direction: rtl; }
+    [dir="rtl"] .form-input, [dir="rtl"] .form-textarea { direction: rtl; text-align: right; }
+    [dir="rtl"] .env-city { flex-direction: row-reverse; }
+    [dir="rtl"] .env-meta-row { flex-direction: row-reverse; }
+    [dir="rtl"] .env-refresh-row { flex-direction: row-reverse; }
+    [dir="rtl"] .weight-block { flex-direction: row-reverse; }
+    [dir="rtl"] .score-bar { flex-direction: row-reverse; }
+    [dir="rtl"] .login-tabs { flex-direction: row-reverse; }
+    [dir="rtl"] .bcard-header { flex-direction: row-reverse; }
+    [dir="rtl"] .bcard-footer { flex-direction: row-reverse; }
+    [dir="rtl"] .branch-footer { flex-direction: row-reverse; }
+    [dir="rtl"] .lot-header { flex-direction: row-reverse; }
+    [dir="rtl"] .lot-footer { direction: rtl; }
+    [dir="rtl"] .flavor-tags { direction: rtl; }
+    [dir="rtl"] .import-header-row { flex-direction: row-reverse; }
+    [dir="rtl"] .addlot-grid { direction: rtl; }
+    [dir="rtl"] .recall-modal-title { flex-direction: row-reverse; }
+    [dir="rtl"] .recall-banner-body { text-align: right; }
+
+    /* ── LANGUAGE TOGGLE PILL ── */
+    #langToggle {
+      position: fixed;
+      bottom: 24px;
+      left: 24px;
+      z-index: 9999;
+      display: flex;
+      align-items: center;
+      gap: 0;
+      background: var(--bg-2);
+      border: 1px solid var(--border-amber);
+      border-radius: 24px;
+      overflow: hidden;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.55), 0 0 14px rgba(245,158,11,0.22);
+      cursor: pointer;
+      transition: box-shadow .2s, transform .15s;
+      font-family: var(--font-mono);
+      user-select: none;
+    }
+    [dir="rtl"] #langToggle { left: auto; right: 24px; }
+    #langToggle:hover {
+      box-shadow: 0 6px 28px rgba(0,0,0,0.65), 0 0 22px rgba(245,158,11,0.35);
+      transform: translateY(-2px);
+    }
+    #langToggle:active { transform: translateY(0); }
+    .lang-globe {
+      padding: 8px 10px 8px 14px;
+      color: var(--amber);
+      font-size: 13px;
+      opacity: 0.7;
+      display: flex;
+      align-items: center;
+    }
+    .lang-opt {
+      padding: 8px 14px;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: .8px;
+      color: var(--text-muted);
+      transition: all .18s;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      text-transform: uppercase;
+    }
+    .lang-opt.active {
+      background: var(--amber-glow);
+      color: var(--amber);
+    }
+    .lang-divider {
+      width: 1px;
+      height: 26px;
+      background: var(--border-amber);
+      flex-shrink: 0;
+    }
+    .lang-globe-divider {
+      width: 1px;
+      height: 26px;
+      background: rgba(245,158,11,0.15);
+      flex-shrink: 0;
+    }
+    /* Mobile adjustment */
+    @media (max-width:768px) {
+      #langToggle { bottom: 80px; left: 16px; }
+      [dir="rtl"] #langToggle { left: auto; right: 16px; }
+      .lang-globe { padding: 8px 8px 8px 12px; }
+    }
   </style>
+
+  <!-- ══ ARABIC FONT (Google Fonts) ══ -->
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Arabic:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+
+  <!-- ══ i18n ENGINE ══════════════════════════════════════════════ -->
+  <script>
+  /* ────────────────────────────────────────────────────────────────
+     QABBAN OS — Bilingual i18n Engine
+     Strategy: every translatable text node carries  data-i18n="KEY"
+     The engine swaps innerHTML on language change and persists via
+     localStorage. RTL layout is toggled via <html dir="rtl|ltr">.
+  ──────────────────────────────────────────────────────────────── */
+
+  var I18N = {
+    en: {
+      /* ── BRAND ── */
+      'brand.name':          'QABBAN <span style="color:var(--amber)">OS</span>',
+      'brand.sub':           'Roast Operations Platform',
+      'brand.tagline':       'Roast Operations Platform',
+
+      /* ── LOGIN ── */
+      'login.tab.admin':     '<i class="fa fa-shield-alt"></i> Roaster Admin',
+      'login.tab.cafe':      '<i class="fa fa-mug-hot"></i> Cafe Portal',
+      'login.username':      'Username',
+      'login.password':      'Password',
+      'login.btn':           '<i class="fa fa-arrow-right-to-bracket"></i> &nbsp; ACCESS SYSTEM',
+      'login.hint':          'Admin: <code>admin</code> / <code>qabban2026</code> &nbsp;—&nbsp; Cafe: <code>alnokhba</code> / <code>cafe123</code>',
+      'login.error':         'Invalid credentials. Please try again.',
+      'login.authenticating':'<i class="fa fa-spinner fa-spin"></i> &nbsp; AUTHENTICATING...',
+
+      /* ── NAV ── */
+      'nav.overview':        'Overview',
+      'nav.inventory':       'Inventory',
+      'nav.branches':        'Branches',
+      'nav.requests':        'Bean Requests',
+      'nav.catalog':         'Coffee Catalog',
+      'nav.orders':          'My Orders',
+      'nav.system':          'System',
+      'nav.system.online':   'System Online',
+      'nav.logout':          'LOGOUT',
+
+      /* ── TOPBAR BADGES ── */
+      'badge.admin':         '<i class="fa fa-shield-alt"></i> Roaster Admin',
+      'badge.cafe':          '<i class="fa fa-mug-hot"></i> Cafe Portal',
+      'badge.user':          'admin',
+
+      /* ── PAGE TITLES ── */
+      'page.overview':       'Overview Dashboard',
+      'page.inventory':      'Inventory Ledger',
+      'page.branches':       'Branch Monitor',
+      'page.requests':       'Bean Requests',
+      'page.catalog':        'Coffee Catalog',
+      'page.orders':         'My Orders',
+
+      /* ── PAGE SUBTITLES ── */
+      'sub.overview':        'Last sync: 2026-02-24 08:30 UTC+3',
+      'sub.inventory':       'All lots · Live shrinkage · FIFO balance',
+      'sub.branches':        'Humidity & temperature sensors · Risk classification',
+      'sub.requests':        'Incoming bean requests · Dispatch queue',
+
+      /* ── STAT LABELS ── */
+      'stat.live.green':     'Live Green Stock',
+      'stat.live.roasted':   'Live Roasted Balance',
+      'stat.optimal.lots':   'OPTIMAL Lots',
+      'stat.pending':        'Pending',
+      'stat.confirmed':      'Confirmed',
+      'stat.dispatched':     'Dispatched',
+      'stat.cancelled':      'Cancelled',
+      'stat.active.branches':'Active Branches',
+      'stat.critical.high':  'Critical / High Risk',
+      'stat.active.lots':    'Active Lots',
+      'stat.in.stock':       'In Stock',
+      'stat.out.of.stock':   'Out of Stock',
+      'stat.your.orders':    'Your Orders',
+      'stat.origins':        'Origins in Catalog',
+      'stat.total.dispatched':'Total Dispatched',
+      'stat.yield.rate':     'Yield Rate',
+      'stat.kg.available':   'kg available',
+      'stat.total.lots':     'of total lots',
+      'stat.awaiting':       'awaiting confirmation',
+      'stat.kg.sent':        'kg roasted sent out',
+      'stat.sponge.adj':     'Sponge-adjusted per branch',
+
+      /* ── SECTION TITLES ── */
+      'section.live.balance':    'Live Balance Formula',
+      'section.env.feed':        'KSA Environmental Live Feed',
+      'section.branch.risk':     'Branch Risk Matrix',
+      'section.recent.requests': 'Recent Bean Requests',
+      'section.shrinkage':       'Inventory Shrinkage Summary — All Branches',
+      'section.sponge':          'Sponge Effect — Dynamic Yield Coefficient Engine',
+      'section.risk.legend':     'Humidity Risk Thresholds',
+      'section.lots.by.branch':  'Lots by Branch',
+      'section.all.requests':    'All Bean Requests',
+      'section.roasting.interests': 'Roasting Interests — Pre-Orders',
+      'section.balance.formula': 'Live Balance Formula',
+      'section.bulk.import':     'Bulk Import',
+      'section.inventory.table': 'Inventory Ledger — All Lots',
+
+      /* ── TABLE HEADERS ── */
+      'th.lot.id':           'Lot ID',
+      'th.origin':           'Origin',
+      'th.branch':           'Branch',
+      'th.purchased.green':  'Purchased Green',
+      'th.purchased.roasted':'Purchased Roasted',
+      'th.dispatched':       'Dispatched',
+      'th.live.green':       'Live Green Balance',
+      'th.live.roasted':     'Live Roasted Balance',
+      'th.status':           'Status',
+      'th.grade':            'Grade',
+      'th.coeff':            '⬡ Yield Coeff.',
+      'th.req.id':           'Req ID',
+      'th.cafe':             'Cafe',
+      'th.lot':              'Lot',
+      'th.qty':              'Qty',
+      'th.notes':            'Notes',
+      'th.submitted':        'Submitted',
+      'th.action':           'Action',
+      'th.roast.date':       'Roast Date',
+      'th.expiry':           'Expiry',
+      'th.humidity':         'Humidity',
+      'th.temp':             'Temp',
+      'th.risk':             'Risk',
+      'th.city':             'City',
+      'th.climate':          'Climate',
+      'th.ref':              'Ref',
+      'th.interest.kg':      'Interest (kg)',
+
+      /* ── BUTTONS / ACTIONS ── */
+      'btn.confirm':         'CONFIRM',
+      'btn.dispatch':        'DISPATCH',
+      'btn.return.stock':    'RETURN TO STOCK',
+      'btn.cancel':          'CANCEL',
+      'btn.send.request':    '<i class="fa fa-paper-plane"></i> &nbsp;SEND REQUEST',
+      'btn.refresh':         'REFRESH',
+      'btn.add.branch':      '<i class="fa fa-plus"></i>&nbsp; ADD NEW BRANCH',
+      'btn.update.sensors':  '<i class="fa fa-sliders"></i> Update Sensors',
+      'btn.save.reading':    '<i class="fa fa-check"></i>&nbsp; SAVE READING',
+      'btn.add.lot':         '<i class="fa fa-plus"></i>&nbsp; LOG NEW LOT',
+      'btn.import.csv':      'BULK IMPORT',
+      'btn.download.tpl':    '<i class="fa fa-download"></i> Download Template',
+      'btn.view.all':        'View all requests →',
+      'btn.request.beans':   '<i class="fa fa-basket-shopping"></i> Request Beans',
+      'btn.request.roasting':'<i class="fa fa-fire"></i> Request Roasting',
+      'btn.recall.confirm':  'INITIATE RECALL',
+      'btn.add.confirm':     '<i class="fa fa-check"></i>&nbsp; CONFIRM ADD',
+
+      /* ── MODAL LABELS ── */
+      'modal.request.title': '<i class="fa fa-basket-shopping"></i> Request Beans',
+      'modal.lot.label':     'Lot',
+      'modal.origin.label':  'Origin',
+      'modal.available':     'Available',
+      'modal.qty.label':     'Quantity (kg)',
+      'modal.notes.label':   'Notes (optional)',
+      'modal.notes.ph':      'Delivery instructions, special requirements...',
+      'modal.add.branch':    '<i class="fa fa-plus-circle"></i> Add New Branch',
+      'modal.update.sensor': 'Update Sensor Reading',
+      'modal.add.lot':       '<i class="fa fa-seedling"></i> Log New Green Lot',
+
+      /* ── FORM LABELS ── */
+      'form.branch.name':    'Branch Name',
+      'form.city':           'City',
+      'form.climate.type':   'Climate Type',
+      'form.humidity':       'Initial Humidity (%)',
+      'form.temperature':    'Initial Temperature (°C)',
+      'form.climate.inland': 'Inland — Arid (Riyadh pattern, low humidity)',
+      'form.climate.coastal':'Coastal — Humid (Jeddah / Dammam pattern)',
+
+      /* ── CLIMATE / BRANCH LABELS ── */
+      'climate.inland':      'Inland',
+      'climate.coastal':     'Coastal',
+      'climate.advisory':    'CLIMATE ADVISORY',
+      'climate.note':        'Risk auto-calculated from humidity. New Branch ID assigned automatically.',
+
+      /* ── RISK LEVELS ── */
+      'risk.low':            'LOW',
+      'risk.moderate':       'MODERATE',
+      'risk.high':           'HIGH',
+      'risk.critical':       'CRITICAL',
+      'risk.low.desc':       'Ideal conditions — standard ventilation',
+      'risk.moderate.desc':  'Monitor weekly',
+      'risk.high.desc':      'Dehumidify within 48h',
+      'risk.critical.desc':  'Immediate action required',
+
+      /* ── LOT CARD LABELS ── */
+      'lot.roasted.balance': 'Roasted Balance',
+      'lot.best.grade':      'Best Lot Grade',
+      'lot.ref':             'Lot Ref',
+      'lot.expires':         'Expires',
+      'lot.live.available':  'live available',
+      'lot.latest.batch':    'latest batch',
+      'lot.in.stock':        'IN STOCK',
+      'lot.out.of.stock':    'OUT OF STOCK',
+
+      /* ── ENVIRONMENT FEED ── */
+      'env.live.badge':      '● LIVE DATA',
+      'env.simulated':       '◌ NO API KEY — SIMULATED',
+      'env.fetching':        'Fetching live sensor data…',
+      'env.next.refresh':    'Next refresh in',
+      'env.refreshed':       'Last refreshed:',
+      'env.source':          'LIVE SENSOR DATA: REFRESHED',
+      'env.temp':            'Temp',
+      'env.wind':            'Wind',
+      'env.sky':             'Sky',
+
+      /* ── SPONGE EFFECT ── */
+      'sponge.active':       '⬡ ACTIVE',
+      'sponge.baseline':     'Baseline Coefficient',
+      'sponge.rule.a':       'Rule A — Coastal',
+      'sponge.rule.b':       'Rule B — Arid',
+      'sponge.baseline.range':'20% ≤ RH ≤ 70%',
+      'sponge.no.adj':       'No adjustment',
+      'sponge.rule.a.desc':  'Moisture absorption → heavier green weight',
+      'sponge.rule.b.desc':  'Evaporation loss → lighter green weight',
+      'sponge.branch.coeffs':'Live Coefficients by Branch',
+      'sponge.portfolio':    'Portfolio Impact',
+
+      /* ── RECALL ── */
+      'recall.title':        '⚠ URGENT RECALL — SFDA AUDIT SHIELD',
+      'recall.instructions': 'Instructions from Roaster:',
+      'recall.acknowledge':  'ACKNOWLEDGE',
+      'recall.btn':          'INITIATE RECALL',
+      'recall.blocked':      'RECALLED — BLOCKED',
+
+      /* ── ORDERS PAGE ── */
+      'orders.empty':        'No orders yet',
+      'orders.sub':          'Your order history',
+      'orders.status':       'Order Status',
+
+      /* ── MISC ── */
+      'misc.kg':             'kg',
+      'misc.rh':             'RH',
+      'misc.system.online':  'System Online',
+      'misc.branches.active':'Branches Active',
+      'misc.view.all':       'View all requests →',
+      'misc.audit.only':     'AUDIT ONLY',
+      'misc.empty.requests': 'No requests yet',
+      'misc.empty.lots':     'No lots yet',
+      'misc.last.checked':   'Checked:',
+      'misc.pre.orders.desc':'Cafes submitted these pre-orders for origins that are currently OUT OF STOCK. Use this to plan your next roast schedule.',
+      'misc.no.preorders':   'No pre-orders yet — cafes will submit Roasting Interest requests when an origin is out of stock.',
+      'misc.sponge.adjusted':'⬡ SPONGE-ADJUSTED',
+    },
+
+    ar: {
+      /* ── BRAND ── */
+      'brand.name':          'قبّان <span style="color:var(--amber)">OS</span>',
+      'brand.sub':           'منصة عمليات التحميص',
+      'brand.tagline':       'منصة عمليات التحميص',
+
+      /* ── LOGIN ── */
+      'login.tab.admin':     '<i class="fa fa-shield-alt"></i> مسؤول المحمصة',
+      'login.tab.cafe':      '<i class="fa fa-mug-hot"></i> بوابة المقهى',
+      'login.username':      'اسم المستخدم',
+      'login.password':      'كلمة المرور',
+      'login.btn':           '<i class="fa fa-arrow-right-to-bracket"></i> &nbsp; دخول النظام',
+      'login.hint':          'المسؤول: <code>admin</code> / <code>qabban2026</code> &nbsp;—&nbsp; المقهى: <code>alnokhba</code> / <code>cafe123</code>',
+      'login.error':         'بيانات اعتماد غير صحيحة. حاول مرة أخرى.',
+      'login.authenticating':'<i class="fa fa-spinner fa-spin"></i> &nbsp; جارٍ المصادقة...',
+
+      /* ── NAV ── */
+      'nav.overview':        'نظرة عامة',
+      'nav.inventory':       'المخزون',
+      'nav.branches':        'الفروع',
+      'nav.requests':        'طلبات البن',
+      'nav.catalog':         'كتالوج القهوة',
+      'nav.orders':          'طلباتي',
+      'nav.system':          'النظام',
+      'nav.system.online':   'النظام متصل',
+      'nav.logout':          'خروج',
+
+      /* ── TOPBAR BADGES ── */
+      'badge.admin':         '<i class="fa fa-shield-alt"></i> مسؤول المحمصة',
+      'badge.cafe':          '<i class="fa fa-mug-hot"></i> بوابة المقهى',
+      'badge.user':          'المسؤول',
+
+      /* ── PAGE TITLES ── */
+      'page.overview':       'لوحة المتابعة',
+      'page.inventory':      'سجل المخزون',
+      'page.branches':       'مراقبة الفروع',
+      'page.requests':       'طلبات البن',
+      'page.catalog':        'كتالوج القهوة',
+      'page.orders':         'طلباتي',
+
+      /* ── PAGE SUBTITLES ── */
+      'sub.overview':        'آخر مزامنة: 2026-02-24 08:30 UTC+3',
+      'sub.inventory':       'جميع الدفعات · التقلص المباشر · رصيد FIFO',
+      'sub.branches':        'حساسات الرطوبة والحرارة · تصنيف المخاطر',
+      'sub.requests':        'طلبات البن الواردة · قائمة الإرسال',
+
+      /* ── STAT LABELS ── */
+      'stat.live.green':     'مخزون البن الأخضر',
+      'stat.live.roasted':   'رصيد المحمص المباشر',
+      'stat.optimal.lots':   'دفعات مثالية',
+      'stat.pending':        'قيد الانتظار',
+      'stat.confirmed':      'مؤكّدة',
+      'stat.dispatched':     'مُرسَلة',
+      'stat.cancelled':      'ملغاة',
+      'stat.active.branches':'الفروع النشطة',
+      'stat.critical.high':  'خطر حرج / مرتفع',
+      'stat.active.lots':    'الدفعات النشطة',
+      'stat.in.stock':       'متوفر',
+      'stat.out.of.stock':   'نفد المخزون',
+      'stat.your.orders':    'طلباتي',
+      'stat.origins':        'أصول في الكتالوج',
+      'stat.total.dispatched':'إجمالي المُرسَل',
+      'stat.yield.rate':     'نسبة الإنتاج',
+      'stat.kg.available':   'كغ متاحة',
+      'stat.total.lots':     'من إجمالي الدفعات',
+      'stat.awaiting':       'بانتظار التأكيد',
+      'stat.kg.sent':        'كغ محمصة مُرسَلة',
+      'stat.sponge.adj':     'معدّل حسب الفرع',
+
+      /* ── SECTION TITLES ── */
+      'section.live.balance':    'معادلة الرصيد المباشر',
+      'section.env.feed':        'البث البيئي المباشر - المملكة',
+      'section.branch.risk':     'مصفوفة مخاطر الفروع',
+      'section.recent.requests': 'أحدث طلبات البن',
+      'section.shrinkage':       'ملخص تقلص المخزون — جميع الفروع',
+      'section.sponge':          'تأثير الإسفنج — محرك معامل الإنتاج الديناميكي',
+      'section.risk.legend':     'عتبات مخاطر الرطوبة',
+      'section.lots.by.branch':  'الدفعات حسب الفرع',
+      'section.all.requests':    'جميع طلبات البن',
+      'section.roasting.interests': 'اهتمامات التحميص — الطلبات المسبقة',
+      'section.balance.formula': 'معادلة الرصيد المباشر',
+      'section.bulk.import':     'الاستيراد الجماعي',
+      'section.inventory.table': 'سجل المخزون — جميع الدفعات',
+
+      /* ── TABLE HEADERS ── */
+      'th.lot.id':           'رقم الدفعة',
+      'th.origin':           'المنشأ',
+      'th.branch':           'الفرع',
+      'th.purchased.green':  'البن الأخضر المشترى',
+      'th.purchased.roasted':'المحمص المشترى',
+      'th.dispatched':       'المُرسَل',
+      'th.live.green':       'رصيد الأخضر المباشر',
+      'th.live.roasted':     'رصيد المحمص المباشر',
+      'th.status':           'الحالة',
+      'th.grade':            'التقييم',
+      'th.coeff':            '⬡ معامل الإنتاج',
+      'th.req.id':           'رقم الطلب',
+      'th.cafe':             'المقهى',
+      'th.lot':              'الدفعة',
+      'th.qty':              'الكمية',
+      'th.notes':            'ملاحظات',
+      'th.submitted':        'تاريخ الطلب',
+      'th.action':           'إجراء',
+      'th.roast.date':       'تاريخ التحميص',
+      'th.expiry':           'تاريخ الانتهاء',
+      'th.humidity':         'الرطوبة',
+      'th.temp':             'الحرارة',
+      'th.risk':             'المخاطر',
+      'th.city':             'المدينة',
+      'th.climate':          'المناخ',
+      'th.ref':              'المرجع',
+      'th.interest.kg':      'الكمية المطلوبة (كغ)',
+
+      /* ── BUTTONS / ACTIONS ── */
+      'btn.confirm':         'تأكيد',
+      'btn.dispatch':        'إرسال',
+      'btn.return.stock':    'إعادة للمخزون',
+      'btn.cancel':          'إلغاء',
+      'btn.send.request':    '<i class="fa fa-paper-plane"></i> &nbsp;إرسال الطلب',
+      'btn.refresh':         'تحديث',
+      'btn.add.branch':      '<i class="fa fa-plus"></i>&nbsp; إضافة فرع',
+      'btn.update.sensors':  '<i class="fa fa-sliders"></i> تحديث الحساسات',
+      'btn.save.reading':    '<i class="fa fa-check"></i>&nbsp; حفظ القراءة',
+      'btn.add.lot':         '<i class="fa fa-plus"></i>&nbsp; تسجيل دفعة جديدة',
+      'btn.import.csv':      'استيراد جماعي',
+      'btn.download.tpl':    '<i class="fa fa-download"></i> تحميل النموذج',
+      'btn.view.all':        'عرض جميع الطلبات ←',
+      'btn.request.beans':   '<i class="fa fa-basket-shopping"></i> طلب البن',
+      'btn.request.roasting':'<i class="fa fa-fire"></i> طلب تحميص',
+      'btn.recall.confirm':  'بدء الاستدعاء',
+      'btn.add.confirm':     '<i class="fa fa-check"></i>&nbsp; تأكيد الإضافة',
+
+      /* ── MODAL LABELS ── */
+      'modal.request.title': '<i class="fa fa-basket-shopping"></i> طلب البن',
+      'modal.lot.label':     'الدفعة',
+      'modal.origin.label':  'المنشأ',
+      'modal.available':     'المتاح',
+      'modal.qty.label':     'الكمية (كغ)',
+      'modal.notes.label':   'ملاحظات (اختياري)',
+      'modal.notes.ph':      'تعليمات التسليم، متطلبات خاصة...',
+      'modal.add.branch':    '<i class="fa fa-plus-circle"></i> إضافة فرع جديد',
+      'modal.update.sensor': 'تحديث قراءة الحساسات',
+      'modal.add.lot':       '<i class="fa fa-seedling"></i> تسجيل دفعة خضراء جديدة',
+
+      /* ── FORM LABELS ── */
+      'form.branch.name':    'اسم الفرع',
+      'form.city':           'المدينة',
+      'form.climate.type':   'نوع المناخ',
+      'form.humidity':       'الرطوبة الابتدائية (%)',
+      'form.temperature':    'الحرارة الابتدائية (°م)',
+      'form.climate.inland': 'داخلي — جاف (نمط الرياض، رطوبة منخفضة)',
+      'form.climate.coastal':'ساحلي — رطب (نمط جدة / الدمام)',
+
+      /* ── CLIMATE / BRANCH LABELS ── */
+      'climate.inland':      'داخلي',
+      'climate.coastal':     'ساحلي',
+      'climate.advisory':    'التوصية المناخية',
+      'climate.note':        'تُحسَب درجة المخاطر تلقائياً من الرطوبة. يُعيَّن رقم معرّف الفرع تلقائياً.',
+
+      /* ── RISK LEVELS ── */
+      'risk.low':            'منخفض',
+      'risk.moderate':       'متوسط',
+      'risk.high':           'مرتفع',
+      'risk.critical':       'حرج',
+      'risk.low.desc':       'ظروف مثالية — تهوية قياسية',
+      'risk.moderate.desc':  'مراقبة أسبوعية',
+      'risk.high.desc':      'إزالة رطوبة خلال 48 ساعة',
+      'risk.critical.desc':  'إجراء فوري مطلوب',
+
+      /* ── LOT CARD LABELS ── */
+      'lot.roasted.balance': 'رصيد المحمص',
+      'lot.best.grade':      'أعلى تقييم للدفعة',
+      'lot.ref':             'مرجع الدفعة',
+      'lot.expires':         'ينتهي في',
+      'lot.live.available':  'متاح حالياً',
+      'lot.latest.batch':    'آخر دفعة',
+      'lot.in.stock':        'متوفر',
+      'lot.out.of.stock':    'نفد المخزون',
+
+      /* ── ENVIRONMENT FEED ── */
+      'env.live.badge':      '● بيانات مباشرة',
+      'env.simulated':       '◌ لا يوجد مفتاح API — محاكاة',
+      'env.fetching':        'جارٍ جلب بيانات الحساسات المباشرة…',
+      'env.next.refresh':    'التحديث القادم خلال',
+      'env.refreshed':       'آخر تحديث:',
+      'env.source':          'بيانات حساس مباشرة: مُحدَّثة',
+      'env.temp':            'الحرارة',
+      'env.wind':            'الرياح',
+      'env.sky':             'السماء',
+
+      /* ── SPONGE EFFECT ── */
+      'sponge.active':       '⬡ نشط',
+      'sponge.baseline':     'المعامل الأساسي',
+      'sponge.rule.a':       'القاعدة أ — ساحلي',
+      'sponge.rule.b':       'القاعدة ب — جاف',
+      'sponge.baseline.range':'20% ≤ رطوبة ≤ 70%',
+      'sponge.no.adj':       'لا تعديل',
+      'sponge.rule.a.desc':  'امتصاص الرطوبة ← وزن أخضر أثقل',
+      'sponge.rule.b.desc':  'خسارة التبخر ← وزن أخضر أخف',
+      'sponge.branch.coeffs':'المعاملات الحية حسب الفرع',
+      'sponge.portfolio':    'التأثير الإجمالي',
+
+      /* ── RECALL ── */
+      'recall.title':        '⚠ استدعاء عاجل — درع تدقيق SFDA',
+      'recall.instructions': 'تعليمات من المحمصة:',
+      'recall.acknowledge':  'تم الاستلام',
+      'recall.btn':          'بدء الاستدعاء',
+      'recall.blocked':      'مستدعى — محظور',
+
+      /* ── ORDERS PAGE ── */
+      'orders.empty':        'لا توجد طلبات بعد',
+      'orders.sub':          'سجل طلباتك',
+      'orders.status':       'حالة الطلب',
+
+      /* ── MISC ── */
+      'misc.kg':             'كغ',
+      'misc.rh':             'رطوبة',
+      'misc.system.online':  'النظام متصل',
+      'misc.branches.active':'فروع نشطة',
+      'misc.view.all':       'عرض جميع الطلبات ←',
+      'misc.audit.only':     'للتدقيق فقط',
+      'misc.empty.requests': 'لا توجد طلبات بعد',
+      'misc.empty.lots':     'لا توجد دفعات بعد',
+      'misc.last.checked':   'آخر فحص:',
+      'misc.pre.orders.desc':'قدّمت المقاهي هذه الطلبات المسبقة للأصول غير المتوفرة. استخدمها لتخطيط جدول التحميص القادم.',
+      'misc.no.preorders':   'لا توجد طلبات مسبقة بعد — ستُرسِل المقاهي طلبات اهتمام التحميص عند نفاد المخزون.',
+      'misc.sponge.adjusted':'⬡ معدَّل بتأثير الإسفنج',
+    }
+  };
+
+  /* ─── Core engine ─────────────────────────────────────────────── */
+  var _lang = (localStorage.getItem('qabban_lang') || 'en');
+
+  function t(key) {
+    var dict = I18N[_lang] || I18N['en'];
+    return dict[key] !== undefined ? dict[key] : (I18N['en'][key] || key);
+  }
+
+  function applyLang(lang) {
+    _lang = lang;
+    localStorage.setItem('qabban_lang', lang);
+
+    /* 1. html dir + lang attributes */
+    var html = document.documentElement;
+    html.setAttribute('lang', lang);
+    html.setAttribute('dir', lang === 'ar' ? 'rtl' : 'ltr');
+
+    /* 2. Swap all [data-i18n] elements */
+    document.querySelectorAll('[data-i18n]').forEach(function(el) {
+      var key = el.getAttribute('data-i18n');
+      var val = t(key);
+      if (val !== undefined) el.innerHTML = val;
+    });
+
+    /* 3. Swap all [data-i18n-ph] placeholders */
+    document.querySelectorAll('[data-i18n-ph]').forEach(function(el) {
+      var key = el.getAttribute('data-i18n-ph');
+      var val = t(key);
+      if (val !== undefined) el.placeholder = val;
+    });
+
+    /* 4. Update toggle pill UI */
+    var enOpt = document.getElementById('lang-opt-en');
+    var arOpt = document.getElementById('lang-opt-ar');
+    if (enOpt) enOpt.classList.toggle('active', lang === 'en');
+    if (arOpt) arOpt.classList.toggle('active', lang === 'ar');
+
+    /* 5. Arabic font on body */
+    if (lang === 'ar') {
+      document.body.style.fontFamily = "'IBM Plex Arabic', 'Noto Sans Arabic', sans-serif";
+    } else {
+      document.body.style.fontFamily = '';
+    }
+  }
+
+  function toggleLang() {
+    applyLang(_lang === 'en' ? 'ar' : 'en');
+  }
+
+  /* Run on every page load */
+  document.addEventListener('DOMContentLoaded', function() {
+    applyLang(_lang);
+  });
+  </script>
 </head>
 <body>
 ${body}
+
+<!-- ── LANGUAGE TOGGLE PILL ── -->
+<div id="langToggle" onclick="toggleLang()" title="Switch language / تغيير اللغة">
+  <div class="lang-globe">
+    <i class="fa fa-globe"></i>
+  </div>
+  <div class="lang-globe-divider"></div>
+  <div class="lang-opt" id="lang-opt-en">
+    <span>EN</span>
+  </div>
+  <div class="lang-divider"></div>
+  <div class="lang-opt" id="lang-opt-ar">
+    <span>ع</span>
+  </div>
+</div>
+
 </body>
 </html>`
 
@@ -924,16 +1580,16 @@ app.get('/', (c) => {
             height="130"
           />
         </div>
-        <div class="login-brand-name">QABBAN <span>OS</span></div>
-        <div class="login-brand-sub">Roast Operations Platform</div>
+        <div class="login-brand-name" data-i18n="brand.name">QABBAN <span>OS</span></div>
+        <div class="login-brand-sub" data-i18n="brand.sub">Roast Operations Platform</div>
         <div class="login-brand-rule"></div>
       </div>
 
       <div class="login-tabs">
-        <button class="login-tab active" id="tabAdmin" onclick="switchTab('admin')">
+        <button class="login-tab active" id="tabAdmin" onclick="switchTab('admin')" data-i18n="login.tab.admin">
           <i class="fa fa-shield-alt"></i> Roaster Admin
         </button>
-        <button class="login-tab" id="tabCafe" onclick="switchTab('cafe')">
+        <button class="login-tab" id="tabCafe" onclick="switchTab('cafe')" data-i18n="login.tab.cafe">
           <i class="fa fa-mug-hot"></i> Cafe Portal
         </button>
       </div>
@@ -944,22 +1600,22 @@ app.get('/', (c) => {
       </div>
 
       <div class="form-group">
-        <label class="form-label" for="username">Username</label>
+        <label class="form-label" for="username" data-i18n="login.username">Username</label>
         <input class="form-input" type="text" id="username"
                placeholder="admin" autocomplete="username" autocapitalize="none"/>
       </div>
 
       <div class="form-group">
-        <label class="form-label" for="password">Password</label>
+        <label class="form-label" for="password" data-i18n="login.password">Password</label>
         <input class="form-input" type="password" id="password"
                placeholder="••••••••" autocomplete="current-password"/>
       </div>
 
-      <button class="btn-primary" id="accessBtn" onclick="handleLogin()">
+      <button class="btn-primary" id="accessBtn" onclick="handleLogin()" data-i18n="login.btn">
         <i class="fa fa-arrow-right-to-bracket"></i> &nbsp; ACCESS SYSTEM
       </button>
 
-      <div class="login-hint">
+      <div class="login-hint" data-i18n="login.hint">
         Admin: <code>admin</code> / <code>qabban2026</code>
         &nbsp;&mdash;&nbsp;
         Cafe: <code>alnokhba</code> / <code>cafe123</code>
@@ -1012,10 +1668,10 @@ app.get('/', (c) => {
         } else {
           /* wrong — show error, re-enable button */
           document.getElementById('loginErrorMsg').textContent =
-            'Invalid credentials. Please try again.';
+            t('login.error');
           errEl.style.display = 'flex';
           btn.disabled = false;
-          btn.innerHTML = '<i class="fa fa-arrow-right-to-bracket"></i> &nbsp; ACCESS SYSTEM';
+          btn.innerHTML = t('login.btn');
           document.getElementById('password').value = '';
           document.getElementById('password').focus();
         }
@@ -1032,10 +1688,10 @@ app.get('/', (c) => {
 
 function adminLayout(pageTitle: string, activeNav: string, content: string, pendingCount = 0) {
   const navLinks = [
-    { href: '/admin',           icon: 'fa-gauge',         label: 'Overview',      id: 'overview'   },
-    { href: '/admin/inventory', icon: 'fa-boxes-stacked', label: 'Inventory',     id: 'inventory'  },
-    { href: '/admin/branches',  icon: 'fa-building',      label: 'Branches',      id: 'branches'   },
-    { href: '/admin/requests',  icon: 'fa-bell',          label: 'Bean Requests', id: 'requests'   },
+    { href: '/admin',           icon: 'fa-gauge',         label: 'Overview',      id: 'overview',   i18n: 'nav.overview'  },
+    { href: '/admin/inventory', icon: 'fa-boxes-stacked', label: 'Inventory',     id: 'inventory',  i18n: 'nav.inventory' },
+    { href: '/admin/branches',  icon: 'fa-building',      label: 'Branches',      id: 'branches',   i18n: 'nav.branches'  },
+    { href: '/admin/requests',  icon: 'fa-bell',          label: 'Bean Requests', id: 'requests',   i18n: 'nav.requests'  },
   ]
   const body = `
   <header class="topbar">
@@ -1043,44 +1699,44 @@ function adminLayout(pageTitle: string, activeNav: string, content: string, pend
       <div class="topbar-logo">
         <img src="/static/qabban-logo-48.png" alt="Qabban OS" width="36" height="36"/>
       </div>
-      <span class="topbar-title">QABBAN <span>OS</span></span>
+      <span class="topbar-title" data-i18n="brand.name">QABBAN <span>OS</span></span>
     </div>
     <div class="topbar-right">
       <a href="/admin/requests" class="notif-btn" title="Bean Requests">
         <i class="fa fa-bell"></i>
         ${pendingCount > 0 ? `<span class="notif-count">${pendingCount}</span>` : ''}
       </a>
-      <span class="topbar-badge badge-admin"><i class="fa fa-shield-alt"></i> Roaster Admin</span>
-      <span class="topbar-user"><i class="fa fa-user-circle"></i> admin</span>
-      <a href="/"><button class="btn-logout">LOGOUT</button></a>
+      <span class="topbar-badge badge-admin" data-i18n="badge.admin"><i class="fa fa-shield-alt"></i> Roaster Admin</span>
+      <span class="topbar-user"><i class="fa fa-user-circle"></i> <span data-i18n="badge.user">admin</span></span>
+      <a href="/"><button class="btn-logout" data-i18n="nav.logout">LOGOUT</button></a>
     </div>
   </header>
   <div class="layout">
     <nav class="sidebar">
       <div class="sidebar-section">
-        <div class="sidebar-label">Navigation</div>
+        <div class="sidebar-label" data-i18n="nav.system">Navigation</div>
         ${navLinks.map(l => `
         <a href="${l.href}" class="sidebar-link ${activeNav === l.id ? 'active' : ''}">
-          <i class="fa ${l.icon}"></i> ${l.label}
+          <i class="fa ${l.icon}"></i> <span data-i18n="${l.i18n}">${l.label}</span>
           ${l.id === 'requests' && pendingCount > 0
             ? `<span style="margin-left:auto;background:var(--red);color:white;font-size:9px;padding:1px 5px;border-radius:9px;font-family:var(--font-mono)">${pendingCount}</span>`
             : ''}
         </a>`).join('')}
       </div>
       <div class="sidebar-section">
-        <div class="sidebar-label">System</div>
+        <div class="sidebar-label" data-i18n="nav.system">System</div>
         <div class="sidebar-link" style="font-size:11px;color:var(--text-muted)">
-          <i class="fa fa-circle" style="color:var(--green);font-size:8px"></i> System Online
+          <i class="fa fa-circle" style="color:var(--green);font-size:8px"></i> <span data-i18n="misc.system.online">System Online</span>
         </div>
         <div class="sidebar-link" style="font-size:11px;color:var(--text-muted)">
-          <i class="fa fa-database"></i> ${branches.length} Branches Active
+          <i class="fa fa-database"></i> ${branches.length} <span data-i18n="misc.branches.active">Branches Active</span>
         </div>
       </div>
     </nav>
     <main class="main">
       <div class="page-header">
         <div class="page-title"><span>// </span>${pageTitle}</div>
-        <div class="page-sub">Last sync: 2026-02-24 08:30 UTC+3</div>
+        <div class="page-sub" data-i18n="sub.overview">Last sync: 2026-02-24 08:30 UTC+3</div>
       </div>
       ${content}
     </main>
@@ -1089,7 +1745,7 @@ function adminLayout(pageTitle: string, activeNav: string, content: string, pend
     <div class="mobile-nav-items">
       ${navLinks.map(l => `
       <a href="${l.href}" class="mobile-nav-item ${activeNav === l.id ? 'active' : ''}">
-        <i class="fa ${l.icon}"></i> ${l.label}
+        <i class="fa ${l.icon}"></i> <span data-i18n="${l.i18n}">${l.label}</span>
       </a>`).join('')}
     </div>
   </nav>`
@@ -1099,8 +1755,8 @@ function adminLayout(pageTitle: string, activeNav: string, content: string, pend
 function cafeLayout(pageTitle: string, activeNav: string, content: string, clientInfo: { name: string; tier: string; branch: string; id: string }) {
   const cid = clientInfo.id  // e.g. "CAF-001"
   const navLinks = [
-    { href: `/cafe?cid=${cid}`,        icon: 'fa-mug-hot',           label: 'Coffee Catalog', id: 'lots'   },
-    { href: `/cafe/orders?cid=${cid}`, icon: 'fa-clock-rotate-left', label: 'My Orders',      id: 'orders' },
+    { href: `/cafe?cid=${cid}`,        icon: 'fa-mug-hot',           label: 'Coffee Catalog', id: 'lots',   i18n: 'nav.catalog' },
+    { href: `/cafe/orders?cid=${cid}`, icon: 'fa-clock-rotate-left', label: 'My Orders',      id: 'orders', i18n: 'nav.orders'  },
   ]
   const tierColor = clientInfo.tier === 'Gold' ? 'var(--amber)' : clientInfo.tier === 'Silver' ? '#94a3b8' : '#cd7f32'
   const body = `
@@ -1109,28 +1765,28 @@ function cafeLayout(pageTitle: string, activeNav: string, content: string, clien
       <div class="topbar-logo">
         <img src="/static/qabban-logo-48.png" alt="Qabban OS" width="36" height="36"/>
       </div>
-      <span class="topbar-title">QABBAN <span>OS</span></span>
+      <span class="topbar-title" data-i18n="brand.name">QABBAN <span>OS</span></span>
     </div>
     <div class="topbar-right">
       <span style="font-family:var(--font-mono);font-size:11px;color:${tierColor};padding:3px 8px;border:1px solid ${tierColor}40;border-radius:2px">
         ★ ${clientInfo.tier}
       </span>
-      <span class="topbar-badge badge-cafe"><i class="fa fa-mug-hot"></i> Cafe Portal</span>
+      <span class="topbar-badge badge-cafe" data-i18n="badge.cafe"><i class="fa fa-mug-hot"></i> Cafe Portal</span>
       <span class="topbar-user"><i class="fa fa-store"></i> ${clientInfo.name}</span>
-      <a href="/"><button class="btn-logout">LOGOUT</button></a>
+      <a href="/"><button class="btn-logout" data-i18n="nav.logout">LOGOUT</button></a>
     </div>
   </header>
   <div class="layout">
     <nav class="sidebar">
       <div class="sidebar-section">
-        <div class="sidebar-label">Cafe Portal</div>
+        <div class="sidebar-label" data-i18n="badge.cafe">Cafe Portal</div>
         ${navLinks.map(l => `
         <a href="${l.href}" class="sidebar-link ${activeNav === l.id ? 'active' : ''}">
-          <i class="fa ${l.icon}"></i> ${l.label}
+          <i class="fa ${l.icon}"></i> <span data-i18n="${l.i18n}">${l.label}</span>
         </a>`).join('')}
       </div>
       <div class="sidebar-section">
-        <div class="sidebar-label">Account</div>
+        <div class="sidebar-label" data-i18n="nav.overview">Account</div>
         <div style="padding:12px 20px">
           <div style="font-size:12px;font-weight:600;color:var(--text-pri)">${clientInfo.name}</div>
           <div style="font-size:11px;color:var(--text-muted);margin-top:2px">${clientInfo.branch} Branch</div>
@@ -1151,7 +1807,7 @@ function cafeLayout(pageTitle: string, activeNav: string, content: string, clien
     <div class="mobile-nav-items">
       ${navLinks.map(l => `
       <a href="${l.href}" class="mobile-nav-item ${activeNav === l.id ? 'active' : ''}">
-        <i class="fa ${l.icon}"></i> ${l.label}
+        <i class="fa ${l.icon}"></i> <span data-i18n="${l.i18n}">${l.label}</span>
       </a>`).join('')}
     </div>
   </nav>
@@ -1159,22 +1815,22 @@ function cafeLayout(pageTitle: string, activeNav: string, content: string, clien
   <!-- Request Beans Modal -->
   <div class="modal-overlay" id="requestModal">
     <div class="modal">
-      <div class="modal-title"><i class="fa fa-basket-shopping"></i> Request Beans</div>
+      <div class="modal-title" data-i18n="modal.request.title"><i class="fa fa-basket-shopping"></i> Request Beans</div>
       <div id="modalContent"></div>
       <form method="POST" action="/cafe/request" id="requestForm">
         <input type="hidden" name="cafeId" value="${cid}"/>
         <input type="hidden" name="lotId" id="modalLotId"/>
         <div class="form-group" style="margin-bottom:16px">
-          <label class="form-label">Quantity (kg)</label>
-          <input class="form-input" type="number" name="quantity" id="modalQty" min="1" max="500" placeholder="Enter kg" required/>
+          <label class="form-label" data-i18n="modal.qty.label">Quantity (kg)</label>
+          <input class="form-input" type="number" name="quantity" id="modalQty" min="1" max="500" data-i18n-ph="modal.qty.label" placeholder="Enter kg" required/>
         </div>
         <div class="form-group" style="margin-bottom:16px">
-          <label class="form-label">Notes (optional)</label>
-          <textarea class="form-textarea" name="notes" placeholder="Delivery instructions, special requirements..."></textarea>
+          <label class="form-label" data-i18n="modal.notes.label">Notes (optional)</label>
+          <textarea class="form-textarea" name="notes" data-i18n-ph="modal.notes.ph" placeholder="Delivery instructions, special requirements..."></textarea>
         </div>
         <div class="modal-actions">
-          <button type="button" class="btn-cancel" onclick="closeModal()">CANCEL</button>
-          <button type="submit" class="btn-confirm"><i class="fa fa-paper-plane"></i> &nbsp;SEND REQUEST</button>
+          <button type="button" class="btn-cancel" onclick="closeModal()" data-i18n="btn.cancel">CANCEL</button>
+          <button type="submit" class="btn-confirm" data-i18n="btn.send.request"><i class="fa fa-paper-plane"></i> &nbsp;SEND REQUEST</button>
         </div>
       </form>
     </div>
@@ -1272,36 +1928,36 @@ app.get('/admin', (c) => {
 
   <div class="stat-grid" style="margin-bottom:28px">
     <div class="stat-card">
-      <div class="stat-label">Live Green Stock</div>
+      <div class="stat-label" data-i18n="stat.live.green">Live Green Stock</div>
       <div class="stat-value">${bal.liveGreenKg.toLocaleString()}</div>
-      <div class="stat-unit">kg available</div>
+      <div class="stat-unit" data-i18n="stat.kg.available">kg available</div>
     </div>
     <div class="stat-card" style="border-color:rgba(245,158,11,0.35);position:relative;overflow:hidden">
       <div style="position:absolute;top:0;right:0;font-family:var(--font-mono);font-size:9px;padding:2px 8px;background:rgba(245,158,11,0.1);color:var(--amber);border-left:1px solid rgba(245,158,11,0.25);border-bottom:1px solid rgba(245,158,11,0.25);border-radius:0 0 0 4px;letter-spacing:.4px">
         ⬡ SPONGE
       </div>
-      <div class="stat-label">Live Roasted Balance</div>
+      <div class="stat-label" data-i18n="stat.live.roasted">Live Roasted Balance</div>
       <div class="stat-value">${bal.liveRoastedKg.toLocaleString()}</div>
       <div class="stat-unit">kg · <span style="color:${spongeAdjColor};font-family:var(--font-mono)">${spongeAdjSign}${spongeAdj} kg sponge adj.</span></div>
     </div>
     <div class="stat-card">
-      <div class="stat-label">OPTIMAL Lots</div>
+      <div class="stat-label" data-i18n="stat.optimal.lots">OPTIMAL Lots</div>
       <div class="stat-value">${optimalLots}</div>
-      <div class="stat-unit">of ${coffeeLots.length} total lots</div>
+      <div class="stat-unit">${coffeeLots.length} <span data-i18n="stat.total.lots">of total lots</span></div>
     </div>
     <div class="stat-card">
-      <div class="stat-label">Pending Orders</div>
+      <div class="stat-label" data-i18n="stat.pending">Pending Orders</div>
       <div class="stat-value" style="color:${pendingCount > 0 ? 'var(--red)' : 'var(--green)'}">
         ${pendingCount}
       </div>
-      <div class="stat-unit">awaiting confirmation</div>
+      <div class="stat-unit" data-i18n="stat.awaiting">awaiting confirmation</div>
     </div>
   </div>
 
   <!-- Live balance breakdown banner -->
   <div style="background:var(--bg-2);border:1px solid var(--border);border-left:3px solid var(--amber);border-radius:var(--radius);padding:12px 16px;margin-bottom:16px;display:flex;flex-wrap:wrap;gap:24px;align-items:center">
     <div style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted);letter-spacing:1px;text-transform:uppercase;flex-shrink:0">
-      <i class="fa fa-scale-balanced" style="color:var(--amber)"></i>&nbsp; Live Balance Formula
+      <i class="fa fa-scale-balanced" style="color:var(--amber)"></i>&nbsp; <span data-i18n="section.live.balance">Live Balance Formula</span>
     </div>
     <div style="display:flex;flex-wrap:wrap;gap:20px;font-family:var(--font-mono);font-size:12px">
       <span>
@@ -1325,8 +1981,8 @@ app.get('/admin', (c) => {
   <div class="card" style="margin-bottom:28px;border-color:rgba(245,158,11,0.30);background:linear-gradient(135deg,var(--bg-1) 0%,rgba(245,158,11,0.03) 100%)">
     <div class="card-title">
       <i class="fa fa-droplet" style="color:var(--amber)"></i>
-      Sponge Effect — Dynamic Yield Coefficient Engine
-      <span style="font-family:var(--font-mono);font-size:9px;padding:2px 8px;border-radius:2px;background:rgba(245,158,11,0.10);color:var(--amber);border:1px solid rgba(245,158,11,0.30);letter-spacing:.5px">
+      <span data-i18n="section.sponge">Sponge Effect — Dynamic Yield Coefficient Engine</span>
+      <span style="font-family:var(--font-mono);font-size:9px;padding:2px 8px;border-radius:2px;background:rgba(245,158,11,0.10);color:var(--amber);border:1px solid rgba(245,158,11,0.30);letter-spacing:.5px" data-i18n="sponge.active">
         ⬡ ACTIVE
       </span>
     </div>
@@ -1334,29 +1990,29 @@ app.get('/admin', (c) => {
     <!-- Engine explanation row -->
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:20px">
       <div style="padding:14px;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius-lg);border-top:2px solid var(--text-muted)">
-        <div style="font-family:var(--font-mono);font-size:9px;color:var(--text-muted);letter-spacing:1.2px;text-transform:uppercase;margin-bottom:8px">Baseline Coefficient</div>
+        <div style="font-family:var(--font-mono);font-size:9px;color:var(--text-muted);letter-spacing:1.2px;text-transform:uppercase;margin-bottom:8px" data-i18n="sponge.baseline">Baseline Coefficient</div>
         <div style="font-family:var(--font-mono);font-size:28px;font-weight:700;color:var(--text-sec)">82.0<span style="font-size:14px">%</span></div>
-        <div style="font-size:10px;color:var(--text-muted);margin-top:4px">20% ≤ RH ≤ 70%</div>
-        <div style="font-size:10px;color:var(--text-muted);margin-top:2px">No adjustment</div>
+        <div style="font-size:10px;color:var(--text-muted);margin-top:4px" data-i18n="sponge.baseline.range">20% ≤ RH ≤ 70%</div>
+        <div style="font-size:10px;color:var(--text-muted);margin-top:2px" data-i18n="sponge.no.adj">No adjustment</div>
       </div>
       <div style="padding:14px;background:var(--bg-2);border:1px solid rgba(56,189,248,0.25);border-radius:var(--radius-lg);border-top:2px solid #38bdf8">
-        <div style="font-family:var(--font-mono);font-size:9px;color:#38bdf8;letter-spacing:1.2px;text-transform:uppercase;margin-bottom:8px">Rule A — Coastal</div>
+        <div style="font-family:var(--font-mono);font-size:9px;color:#38bdf8;letter-spacing:1.2px;text-transform:uppercase;margin-bottom:8px" data-i18n="sponge.rule.a">Rule A — Coastal</div>
         <div style="font-family:var(--font-mono);font-size:28px;font-weight:700;color:#38bdf8">82.5<span style="font-size:14px">%</span></div>
         <div style="font-size:10px;color:var(--text-muted);margin-top:4px">RH &gt; 70% · +0.5%</div>
-        <div style="font-size:10px;color:#38bdf8;margin-top:2px">Moisture absorption → heavier green weight</div>
+        <div style="font-size:10px;color:#38bdf8;margin-top:2px" data-i18n="sponge.rule.a.desc">Moisture absorption → heavier green weight</div>
       </div>
       <div style="padding:14px;background:var(--bg-2);border:1px solid rgba(251,146,60,0.25);border-radius:var(--radius-lg);border-top:2px solid #fb923c">
-        <div style="font-family:var(--font-mono);font-size:9px;color:#fb923c;letter-spacing:1.2px;text-transform:uppercase;margin-bottom:8px">Rule B — Arid</div>
+        <div style="font-family:var(--font-mono);font-size:9px;color:#fb923c;letter-spacing:1.2px;text-transform:uppercase;margin-bottom:8px" data-i18n="sponge.rule.b">Rule B — Arid</div>
         <div style="font-family:var(--font-mono);font-size:28px;font-weight:700;color:#fb923c">81.7<span style="font-size:14px">%</span></div>
         <div style="font-size:10px;color:var(--text-muted);margin-top:4px">RH &lt; 20% · −0.3%</div>
-        <div style="font-size:10px;color:#fb923c;margin-top:2px">Evaporation loss → lighter green weight</div>
+        <div style="font-size:10px;color:#fb923c;margin-top:2px" data-i18n="sponge.rule.b.desc">Evaporation loss → lighter green weight</div>
       </div>
     </div>
 
     <!-- Per-branch coefficient table -->
     <div style="margin-bottom:16px">
       <div style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:10px;display:flex;align-items:center;gap:8px">
-        <i class="fa fa-building" style="color:var(--amber)"></i> Live Coefficients by Branch
+        <i class="fa fa-building" style="color:var(--amber)"></i> <span data-i18n="sponge.branch.coeffs">Live Coefficients by Branch</span>
       </div>
       <div style="display:grid;gap:8px">
         ${spongeBranches.map(b => {
