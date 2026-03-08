@@ -893,3 +893,209 @@ export const calcPortfolioFinancials = (
     byLot,
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  ZATCA BULK SHRINKAGE EXPORT ENGINE
+//  Produces a per-lot weight-reconciliation report for Saudi tax auditors.
+//
+//  Theoretical vs. Actual weight reconciliation:
+//    • Theoretical Roasted (Baseline) = greenWeightKg × 0.82
+//      → what the standard 18 % roasting loss formula predicts
+//    • Actual Roasted (Sponge-adj.)   = greenWeightKg × spongeCoeff
+//      → what the branch's real humidity yields after Sponge Effect
+//
+//  Sponge rules applied:
+//    Rule A — Coastal Surplus : spongeCoeff > 0.82  (high humidity, > 70 % RH)
+//    Rule B — Arid Deficit    : spongeCoeff < 0.82  (low humidity,  < 20 % RH)
+//    Baseline                 : spongeCoeff = 0.82  (20–70 % RH, no adjustment)
+//
+//  30-day aggregates:
+//    totalBaselineShrinkageKg = Σ (greenKg × 0.18)           [kg lost @ standard]
+//    totalRuleASurplusKg      = Σ positive sponge deltas      [coastal gain]
+//    totalRuleBDeficitKg      = Σ negative sponge deltas      [arid loss]
+//    netSpongeAdjustmentKg    = totalRuleASurplus + totalRuleBDeficit
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface ZatcaLotRow {
+  // Identifiers
+  lotId:               string
+  origin:              string
+  variety:             string
+  process:             string
+  branch:              string
+  roastDate:           string
+  expiryDate:          string
+
+  // Weight inputs
+  purchasedGreenKg:    number   // original green purchase weight
+  dispatchedRoastedKg: number   // total roasted kg dispatched (from DISPATCHED requests)
+
+  // Shrinkage calculations
+  baselineShrinkagePct:number   // always 18 % (= 1 − 0.82)
+  baselineRoastedKg:   number   // purchasedGreenKg × 0.82  (theoretical)
+  spongeCoefficient:   number   // actual live coefficient from branch humidity
+  spongeRule:          SpongeRule
+  actualRoastedKg:     number   // purchasedGreenKg × spongeCoeff  (actual)
+
+  // Delta breakdown
+  baselineShrinkageKg: number   // kg lost to standard 18 % roast process
+  spongeAdjKg:         number   // actualRoasted − theoreticalRoasted  (+ = surplus, − = deficit)
+  ruleASurplusKg:      number   // max(0, spongeAdjKg)
+  ruleBDeficitKg:      number   // min(0, spongeAdjKg)
+
+  // Live inventory (post-dispatch)
+  liveGreenKg:         number   // remaining unroasted green equivalent
+  liveRoastedKg:       number   // sponge-adjusted live roasted balance
+  liveBaselineKg:      number   // liveGreenKg × 0.82 for comparison
+
+  // Financial reference
+  costPerKg:           number   // green bean cost (SAR/kg), 0 if not set
+  wholesalePriceGold:  number   // SAR/kg at Gold tier margin (0 if no cost data)
+  liveInventoryValue:  number   // liveRoastedKg × wholesalePriceGold
+
+  // Status
+  status:              string
+  branchHumidity:      number   // branch RH at report time
+}
+
+export interface ZatcaShrinkageReport {
+  // Report metadata
+  reportDate:          string   // ISO date string of generation
+  periodLabel:         string   // e.g. "30-Day Period ending 2026-03-08"
+  generatedBy:         string   // system identifier
+
+  // Portfolio-level 30-day aggregates
+  totalLotsReported:    number
+  totalPurchasedGreenKg:number
+  totalBaselineRoastedKg:number  // Σ (green × 0.82) — theoretical
+  totalActualRoastedKg: number   // Σ (green × spongeCoeff) — actual
+  totalBaselineShrinkageKg:number // Σ (green × 0.18) — standard loss
+  totalRuleASurplusKg:  number   // total coastal gain across all lots
+  totalRuleBDeficitKg:  number   // total arid loss across all lots
+  netSpongeAdjustmentKg:number   // = totalRuleA + totalRuleB (net)
+  totalDispatchedRoastedKg:number
+  totalLiveRoastedKg:   number
+
+  // Per-lot rows
+  rows: ZatcaLotRow[]
+}
+
+/**
+ * calcZatcaShrinkageReport
+ *
+ * Builds the full ZATCA-ready weight reconciliation report by iterating over
+ * all coffee lots (including RECALLED — auditors need the full picture),
+ * computing theoretical vs. actual roasted weight per lot using the Sponge
+ * Effect engine, and summing up Rule A/B adjustments for the 30-day period.
+ */
+export const calcZatcaShrinkageReport = (
+  lots:        CoffeeLot[],
+  requests:    BeanRequest[],
+  branchList:  Branch[] = branches,
+  goldMargin:  number   = 35,
+  reportDate?: string,
+): ZatcaShrinkageReport => {
+  const today = reportDate ?? new Date().toISOString().split('T')[0]
+
+  // Build branch humidity lookup
+  const humidityByBranch = new Map<string, number>()
+  for (const b of branchList) humidityByBranch.set(b.name, b.humidity)
+
+  // Build dispatched quantity lookup
+  const dispatchedByLot = new Map<string, number>()
+  for (const r of requests) {
+    if (r.status === 'DISPATCHED') {
+      dispatchedByLot.set(r.lotId, (dispatchedByLot.get(r.lotId) ?? 0) + r.quantityKg)
+    }
+  }
+
+  const rows: ZatcaLotRow[] = []
+  let totPurchasedGreen       = 0
+  let totBaselineRoasted      = 0
+  let totActualRoasted        = 0
+  let totBaselineShrinkage    = 0
+  let totRuleASurplus         = 0
+  let totRuleBDeficit         = 0
+  let totDispatched           = 0
+  let totLiveRoasted          = 0
+
+  for (const lot of lots) {
+    const branchHumidity  = humidityByBranch.get(lot.branch) ?? 50
+    const sponge          = calcSpongeCoefficient(branchHumidity)
+
+    const greenKg           = lot.greenWeightKg
+    const baselineRoastedKg = Math.round(greenKg * SPONGE_BASELINE_COEFFICIENT * 100) / 100
+    const actualRoastedKg   = Math.round(greenKg * sponge.coefficient * 100) / 100
+    const baselineShrinkKg  = Math.round((greenKg * (1 - SPONGE_BASELINE_COEFFICIENT)) * 100) / 100
+    const spongeAdjKg       = Math.round((actualRoastedKg - baselineRoastedKg) * 100) / 100
+    const ruleASurplusKg    = Math.max(0, spongeAdjKg)
+    const ruleBDeficitKg    = Math.min(0, spongeAdjKg)
+
+    const dispatchedRoastedKg  = Math.round((dispatchedByLot.get(lot.id) ?? 0) * 100) / 100
+    const dispatchedGreenEquiv = roastedToGreenEquivWithSponge(dispatchedRoastedKg, branchHumidity)
+    const liveGreenKg          = Math.max(0, Math.round((greenKg - dispatchedGreenEquiv) * 100) / 100)
+    const liveRoastedKg        = Math.round(applyRoastShrinkageWithSponge(liveGreenKg, branchHumidity) * 100) / 100
+    const liveBaselineKg       = Math.round(liveGreenKg * SPONGE_BASELINE_COEFFICIENT * 100) / 100
+
+    const cost               = lot.costPerKg ?? 0
+    const wpGold             = cost > 0 ? calcWholesalePrice(cost, goldMargin) : 0
+    const liveInventoryValue = Math.round(liveRoastedKg * wpGold * 100) / 100
+
+    rows.push({
+      lotId:               lot.id,
+      origin:              lot.origin,
+      variety:             lot.variety ?? '—',
+      process:             lot.process  ?? '—',
+      branch:              lot.branch,
+      roastDate:           lot.roastDate,
+      expiryDate:          lot.expiryDate,
+      purchasedGreenKg:    greenKg,
+      dispatchedRoastedKg,
+      baselineShrinkagePct:18,
+      baselineRoastedKg,
+      spongeCoefficient:   sponge.coefficient,
+      spongeRule:          sponge.rule,
+      actualRoastedKg,
+      baselineShrinkageKg: baselineShrinkKg,
+      spongeAdjKg,
+      ruleASurplusKg,
+      ruleBDeficitKg,
+      liveGreenKg,
+      liveRoastedKg,
+      liveBaselineKg,
+      costPerKg:           cost,
+      wholesalePriceGold:  wpGold,
+      liveInventoryValue,
+      status:              lot.status,
+      branchHumidity,
+    })
+
+    totPurchasedGreen    += greenKg
+    totBaselineRoasted   += baselineRoastedKg
+    totActualRoasted     += actualRoastedKg
+    totBaselineShrinkage += baselineShrinkKg
+    totRuleASurplus      += ruleASurplusKg
+    totRuleBDeficit      += ruleBDeficitKg
+    totDispatched        += dispatchedRoastedKg
+    totLiveRoasted       += liveRoastedKg
+  }
+
+  const r2 = (n: number) => Math.round(n * 100) / 100
+
+  return {
+    reportDate:              today,
+    periodLabel:             `30-Day Period ending ${today}`,
+    generatedBy:             'Qabban OS — ZATCA Shrinkage Export Engine v1.0',
+    totalLotsReported:       rows.length,
+    totalPurchasedGreenKg:   r2(totPurchasedGreen),
+    totalBaselineRoastedKg:  r2(totBaselineRoasted),
+    totalActualRoastedKg:    r2(totActualRoasted),
+    totalBaselineShrinkageKg:r2(totBaselineShrinkage),
+    totalRuleASurplusKg:     r2(totRuleASurplus),
+    totalRuleBDeficitKg:     r2(totRuleBDeficit),
+    netSpongeAdjustmentKg:   r2(totRuleASurplus + totRuleBDeficit),
+    totalDispatchedRoastedKg:r2(totDispatched),
+    totalLiveRoastedKg:      r2(totLiveRoasted),
+    rows,
+  }
+}

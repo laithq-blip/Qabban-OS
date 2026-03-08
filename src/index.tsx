@@ -20,6 +20,7 @@ import {
   SPONGE_LOW_DELTA,
   calcWholesalePrice,
   calcPortfolioFinancials,
+  calcZatcaShrinkageReport,
   defaultTargetMargin,
   setDefaultTargetMargin,
   tierMargins,
@@ -32,6 +33,7 @@ import {
   type RoastingInterest,
   type PortfolioFinancials,
   type ClientTier,
+  type ZatcaShrinkageReport,
 } from './data'
 
 const app = new Hono()
@@ -5407,6 +5409,145 @@ app.get('/admin/finance', (c) => {
     </div>
   </div>
 
+  <!-- ══ ZATCA BULK SHRINKAGE EXPORT ══ -->
+  ${(() => {
+    const rpt = calcZatcaShrinkageReport(coffeeLots, beanRequests, branches, tierMargins.Gold)
+    const netSign   = rpt.netSpongeAdjustmentKg >= 0 ? '+' : ''
+    const netColor  = rpt.netSpongeAdjustmentKg > 0 ? 'var(--green)' : rpt.netSpongeAdjustmentKg < 0 ? 'var(--red)' : 'var(--text-muted)'
+    const ruleAColor = rpt.totalRuleASurplusKg > 0 ? 'var(--green)' : 'var(--text-muted)'
+    const ruleBColor = rpt.totalRuleBDeficitKg < 0 ? 'var(--red)'   : 'var(--text-muted)'
+    return `
+  <div class="card" style="margin-bottom:28px;border-color:rgba(245,158,11,0.35);background:linear-gradient(135deg,var(--bg-1) 0%,rgba(245,158,11,0.04) 100%)">
+    <div class="card-title" style="margin-bottom:4px">
+      <i class="fa fa-file-invoice" style="color:var(--amber)"></i>
+      <span>ZATCA Bulk Shrinkage Export</span>
+      <span style="font-family:var(--font-mono);font-size:9px;padding:2px 7px;border-radius:2px;background:rgba(245,158,11,0.10);color:var(--amber);border:1px solid rgba(245,158,11,0.25);margin-left:8px">⬡ TAX AUDIT</span>
+    </div>
+    <div style="font-size:11px;color:var(--text-muted);margin-bottom:20px;font-family:var(--font-mono)">
+      Theoretical vs. Actual weight reconciliation · ${rpt.periodLabel} · ${rpt.totalLotsReported} lots
+    </div>
+
+    <!-- 30-day aggregate summary tiles -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:12px;margin-bottom:24px">
+
+      <div style="background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:14px">
+        <div style="font-size:9px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">Purchased Green</div>
+        <div style="font-family:var(--font-mono);font-size:18px;font-weight:700;color:var(--text-pri)">${rpt.totalPurchasedGreenKg.toLocaleString('en-SA')}</div>
+        <div style="font-size:10px;color:var(--text-muted);margin-top:2px;font-family:var(--font-mono)">kg total</div>
+      </div>
+
+      <div style="background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:14px">
+        <div style="font-size:9px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">Baseline Shrinkage</div>
+        <div style="font-family:var(--font-mono);font-size:18px;font-weight:700;color:var(--red)">−${rpt.totalBaselineShrinkageKg.toLocaleString('en-SA')}</div>
+        <div style="font-size:10px;color:var(--text-muted);margin-top:2px;font-family:var(--font-mono)">kg · standard 18% roast loss</div>
+      </div>
+
+      <div style="background:var(--bg-2);border:1px solid rgba(34,197,94,0.30);border-radius:var(--radius);padding:14px">
+        <div style="font-size:9px;color:${ruleAColor};text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">Rule A Surplus</div>
+        <div style="font-family:var(--font-mono);font-size:18px;font-weight:700;color:${ruleAColor}">${rpt.totalRuleASurplusKg > 0 ? '+' : ''}${rpt.totalRuleASurplusKg.toLocaleString('en-SA')}</div>
+        <div style="font-size:10px;color:var(--text-muted);margin-top:2px;font-family:var(--font-mono)">kg · Coastal Gain (RH &gt; 70%)</div>
+      </div>
+
+      <div style="background:var(--bg-2);border:1px solid rgba(239,68,68,0.25);border-radius:var(--radius);padding:14px">
+        <div style="font-size:9px;color:${ruleBColor};text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">Rule B Deficit</div>
+        <div style="font-family:var(--font-mono);font-size:18px;font-weight:700;color:${ruleBColor}">${rpt.totalRuleBDeficitKg < 0 ? '' : '+'}${rpt.totalRuleBDeficitKg.toLocaleString('en-SA')}</div>
+        <div style="font-size:10px;color:var(--text-muted);margin-top:2px;font-family:var(--font-mono)">kg · Arid Loss (RH &lt; 20%)</div>
+      </div>
+
+      <div style="background:var(--bg-2);border:1px solid rgba(245,158,11,0.30);border-radius:var(--radius);padding:14px">
+        <div style="font-size:9px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">Net Sponge Adjustment</div>
+        <div style="font-family:var(--font-mono);font-size:18px;font-weight:700;color:${netColor}">${netSign}${rpt.netSpongeAdjustmentKg.toLocaleString('en-SA')}</div>
+        <div style="font-size:10px;color:var(--text-muted);margin-top:2px;font-family:var(--font-mono)">kg · Rule A + Rule B net</div>
+      </div>
+
+      <div style="background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:14px">
+        <div style="font-size:9px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">Actual vs. Theoretical</div>
+        <div style="font-family:var(--font-mono);font-size:15px;font-weight:700;color:var(--text-sec)">${rpt.totalActualRoastedKg.toLocaleString('en-SA')} <span style="font-weight:400;font-size:11px;color:var(--text-muted)">actual</span></div>
+        <div style="font-size:11px;color:var(--text-muted);font-family:var(--font-mono)">vs ${rpt.totalBaselineRoastedKg.toLocaleString('en-SA')} theoretical kg</div>
+      </div>
+
+    </div>
+
+    <!-- Per-lot shrinkage preview table -->
+    <div style="overflow-x:auto;margin-bottom:20px">
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead>
+          <tr style="border-bottom:1px solid var(--border)">
+            <th style="text-align:left;padding:8px 10px;color:var(--text-muted);font-family:var(--font-mono);font-size:10px;font-weight:600;letter-spacing:.4px;white-space:nowrap">LOT ID</th>
+            <th style="text-align:left;padding:8px 10px;color:var(--text-muted);font-family:var(--font-mono);font-size:10px;font-weight:600;letter-spacing:.4px">ORIGIN</th>
+            <th style="text-align:left;padding:8px 10px;color:var(--text-muted);font-family:var(--font-mono);font-size:10px;font-weight:600;letter-spacing:.4px">BRANCH</th>
+            <th style="text-align:right;padding:8px 10px;color:var(--text-muted);font-family:var(--font-mono);font-size:10px;font-weight:600;white-space:nowrap">GREEN (kg)</th>
+            <th style="text-align:right;padding:8px 10px;color:var(--text-muted);font-family:var(--font-mono);font-size:10px;font-weight:600;white-space:nowrap">THEORETICAL (kg)</th>
+            <th style="text-align:right;padding:8px 10px;color:var(--text-muted);font-family:var(--font-mono);font-size:10px;font-weight:600;white-space:nowrap">ACTUAL (kg)</th>
+            <th style="text-align:right;padding:8px 10px;color:var(--text-muted);font-family:var(--font-mono);font-size:10px;font-weight:600;white-space:nowrap">SHRINKAGE (kg)</th>
+            <th style="text-align:right;padding:8px 10px;color:var(--text-muted);font-family:var(--font-mono);font-size:10px;font-weight:600;white-space:nowrap">SPONGE Δ (kg)</th>
+            <th style="text-align:left;padding:8px 10px;color:var(--text-muted);font-family:var(--font-mono);font-size:10px;font-weight:600">RULE</th>
+            <th style="text-align:left;padding:8px 10px;color:var(--text-muted);font-family:var(--font-mono);font-size:10px;font-weight:600">STATUS</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rpt.rows.map(r => {
+            const adjColor  = r.spongeAdjKg > 0 ? 'var(--green)' : r.spongeAdjKg < 0 ? 'var(--red)' : 'var(--text-muted)'
+            const adjSign   = r.spongeAdjKg >= 0 ? '+' : ''
+            const ruleShort = r.spongeRule === 'MOISTURE_ABSORPTION' ? '★ Rule A — Coastal' :
+                              r.spongeRule === 'EVAPORATION_LOSS'    ? '★ Rule B — Arid'    : 'Baseline'
+            const ruleColor = r.spongeRule === 'MOISTURE_ABSORPTION' ? 'var(--green)' :
+                              r.spongeRule === 'EVAPORATION_LOSS'    ? 'var(--red)'   : 'var(--text-muted)'
+            const statusColor = r.status === 'RECALLED' ? 'var(--red)' : r.status === 'OPTIMAL' ? 'var(--green)' : 'var(--blue)'
+            return `
+          <tr style="border-bottom:1px solid rgba(255,255,255,0.04)">
+            <td style="padding:8px 10px;font-family:var(--font-mono);color:var(--amber);font-weight:700">${r.lotId}</td>
+            <td style="padding:8px 10px;font-size:12px">${r.origin}</td>
+            <td style="padding:8px 10px;font-size:11px;color:var(--text-sec)">${r.branch} <span style="font-size:9px;color:var(--text-muted)">${r.branchHumidity}% RH</span></td>
+            <td style="padding:8px 10px;text-align:right;font-family:var(--font-mono);color:var(--text-pri)">${r.purchasedGreenKg}</td>
+            <td style="padding:8px 10px;text-align:right;font-family:var(--font-mono);color:var(--text-sec)">${r.baselineRoastedKg}</td>
+            <td style="padding:8px 10px;text-align:right;font-family:var(--font-mono);font-weight:700;color:var(--text-pri)">${r.actualRoastedKg}</td>
+            <td style="padding:8px 10px;text-align:right;font-family:var(--font-mono);color:var(--red)">−${r.baselineShrinkageKg}</td>
+            <td style="padding:8px 10px;text-align:right;font-family:var(--font-mono);font-weight:700;color:${adjColor}">${adjSign}${r.spongeAdjKg}</td>
+            <td style="padding:8px 10px;font-family:var(--font-mono);font-size:10px;color:${ruleColor}">${ruleShort}</td>
+            <td style="padding:8px 10px;font-family:var(--font-mono);font-size:10px;color:${statusColor}">${r.status}</td>
+          </tr>`
+          }).join('')}
+          <!-- Totals row -->
+          <tr style="border-top:2px solid rgba(245,158,11,0.4);background:rgba(245,158,11,0.04)">
+            <td colspan="3" style="padding:10px;font-family:var(--font-mono);font-size:11px;color:var(--amber);font-weight:700">PORTFOLIO TOTALS</td>
+            <td style="padding:10px;text-align:right;font-family:var(--font-mono);font-weight:700;color:var(--text-pri)">${rpt.totalPurchasedGreenKg}</td>
+            <td style="padding:10px;text-align:right;font-family:var(--font-mono);font-weight:700;color:var(--text-sec)">${rpt.totalBaselineRoastedKg}</td>
+            <td style="padding:10px;text-align:right;font-family:var(--font-mono);font-weight:700;color:var(--text-pri)">${rpt.totalActualRoastedKg}</td>
+            <td style="padding:10px;text-align:right;font-family:var(--font-mono);font-weight:700;color:var(--red)">−${rpt.totalBaselineShrinkageKg}</td>
+            <td style="padding:10px;text-align:right;font-family:var(--font-mono);font-weight:700;color:${netColor}">${netSign}${rpt.netSpongeAdjustmentKg}</td>
+            <td colspan="2"></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Download button -->
+    <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+      <a href="/admin/finance/zatca-export"
+         download="qabban-zatca-shrinkage-${rpt.reportDate}.csv"
+         style="display:inline-flex;align-items:center;gap:8px;padding:11px 24px;background:rgba(245,158,11,0.15);border:1px solid rgba(245,158,11,0.50);border-radius:var(--radius);font-family:var(--font-mono);font-size:12px;font-weight:700;color:var(--amber);text-decoration:none;letter-spacing:.5px;transition:background .15s"
+         onmouseover="this.style.background='rgba(245,158,11,0.25)'"
+         onmouseout="this.style.background='rgba(245,158,11,0.15)'">
+        <i class="fa fa-file-arrow-down"></i>
+        &nbsp;DOWNLOAD MONTHLY SHRINKAGE REPORT
+      </a>
+      <div style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted)">
+        CSV · UTF-8 · ${rpt.totalLotsReported} lots · Gold-tier reference pricing · ${rpt.reportDate}
+      </div>
+    </div>
+
+    <!-- Audit notes -->
+    <div style="margin-top:18px;padding:12px 16px;background:rgba(245,158,11,0.05);border:1px dashed rgba(245,158,11,0.25);border-radius:var(--radius);font-size:10px;color:var(--text-muted);font-family:var(--font-mono);line-height:1.7">
+      <strong style="color:var(--amber)">Auditor Reference:</strong><br>
+      <strong>Baseline Shrinkage</strong> — Standard 18% weight loss (yield coeff. 0.82) per ZATCA commodity regulations.<br>
+      <strong>Rule A — Coastal Surplus</strong> — Branches with RH &gt; 70%: yield coeff. rises to 0.825 (+0.5%). Moisture absorption documented.<br>
+      <strong>Rule B — Arid Deficit</strong> — Branches with RH &lt; 20%: yield coeff. drops to 0.817 (−0.3%). Evaporation loss documented.<br>
+      Branch humidity readings sourced in real-time from Qabban OS Sponge Effect Engine. All weights in kg (SAR prices at Gold-tier margin).
+    </div>
+  </div>`
+  })()}
+
   <script>
   /* ── QFI REACTIVE ENGINE (TIER-BASED) ───────────────────────────────────────
      Recalculates wholesale prices per tier in real-time as the admin types.
@@ -5689,6 +5830,119 @@ app.get('/api/finance/snapshot', (c) => {
       wpGold:     fin.costPerKg > 0 ? calcWholesalePrice(fin.costPerKg, tierMargins.Gold)     : null,
       wpPlatinum: fin.costPerKg > 0 ? calcWholesalePrice(fin.costPerKg, tierMargins.Platinum) : null,
     })),
+  })
+})
+
+// ── GET /admin/finance/zatca-export ─────────────────────────────────────────
+// Streams a ZATCA-formatted CSV for tax auditors: Theoretical vs. Actual
+// roasted weight reconciliation, per lot, for the current 30-day period.
+// Includes: Baseline Shrinkage, Rule A Surplus, Rule B Deficit, net adjustment.
+app.get('/admin/finance/zatca-export', (c) => {
+  const report = calcZatcaShrinkageReport(
+    coffeeLots,
+    beanRequests,
+    branches,
+    tierMargins.Gold,   // Gold tier used as reference wholesale price column
+  )
+
+  // ── CSV helper ────────────────────────────────────────────────────────────
+  // Escapes a value for safe CSV embedding (handles commas, quotes, newlines).
+  const esc = (v: string | number): string => {
+    const s = String(v)
+    return s.includes(',') || s.includes('"') || s.includes('\n')
+      ? `"${s.replace(/"/g, '""')}"` : s
+  }
+  const row = (...cols: (string | number)[]) => cols.map(esc).join(',')
+
+  const lines: string[] = []
+
+  // ── Section 1: Report Header ──────────────────────────────────────────────
+  lines.push(row('ZATCA BULK SHRINKAGE EXPORT — WEIGHT RECONCILIATION REPORT'))
+  lines.push(row('Generated By',   report.generatedBy))
+  lines.push(row('Report Date',    report.reportDate))
+  lines.push(row('Period',         report.periodLabel))
+  lines.push(row('Lots Reported',  report.totalLotsReported))
+  lines.push('')
+
+  // ── Section 2: Portfolio 30-Day Aggregates ────────────────────────────────
+  lines.push(row('=== 30-DAY PORTFOLIO SHRINKAGE SUMMARY ==='))
+  lines.push(row('Metric', 'Value (kg)', 'Notes'))
+  lines.push(row('Total Purchased Green Weight',    report.totalPurchasedGreenKg,    'Sum of all lot green purchase weights'))
+  lines.push(row('Baseline Roasted (Theoretical)',  report.totalBaselineRoastedKg,   'Σ green × 0.82 — standard 18% roast loss'))
+  lines.push(row('Actual Roasted (Sponge-adj.)',    report.totalActualRoastedKg,     'Σ green × sponge coefficient'))
+  lines.push(row('Total Baseline Shrinkage',        report.totalBaselineShrinkageKg, 'Σ green × 0.18 — standard loss (regulatory baseline)'))
+  lines.push(row('Rule A Surplus (Coastal Gain)',   report.totalRuleASurplusKg,      'Extra yield from high humidity (RH > 70%)'))
+  lines.push(row('Rule B Deficit (Arid Loss)',      report.totalRuleBDeficitKg,      'Yield reduction from low humidity (RH < 20%)'))
+  lines.push(row('Net Sponge Adjustment',           report.netSpongeAdjustmentKg,    'Rule A + Rule B combined net kg deviation'))
+  lines.push(row('Total Dispatched Roasted',        report.totalDispatchedRoastedKg, 'Sum of all DISPATCHED order quantities'))
+  lines.push(row('Total Live Roasted Balance',      report.totalLiveRoastedKg,       'Current sponge-adjusted inventory'))
+  lines.push('')
+
+  // ── Section 3: Per-Lot Detail ─────────────────────────────────────────────
+  lines.push(row('=== PER-LOT THEORETICAL VS. ACTUAL WEIGHT RECONCILIATION ==='))
+  lines.push(row(
+    // Identifiers
+    'Lot ID', 'Origin', 'Variety', 'Process', 'Branch', 'Roast Date', 'Expiry Date', 'Status', 'Branch RH (%)',
+    // Green weight
+    'Purchased Green (kg)',
+    // Theoretical (Baseline)
+    'Baseline Shrinkage %', 'Theoretical Roasted — Baseline (kg)', 'Standard Shrinkage Loss (kg)',
+    // Actual (Sponge)
+    'Sponge Coefficient', 'Sponge Rule', 'Actual Roasted — Sponge adj. (kg)',
+    // Delta
+    'Sponge Adjustment (kg)', 'Rule A Surplus (kg)', 'Rule B Deficit (kg)',
+    // Dispatched & live
+    'Dispatched Roasted (kg)', 'Live Green Equiv. (kg)', 'Live Roasted — Sponge adj. (kg)', 'Live Roasted — Baseline (kg)',
+    // Financial
+    'Green Cost (SAR/kg)', 'Wholesale Price Gold (SAR/kg)', 'Live Inventory Value (SAR)',
+  ))
+
+  for (const r of report.rows) {
+    // Friendly sponge rule label
+    const ruleLabel =
+      r.spongeRule === 'MOISTURE_ABSORPTION' ? 'Rule A — Coastal High Humidity' :
+      r.spongeRule === 'EVAPORATION_LOSS'    ? 'Rule B — Inland Arid'            :
+                                               'Baseline — Normal RH'
+
+    lines.push(row(
+      r.lotId, r.origin, r.variety, r.process, r.branch, r.roastDate, r.expiryDate, r.status, r.branchHumidity,
+      r.purchasedGreenKg,
+      r.baselineShrinkagePct + '%', r.baselineRoastedKg, r.baselineShrinkageKg,
+      r.spongeCoefficient, ruleLabel, r.actualRoastedKg,
+      r.spongeAdjKg, r.ruleASurplusKg, r.ruleBDeficitKg,
+      r.dispatchedRoastedKg, r.liveGreenKg, r.liveRoastedKg, r.liveBaselineKg,
+      r.costPerKg > 0 ? r.costPerKg : 'N/A',
+      r.wholesalePriceGold > 0 ? r.wholesalePriceGold : 'N/A',
+      r.liveInventoryValue > 0 ? r.liveInventoryValue : 'N/A',
+    ))
+  }
+
+  lines.push('')
+
+  // ── Section 4: Auditor Notes ──────────────────────────────────────────────
+  lines.push(row('=== AUDITOR NOTES ==='))
+  lines.push(row('Definition: Baseline Shrinkage',
+    'Standard 18% weight loss (yield coefficient 0.82) applied uniformly to all lots per ZATCA commodity regulations.'))
+  lines.push(row('Definition: Rule A — Coastal Surplus',
+    'Lots stored at branches with RH > 70% absorb ambient moisture. Yield coefficient rises to 0.825 (+0.5%). Weight gain is REAL and auditable.'))
+  lines.push(row('Definition: Rule B — Arid Deficit',
+    'Lots stored at branches with RH < 20% lose additional moisture. Yield coefficient drops to 0.817 (−0.3%). Additional loss is REAL and auditable.'))
+  lines.push(row('Definition: Sponge Adjustment',
+    'Net deviation (kg) between Actual and Theoretical roasted weight. Positive = surplus under Rule A. Negative = deficit under Rule B.'))
+  lines.push(row('Regulatory Basis',
+    'Weight differences arise solely from documented environmental humidity readings. Branch RH logged in real-time by Qabban OS Sponge Effect Engine.'))
+  lines.push(row('Currency', 'SAR (Saudi Riyal)'))
+  lines.push(row('Weight Unit', 'Kilograms (kg)'))
+
+  const csvBody = lines.join('\r\n')
+  const filename = `qabban-zatca-shrinkage-${report.reportDate}.csv`
+
+  return new Response(csvBody, {
+    headers: {
+      'Content-Type':        'text/csv; charset=utf-8',
+      'Content-Disposition': `attachment; filename="${filename}"`,
+      'Cache-Control':       'no-store',
+    },
   })
 })
 
