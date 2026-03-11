@@ -39,13 +39,18 @@ import {
   globalLots,
   globalBuyers,
   globalContracts,
+  forwardContracts,
   zatcaInvoices,
+  rateLocks,
   calcLandedPrice,
   generateZatcaInvoice,
+  createRateLock,
+  getActiveLock,
   exchangeRateBuffer,
   setExchangeRateBuffer,
   lastKnownUsdToSar,
   lastKnownEurToSar,
+  samaReferenceRate,
   exchangeRateUpdatedAt,
   updateExchangeRates,
   usdToSarBuffered,
@@ -55,6 +60,10 @@ import {
   type GlobalVendor,
   type GlobalLot,
   type GlobalBuyer,
+  type ForwardContract,
+  type ClimateLogEntry,
+  type ShipTrackerData,
+  type RateLock,
   type LandedPriceBreakdown,
   type ZatcaInvoice,
 } from './data'
@@ -566,7 +575,7 @@ const shell = (title: string, body: string) => `<!DOCTYPE html>
       width:140px; height:140px;
       position:relative;
       display:flex; align-items:center; justify-content:center;
-      margin-bottom:4px;
+      margin: 0 auto 4px;
     }
     /* Ambient glow halo behind the logo */
     .login-logo-img-wrap::before {
@@ -7066,531 +7075,608 @@ app.post('/api/sponge/simulate', async (c) => {
 })
 
 // ═════════════════════════════════════════════════════════════════════════════
-//  QABBAN GLOBAL EXCHANGE ROUTES
+//  QABBAN GLOBAL EXCHANGE ROUTES  v2 — Dual-Track · Climate Passport · Ship
+//  Tracker · Rate Lock · Forward Contracts · ZATCA Phase-2
 // ═════════════════════════════════════════════════════════════════════════════
 
-// ─── Shared Exchange Layout ───────────────────────────────────────────────────
+// ─── Shared Exchange CSS + Layout ────────────────────────────────────────────
+const EXCHANGE_CSS = `
+  :root{--bg:#0f0f11;--card:#18181b;--card2:#1c1c20;--border:rgba(255,255,255,0.07);
+        --text:#f1f5f9;--muted:#64748b;--amber:#f59e0b;--green:#4ade80;--red:#f87171;
+        --blue:#60a5fa;--purple:#a78bfa;--cyan:#22d3ee;
+        --radius:8px;--mono:'JetBrains Mono',ui-monospace,monospace}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font-family:system-ui,sans-serif;min-height:100vh;display:flex}
+  /* ── Sidebar ── */
+  .sidebar{width:224px;min-height:100vh;background:rgba(0,0,0,.4);border-right:1px solid var(--border);
+           display:flex;flex-direction:column;padding:0;flex-shrink:0;position:sticky;top:0;height:100vh;overflow-y:auto}
+  .sb-brand{padding:20px 18px 16px;border-bottom:1px solid var(--border)}
+  .sb-brand-icon{font-size:18px;margin-bottom:4px;color:var(--amber)}
+  .sb-brand-title{font-family:var(--mono);font-size:11px;color:var(--amber);letter-spacing:.12em;font-weight:700}
+  .sb-brand-sub{font-size:10px;color:var(--muted);margin-top:2px}
+  .sb-section{font-size:9px;color:var(--muted);font-family:var(--mono);letter-spacing:.1em;padding:14px 18px 4px;text-transform:uppercase}
+  .nav-a{display:flex;align-items:center;gap:9px;padding:8px 18px;color:var(--muted);text-decoration:none;
+         font-size:12px;border-left:2px solid transparent;transition:all .12s;white-space:nowrap}
+  .nav-a:hover,.nav-a.on{color:var(--amber);border-left-color:var(--amber);background:rgba(245,158,11,.06)}
+  .nav-a i{width:14px;text-align:center;font-size:11px;flex-shrink:0}
+  .nav-a .tag{font-size:9px;padding:1px 5px;border-radius:3px;background:rgba(245,158,11,.15);color:var(--amber);font-family:var(--mono);margin-left:auto}
+  /* ── Main ── */
+  .main{flex:1;padding:28px 32px;overflow-x:hidden;min-width:0}
+  .pg-title{font-size:20px;font-weight:700;margin-bottom:3px;display:flex;align-items:center;gap:10px}
+  .pg-sub{font-size:11px;color:var(--muted);margin-bottom:22px;font-family:var(--mono)}
+  /* ── Cards ── */
+  .card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:20px;margin-bottom:18px}
+  .card-hdr{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;margin-bottom:14px}
+  .stat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(165px,1fr));gap:14px;margin-bottom:22px}
+  .stat-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px}
+  .stat-lbl{font-size:9px;color:var(--muted);font-family:var(--mono);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px}
+  .stat-val{font-size:22px;font-weight:700;line-height:1}
+  .stat-sub{font-size:10px;color:var(--muted);margin-top:3px}
+  /* ── Badges ── */
+  .badge{display:inline-flex;align-items:center;gap:3px;padding:2px 7px;border-radius:20px;font-size:9px;font-family:var(--mono);font-weight:700;white-space:nowrap}
+  .b-green{background:rgba(74,222,128,.12);color:var(--green);border:1px solid rgba(74,222,128,.3)}
+  .b-amber{background:rgba(245,158,11,.12);color:var(--amber);border:1px solid rgba(245,158,11,.3)}
+  .b-blue{background:rgba(96,165,250,.12);color:var(--blue);border:1px solid rgba(96,165,250,.3)}
+  .b-purple{background:rgba(167,139,250,.12);color:var(--purple);border:1px solid rgba(167,139,250,.3)}
+  .b-red{background:rgba(248,113,113,.12);color:var(--red);border:1px solid rgba(248,113,113,.3)}
+  .b-muted{background:rgba(255,255,255,.05);color:var(--muted);border:1px solid rgba(255,255,255,.1)}
+  .b-cyan{background:rgba(34,211,238,.12);color:var(--cyan);border:1px solid rgba(34,211,238,.3)}
+  /* Track-type pills */
+  .track-spot{background:rgba(74,222,128,.1);color:var(--green);border:1px solid rgba(74,222,128,.3);padding:3px 9px;border-radius:4px;font-size:10px;font-family:var(--mono);font-weight:700}
+  .track-fwd{background:rgba(245,158,11,.1);color:var(--amber);border:1px solid rgba(245,158,11,.3);padding:3px 9px;border-radius:4px;font-size:10px;font-family:var(--mono);font-weight:700}
+  /* ── Table ── */
+  .tbl{width:100%;border-collapse:collapse;font-size:12px}
+  .tbl th{text-align:left;padding:7px 10px;font-size:9px;color:var(--muted);font-family:var(--mono);text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid var(--border)}
+  .tbl td{padding:9px 10px;border-bottom:1px solid rgba(255,255,255,.03);vertical-align:middle}
+  .tbl tr:hover td{background:rgba(255,255,255,.015)}
+  /* ── Buttons ── */
+  .btn{display:inline-flex;align-items:center;gap:5px;padding:7px 14px;border-radius:5px;
+       font-size:11px;font-family:var(--mono);font-weight:700;cursor:pointer;border:none;text-decoration:none;transition:all .12s;white-space:nowrap}
+  .btn-green{background:rgba(74,222,128,.13);color:var(--green);border:1px solid rgba(74,222,128,.35)}
+  .btn-green:hover{background:rgba(74,222,128,.22)}
+  .btn-amber{background:rgba(245,158,11,.13);color:var(--amber);border:1px solid rgba(245,158,11,.35)}
+  .btn-amber:hover{background:rgba(245,158,11,.22)}
+  .btn-blue{background:rgba(96,165,250,.13);color:var(--blue);border:1px solid rgba(96,165,250,.35)}
+  .btn-blue:hover{background:rgba(96,165,250,.22)}
+  .btn-red{background:rgba(248,113,113,.13);color:var(--red);border:1px solid rgba(248,113,113,.35)}
+  /* ── Forms ── */
+  .fg{margin-bottom:14px}
+  .fl{font-size:10px;color:var(--muted);font-family:var(--mono);margin-bottom:4px;display:block}
+  .fi{width:100%;background:#1a1a1e;border:1px solid var(--border);border-radius:5px;
+      padding:8px 11px;color:var(--text);font-size:13px;outline:none}
+  .fi:focus{border-color:rgba(245,158,11,.5);background:rgba(245,158,11,.03)}
+  .fs{width:100%;background:#1a1a1e;border:1px solid var(--border);border-radius:5px;
+      padding:8px 11px;color:var(--text);font-size:13px;outline:none;cursor:pointer}
+  .fs option{background:#1a1a1e;color:#f1f5f9}
+  /* ── Alerts ── */
+  .alert{padding:11px 15px;border-radius:var(--radius);margin-bottom:14px;font-size:12px;display:flex;align-items:center;gap:9px}
+  .al-green{background:rgba(74,222,128,.07);border:1px solid rgba(74,222,128,.22);color:var(--green)}
+  .al-amber{background:rgba(245,158,11,.07);border:1px solid rgba(245,158,11,.22);color:var(--amber)}
+  .al-red{background:rgba(248,113,113,.07);border:1px solid rgba(248,113,113,.22);color:var(--red)}
+  .al-blue{background:rgba(96,165,250,.07);border:1px solid rgba(96,165,250,.22);color:var(--blue)}
+  /* ── Ship tracker ── */
+  .tracker-bar{height:6px;border-radius:3px;background:rgba(255,255,255,.08);overflow:hidden}
+  .tracker-fill{height:100%;border-radius:3px;background:linear-gradient(90deg,var(--amber),var(--green));transition:width .4s}
+  .tracker-events{border-left:2px solid rgba(245,158,11,.3);padding-left:14px;margin-top:12px}
+  .tracker-event{position:relative;padding-bottom:14px;font-size:11px}
+  .tracker-event::before{content:'';position:absolute;left:-19px;top:4px;width:8px;height:8px;border-radius:50%;background:var(--amber);border:2px solid var(--bg)}
+  /* ── Climate passport ── */
+  .climate-timeline{border-left:2px solid rgba(34,211,238,.25);padding-left:14px}
+  .cl-row{position:relative;padding-bottom:14px;font-size:11px}
+  .cl-row::before{content:'';position:absolute;left:-19px;top:3px;width:8px;height:8px;border-radius:50%;border:2px solid var(--bg)}
+  .cl-origin::before{background:var(--green)}
+  .cl-transit::before{background:var(--amber)}
+  .cl-port::before{background:var(--blue)}
+  .cl-arrival::before{background:var(--cyan)}
+  /* ── Rate Lock countdown ── */
+  .ratelock-box{border:1px solid rgba(245,158,11,.4);border-radius:var(--radius);padding:14px 18px;background:rgba(245,158,11,.05)}
+  .ratelock-timer{font-family:var(--mono);font-size:28px;font-weight:700;color:var(--amber);letter-spacing:.05em}
+  /* ── SAS clause banner ── */
+  .sas-box{border:1px dashed rgba(167,139,250,.4);border-radius:var(--radius);padding:12px 16px;background:rgba(167,139,250,.04);font-size:11px;font-family:var(--mono)}
+  /* ── Milestone steps ── */
+  .milestone-step{display:flex;align-items:center;gap:12px;padding:10px;border-radius:6px;margin-bottom:6px;background:rgba(255,255,255,.02);border:1px solid var(--border)}
+  .ms-dot{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0}
+  @media(max-width:720px){.sidebar{display:none}.main{padding:16px}}
+`
+
 function exchangeLayout(pageTitle: string, activeNav: string, content: string) {
   const navLinks = [
-    { href: '/exchange',         icon: 'fa-globe',          label: 'Exchange Hub',   id: 'hub'     },
-    { href: '/exchange/catalog', icon: 'fa-list',           label: 'Global Catalog', id: 'catalog' },
-    { href: '/vendor',           icon: 'fa-store',          label: 'Vendor Portal',  id: 'vendor'  },
-    { href: '/buyer',            icon: 'fa-handshake',      label: 'Buyer Portal',   id: 'buyer'   },
-    { href: '/admin',            icon: 'fa-arrow-left',     label: 'Back to Admin',  id: 'admin'   },
+    { href: '/exchange',           icon: 'fa-gauge',         label: 'Exchange Hub',   id: 'hub',     section: '' },
+    { href: '/exchange/catalog',   icon: 'fa-list',          label: 'Global Catalog', id: 'catalog', section: 'MARKETPLACE' },
+    { href: '/exchange/catalog?type=SPOT',    icon: 'fa-bolt',     label: 'Spot Lots',     id: 'spot',    section: '' },
+    { href: '/exchange/catalog?type=FORWARD', icon: 'fa-seedling', label: 'Forward Lots',  id: 'forward', section: '' },
+    { href: '/vendor',             icon: 'fa-store',         label: 'Vendor Portal',  id: 'vendor',  section: 'PORTALS', tag: '' },
+    { href: '/vendor/register',    icon: 'fa-user-plus',     label: 'Register Vendor',id: 'vreg',    section: '' },
+    { href: '/vendor/lots/new',    icon: 'fa-plus',          label: 'List New Lot',   id: 'vnew',    section: '' },
+    { href: '/buyer',              icon: 'fa-handshake',     label: 'Buyer Portal',   id: 'buyer',   section: 'BUYERS' },
+    { href: '/buyer/register',     icon: 'fa-user-plus',     label: 'Register Buyer', id: 'breg',    section: '' },
+    { href: '/buyer/contract',     icon: 'fa-file-contract', label: 'Contract / Order',id: 'bcon',   section: '' },
+    { href: '/exchange/analytics',    icon: 'fa-chart-bar',    label: 'Analytics',     id: 'analytics', section: 'INTELLIGENCE' },
+    { href: '/admin',              icon: 'fa-arrow-left',    label: 'Back to Admin',  id: 'back',    section: 'SYSTEM' },
   ]
+  const grouped: string[] = []
+  for (const n of navLinks) {
+    if (n.section) grouped.push(`<div class="sb-section">${n.section}</div>`)
+    grouped.push(`<a href="${n.href}" class="nav-a${activeNav===n.id?' on':''}">`+
+      `<i class="fa ${n.icon}"></i>${n.label}`+
+      (n.tag?`<span class="tag">${n.tag}</span>`:'')+
+      `</a>`)
+  }
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>${pageTitle} — Qabban Global Exchange</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css"/>
-  <style>
-    :root{--bg:#0f0f11;--card:#18181b;--border:rgba(255,255,255,0.08);--text:#f8fafc;--text-muted:#94a3b8;
-          --amber:#f59e0b;--green:#4ade80;--red:#f87171;--blue:#60a5fa;--purple:#a78bfa;
-          --radius:8px;--font-mono:'JetBrains Mono',ui-monospace,monospace}
-    *{box-sizing:border-box;margin:0;padding:0}
-    body{background:var(--bg);color:var(--text);font-family:system-ui,sans-serif;min-height:100vh;display:flex}
-    .sidebar{width:220px;min-height:100vh;background:rgba(0,0,0,0.35);border-right:1px solid var(--border);
-             display:flex;flex-direction:column;padding:20px 0;flex-shrink:0}
-    .sidebar-brand{padding:0 20px 20px;border-bottom:1px solid var(--border);margin-bottom:16px}
-    .sidebar-brand .brand-title{font-size:11px;font-family:var(--font-mono);color:var(--green);letter-spacing:0.1em;font-weight:700}
-    .sidebar-brand .brand-sub{font-size:10px;color:var(--text-muted);margin-top:2px}
-    .nav-link{display:flex;align-items:center;gap:10px;padding:9px 20px;color:var(--text-muted);text-decoration:none;
-              font-size:13px;border-left:2px solid transparent;transition:all .15s}
-    .nav-link:hover,.nav-link.active{color:var(--green);border-left-color:var(--green);background:rgba(74,222,128,0.06)}
-    .nav-link i{width:16px;text-align:center;font-size:12px}
-    .main{flex:1;padding:28px;overflow-x:hidden;max-width:calc(100vw - 220px)}
-    .page-title{font-size:22px;font-weight:700;color:var(--text);margin-bottom:4px}
-    .page-sub{font-size:12px;color:var(--text-muted);margin-bottom:24px;font-family:var(--font-mono)}
-    .card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:20px;margin-bottom:20px}
-    .card-title{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600;margin-bottom:16px}
-    .stat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:16px;margin-bottom:28px}
-    .stat-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px}
-    .stat-label{font-size:10px;color:var(--text-muted);font-family:var(--font-mono);text-transform:uppercase;margin-bottom:4px}
-    .stat-value{font-size:24px;font-weight:700}
-    .stat-unit{font-size:10px;color:var(--text-muted)}
-    .badge{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:20px;font-size:10px;font-family:var(--font-mono);font-weight:600}
-    .badge-gold{background:rgba(74,222,128,0.15);color:var(--green);border:1px solid rgba(74,222,128,0.35)}
-    .badge-pending{background:rgba(245,158,11,0.15);color:var(--amber);border:1px solid rgba(245,158,11,0.35)}
-    .badge-verified{background:rgba(96,165,250,0.15);color:var(--blue);border:1px solid rgba(96,165,250,0.35)}
-    .badge-available{background:rgba(74,222,128,0.12);color:var(--green);border:1px solid rgba(74,222,128,0.3)}
-    .badge-contracted{background:rgba(167,139,250,0.12);color:var(--purple);border:1px solid rgba(167,139,250,0.3)}
-    .table{width:100%;border-collapse:collapse;font-size:12px}
-    .table th{text-align:left;padding:8px 10px;font-size:10px;color:var(--text-muted);font-family:var(--font-mono);
-              text-transform:uppercase;border-bottom:1px solid var(--border)}
-    .table td{padding:10px;border-bottom:1px solid rgba(255,255,255,0.04);vertical-align:middle}
-    .table tr:hover td{background:rgba(255,255,255,0.02)}
-    .btn{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:5px;
-         font-size:12px;font-family:var(--font-mono);font-weight:600;cursor:pointer;border:none;text-decoration:none;transition:all .15s}
-    .btn-green{background:rgba(74,222,128,0.15);color:var(--green);border:1px solid rgba(74,222,128,0.4)}
-    .btn-green:hover{background:rgba(74,222,128,0.25)}
-    .btn-amber{background:rgba(245,158,11,0.15);color:var(--amber);border:1px solid rgba(245,158,11,0.4)}
-    .btn-amber:hover{background:rgba(245,158,11,0.25)}
-    .btn-blue{background:rgba(96,165,250,0.15);color:var(--blue);border:1px solid rgba(96,165,250,0.4)}
-    .btn-blue:hover{background:rgba(96,165,250,0.25)}
-    .form-group{margin-bottom:16px}
-    .form-label{font-size:11px;color:var(--text-muted);font-family:var(--font-mono);margin-bottom:5px;display:block}
-    .form-input{width:100%;background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:5px;
-                padding:9px 12px;color:var(--text);font-size:13px;outline:none}
-    .form-input:focus{border-color:rgba(74,222,128,0.5);background:rgba(74,222,128,0.04)}
-    .form-select{width:100%;background:#1e1e22;border:1px solid var(--border);border-radius:5px;
-                 padding:9px 12px;color:var(--text);font-size:13px;outline:none;cursor:pointer}
-    .form-select option{background:#1e1e22;color:#f8fafc}
-    .form-select option:checked,.form-select option:hover{background:#2a2a30;color:#4ade80}
-    .alert{padding:12px 16px;border-radius:var(--radius);margin-bottom:16px;font-size:13px;display:flex;align-items:center;gap:10px}
-    .alert-green{background:rgba(74,222,128,0.08);border:1px solid rgba(74,222,128,0.25);color:var(--green)}
-    .alert-amber{background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.25);color:var(--amber)}
-    @media(max-width:700px){.sidebar{display:none}.main{max-width:100vw;padding:16px}}
-  </style>
+  <style>${EXCHANGE_CSS}</style>
 </head>
 <body>
   <aside class="sidebar">
-    <div class="sidebar-brand">
-      <div class="brand-title">⬡ GLOBAL EXCHANGE</div>
-      <div class="brand-sub">Qabban B2B Trade Platform</div>
+    <div class="sb-brand">
+      <div class="sb-brand-icon">⚖</div>
+      <div class="sb-brand-title">GLOBAL EXCHANGE</div>
+      <div class="sb-brand-sub">Qabban B2B Trade Platform</div>
     </div>
-    ${navLinks.map(n => `
-    <a href="${n.href}" class="nav-link${activeNav === n.id ? ' active' : ''}">
-      <i class="fa ${n.icon}"></i>${n.label}
-    </a>`).join('')}
+    ${grouped.join('\n    ')}
   </aside>
   <main class="main">${content}</main>
 </body>
 </html>`
 }
 
-// ── GET /exchange — Exchange Hub dashboard ────────────────────────────────────
+// ── GET /exchange — Exchange Hub ──────────────────────────────────────────────
 app.get('/exchange', (c) => {
-  const availLots      = globalLots.filter(l => l.status === 'AVAILABLE').length
-  const verifiedVendors = globalVendors.filter(v => v.status === 'VERIFIED').length
-  const activeBuyers   = globalBuyers.filter(b => b.status === 'ACTIVE').length
-  const activeContracts = globalContracts.filter(con => con.status === 'ACTIVE').length
-  const scaBadgedLots  = globalLots.filter(l => l.scaGoldStorage).length
-  const totalVolumeKg  = globalLots.filter(l => l.status === 'AVAILABLE').reduce((s, l) => s + l.greenWeightKg, 0)
-  const effRate        = lastKnownUsdToSar * (1 + exchangeRateBuffer / 100)
+  const spotLots    = globalLots.filter(l => l.marketplaceType==='SPOT'    && l.status==='AVAILABLE')
+  const fwdLots     = globalLots.filter(l => l.marketplaceType==='FORWARD' && l.status==='AVAILABLE')
+  const availLots   = globalLots.filter(l => l.status==='AVAILABLE')
+  const verVendors  = globalVendors.filter(v => v.status==='VERIFIED').length
+  const activeBuyers= globalBuyers.filter(b => b.status==='ACTIVE').length
+  const contracts   = globalContracts.length + forwardContracts.length
+  const scaBadged   = globalLots.filter(l => l.scaGoldStorage).length
+  const totalKg     = availLots.reduce((s,l)=>s+l.greenWeightKg, 0)
+  const effRate     = lastKnownUsdToSar*(1+exchangeRateBuffer/100)
 
   const content = `
-  <div class="page-title"><i class="fa fa-globe" style="color:var(--green);margin-right:8px"></i>Qabban Global Exchange</div>
-  <div class="page-sub">Multi-vendor B2B coffee trade · Real-time SAR pricing · ZATCA Phase-2 compliant</div>
+  <div class="pg-title"><i class="fa fa-globe" style="color:var(--amber)"></i>Qabban Global Exchange</div>
+  <div class="pg-sub">Multi-vendor B2B · Spot &amp; Forward lots · ZATCA Phase-2 · Live ship tracking · Climate passports</div>
 
   <div class="stat-grid">
-    <div class="stat-card">
-      <div class="stat-label">Available Lots</div>
-      <div class="stat-value" style="color:var(--green)">${availLots}</div>
-      <div class="stat-unit">${totalVolumeKg.toLocaleString('en-SA')} kg total volume</div>
+    <div class="stat-card" style="border-color:rgba(74,222,128,.25)">
+      <div class="stat-lbl">Spot Lots</div>
+      <div class="stat-val" style="color:var(--green)">${spotLots.length}</div>
+      <div class="stat-sub">Immediate dispatch</div>
+    </div>
+    <div class="stat-card" style="border-color:rgba(245,158,11,.25)">
+      <div class="stat-lbl">Forward Lots</div>
+      <div class="stat-val" style="color:var(--amber)">${fwdLots.length}</div>
+      <div class="stat-sub">Pre-harvest orders · 30% deposit</div>
     </div>
     <div class="stat-card">
-      <div class="stat-label">Verified Vendors</div>
-      <div class="stat-value" style="color:var(--blue)">${verifiedVendors}</div>
-      <div class="stat-unit">${globalVendors.length} registered total</div>
+      <div class="stat-lbl">Verified Vendors</div>
+      <div class="stat-val" style="color:var(--blue)">${verVendors}</div>
+      <div class="stat-sub">${globalVendors.length} registered</div>
     </div>
     <div class="stat-card">
-      <div class="stat-label">Active Buyers</div>
-      <div class="stat-value" style="color:var(--amber)">${activeBuyers}</div>
-      <div class="stat-unit">Saudi roasteries</div>
+      <div class="stat-lbl">Active Buyers</div>
+      <div class="stat-val" style="color:var(--purple)">${activeBuyers}</div>
+      <div class="stat-sub">Saudi roasteries</div>
     </div>
     <div class="stat-card">
-      <div class="stat-label">Active Contracts</div>
-      <div class="stat-value" style="color:var(--purple)">${activeContracts}</div>
-      <div class="stat-unit">${zatcaInvoices.length} invoices issued</div>
+      <div class="stat-lbl">Total Volume</div>
+      <div class="stat-val" style="color:var(--text)">${totalKg.toLocaleString()}</div>
+      <div class="stat-sub">kg available</div>
     </div>
-    <div class="stat-card" style="border-color:rgba(74,222,128,0.3)">
-      <div class="stat-label">SCA Gold Storage</div>
-      <div class="stat-value" style="color:var(--green)">${scaBadgedLots}</div>
-      <div class="stat-unit">Lots with climate passport</div>
+    <div class="stat-card" style="border-color:rgba(34,211,238,.25)">
+      <div class="stat-lbl">SCA Gold Storage</div>
+      <div class="stat-val" style="color:var(--cyan)">${scaBadged}</div>
+      <div class="stat-sub">Climate-verified lots</div>
     </div>
-    <div class="stat-card" style="border-color:rgba(74,222,128,0.3)">
-      <div class="stat-label">USD → SAR (effective)</div>
-      <div class="stat-value" style="color:var(--green);font-size:18px">${effRate.toFixed(4)}</div>
-      <div class="stat-unit">spot ${lastKnownUsdToSar.toFixed(4)} + ${exchangeRateBuffer}% buffer</div>
+    <div class="stat-card">
+      <div class="stat-lbl">Active Contracts</div>
+      <div class="stat-val" style="color:var(--amber)">${contracts}</div>
+      <div class="stat-sub">${zatcaInvoices.length} ZATCA invoices</div>
+    </div>
+    <div class="stat-card" style="border-color:rgba(245,158,11,.2)">
+      <div class="stat-lbl">USD→SAR (effective)</div>
+      <div class="stat-val" style="color:var(--amber);font-size:17px">${effRate.toFixed(4)}</div>
+      <div class="stat-sub">SAMA ${samaReferenceRate.toFixed(4)} + ${exchangeRateBuffer}% buffer</div>
     </div>
   </div>
 
-  <!-- Featured Lots -->
-  <div class="card">
-    <div class="card-title">
-      <i class="fa fa-star" style="color:var(--amber)"></i>
-      Featured Global Lots
-      <a href="/exchange/catalog" class="btn btn-green" style="margin-left:auto;font-size:11px">View Full Catalog →</a>
+  <!-- Dual-track overview -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">
+    <div class="card" style="border-color:rgba(74,222,128,.25)">
+      <div class="card-hdr"><span class="track-spot">⚡ SPOT</span><span style="font-size:12px">Spot Market Lots</span></div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:10px;font-family:var(--mono)">Immediate dispatch from origin warehouse</div>
+      ${spotLots.slice(0,3).map(l=>`
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:12px">
+        <div><span style="color:var(--green);font-family:var(--mono)">${l.id}</span> — ${l.origin}</div>
+        <div style="font-family:var(--mono);color:var(--amber)">$${l.fobPriceUsd.toFixed(2)}/kg</div>
+      </div>`).join('')}
+      <a href="/exchange/catalog?type=SPOT" class="btn btn-green" style="margin-top:12px;font-size:10px">View all Spot lots →</a>
     </div>
-    <table class="table">
-      <thead><tr>
-        <th>Lot ID</th><th>Origin</th><th>Vendor</th><th>Process</th><th>Weight</th>
-        <th>FOB (USD)</th><th>Landed SAR/kg</th><th>Climate</th><th>Grade</th><th>Status</th>
-      </tr></thead>
-      <tbody>
-        ${globalLots.slice(0, 5).map(lot => {
-          const vendor  = globalVendors.find(v => v.id === lot.vendorId)
-          const landed  = calcLandedPrice(lot)
-          const scaBadge = lot.scaGoldStorage
-            ? `<span class="badge badge-gold"><i class="fa fa-certificate"></i> SCA Gold</span>`
-            : `<span style="font-size:10px;color:var(--text-muted)">RH ${lot.warehouseHumidity ?? '—'}%</span>`
-          const statusBadge = lot.status === 'AVAILABLE'
-            ? `<span class="badge badge-available">AVAILABLE</span>`
-            : `<span class="badge badge-contracted">${lot.status}</span>`
-          return `<tr>
-            <td style="font-family:var(--font-mono);color:var(--green)">${lot.id}</td>
-            <td>${lot.origin}</td>
-            <td style="font-size:11px;color:var(--text-muted)">${vendor?.companyName ?? lot.vendorId}</td>
-            <td><span style="font-size:10px;background:rgba(255,255,255,0.06);padding:2px 6px;border-radius:3px">${lot.process}</span></td>
-            <td style="font-family:var(--font-mono)">${lot.greenWeightKg.toLocaleString()} kg</td>
-            <td style="font-family:var(--font-mono);color:var(--amber)">$${lot.fobPriceUsd.toFixed(2)}/kg</td>
-            <td style="font-family:var(--font-mono);color:var(--green)">${landed.landedPricePerKg.toFixed(2)} SAR/kg</td>
-            <td>${scaBadge}</td>
-            <td>
-              <div style="display:flex;align-items:center;gap:4px">
-                <div style="height:4px;width:${lot.gradeScore - 60}px;max-width:40px;background:var(--green);border-radius:2px"></div>
-                <span style="font-family:var(--font-mono);font-size:11px;color:var(--green)">${lot.gradeScore}</span>
-              </div>
-            </td>
-            <td>${statusBadge}</td>
-          </tr>`
-        }).join('')}
-      </tbody>
-    </table>
+    <div class="card" style="border-color:rgba(245,158,11,.25)">
+      <div class="card-hdr"><span class="track-fwd">🌱 FORWARD</span><span style="font-size:12px">Forward Pre-orders</span></div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:10px;font-family:var(--mono)">30% deposit · SAS clause · milestone payments</div>
+      ${fwdLots.slice(0,3).map(l=>`
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:12px">
+        <div><span style="color:var(--amber);font-family:var(--mono)">${l.id}</span> — ${l.origin}</div>
+        <div style="font-size:10px;color:var(--muted)">Harvest: ${l.harvestDate?.slice(0,7) ?? '—'}</div>
+      </div>`).join('')}
+      <a href="/exchange/catalog?type=FORWARD" class="btn btn-amber" style="margin-top:12px;font-size:10px">View all Forward lots →</a>
+    </div>
   </div>
 
-  <!-- Quick Links -->
-  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px">
-    <a href="/vendor" style="text-decoration:none">
-      <div class="card" style="border-color:rgba(96,165,250,0.3);cursor:pointer;transition:all .15s" onmouseover="this.style.borderColor='rgba(96,165,250,0.6)'" onmouseout="this.style.borderColor='rgba(96,165,250,0.3)'">
-        <div style="font-size:28px;margin-bottom:8px">🌱</div>
-        <div style="font-weight:600;margin-bottom:4px">Vendor Portal</div>
-        <div style="font-size:11px;color:var(--text-muted)">Register lots, upload processing data, manage FOB pricing</div>
+  <!-- Rate Display -->
+  <div class="card" style="border-color:rgba(245,158,11,.25)">
+    <div class="card-hdr"><i class="fa fa-coins" style="color:var(--amber)"></i>Live Exchange Rates — SAMA Reference + Buffer</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px">
+      <div style="text-align:center;padding:12px;background:rgba(245,158,11,.05);border:1px solid rgba(245,158,11,.15);border-radius:6px">
+        <div style="font-size:10px;color:var(--muted);font-family:var(--mono)">SAMA Reference</div>
+        <div style="font-size:22px;font-weight:700;color:var(--amber)">${samaReferenceRate.toFixed(4)}</div>
+        <div style="font-size:10px;color:var(--muted)">SAR per 1 USD</div>
       </div>
-    </a>
-    <a href="/buyer" style="text-decoration:none">
-      <div class="card" style="border-color:rgba(245,158,11,0.3);cursor:pointer;transition:all .15s" onmouseover="this.style.borderColor='rgba(245,158,11,0.6)'" onmouseout="this.style.borderColor='rgba(245,158,11,0.3)'">
-        <div style="font-size:28px;margin-bottom:8px">🏭</div>
-        <div style="font-weight:600;margin-bottom:4px">Buyer Portal</div>
-        <div style="font-size:11px;color:var(--text-muted)">Browse catalog, calculate landed prices, contract lots</div>
+      <div style="text-align:center;padding:12px;background:rgba(74,222,128,.05);border:1px solid rgba(74,222,128,.15);border-radius:6px">
+        <div style="font-size:10px;color:var(--muted);font-family:var(--mono)">With +${exchangeRateBuffer}% Buffer</div>
+        <div style="font-size:22px;font-weight:700;color:var(--green)">${effRate.toFixed(4)}</div>
+        <div style="font-size:10px;color:var(--muted)">SAR per 1 USD (effective)</div>
       </div>
-    </a>
-    <a href="/exchange/catalog" style="text-decoration:none">
-      <div class="card" style="border-color:rgba(74,222,128,0.3);cursor:pointer;transition:all .15s" onmouseover="this.style.borderColor='rgba(74,222,128,0.6)'" onmouseout="this.style.borderColor='rgba(74,222,128,0.3)'">
-        <div style="font-size:28px;margin-bottom:8px">📋</div>
-        <div style="font-weight:600;margin-bottom:4px">Global Catalog</div>
-        <div style="font-size:11px;color:var(--text-muted)">Full catalog with Climate Passports and landed pricing</div>
+      <div style="text-align:center;padding:12px;background:rgba(96,165,250,.05);border:1px solid rgba(96,165,250,.15);border-radius:6px">
+        <div style="font-size:10px;color:var(--muted);font-family:var(--mono)">EUR Rate</div>
+        <div style="font-size:22px;font-weight:700;color:var(--blue)">${(lastKnownEurToSar*(1+exchangeRateBuffer/100)).toFixed(4)}</div>
+        <div style="font-size:10px;color:var(--muted)">SAR per 1 EUR (effective)</div>
       </div>
-    </a>
+      <div style="text-align:center;padding:12px;background:rgba(167,139,250,.05);border:1px solid rgba(167,139,250,.15);border-radius:6px">
+        <div style="font-size:10px;color:var(--muted);font-family:var(--mono)">Rate Lock</div>
+        <div style="font-size:20px;font-weight:700;color:var(--purple)">60s</div>
+        <div style="font-size:10px;color:var(--muted)">Execution window</div>
+      </div>
+    </div>
+    <div style="font-size:10px;color:var(--muted);font-family:var(--mono);margin-top:10px">
+      ${exchangeRateUpdatedAt ? `Last updated: ${exchangeRateUpdatedAt}` : 'Using SAMA peg fallback (3.75 SAR/USD)'} ·
+      <a href="/admin/finance" style="color:var(--amber)">Manage in Finance settings →</a> ·
+      <a href="/exchange/analytics" style="color:var(--blue)">View Analytics →</a>
+    </div>
   </div>`
 
   return c.html(exchangeLayout('Exchange Hub', 'hub', content))
 })
 
-// ── GET /exchange/catalog — Global Catalog with Landed Prices ────────────────
+// ── GET /exchange/catalog — Global Catalog (Spot + Forward) ──────────────────
 app.get('/exchange/catalog', (c) => {
-  const effRate = lastKnownUsdToSar * (1 + exchangeRateBuffer / 100)
+  const typeFilter = c.req.query('type') as 'SPOT'|'FORWARD'|undefined
+  const effRate    = lastKnownUsdToSar*(1+exchangeRateBuffer/100)
+  const filtered   = typeFilter ? globalLots.filter(l=>l.marketplaceType===typeFilter) : globalLots
 
-  const content = `
-  <div class="page-title"><i class="fa fa-list" style="color:var(--green);margin-right:8px"></i>Global Coffee Catalog</div>
-  <div class="page-sub">Real-time SAR pricing · Digital Climate Passports · Landed cost calculator</div>
+  const tabBar = `
+  <div style="display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap">
+    <a href="/exchange/catalog" class="btn ${!typeFilter?'btn-amber':'btn-blue'}" style="font-size:11px">All Lots (${globalLots.length})</a>
+    <a href="/exchange/catalog?type=SPOT" class="btn ${typeFilter==='SPOT'?'btn-green':'btn-blue'}" style="font-size:11px">⚡ Spot (${globalLots.filter(l=>l.marketplaceType==='SPOT').length})</a>
+    <a href="/exchange/catalog?type=FORWARD" class="btn ${typeFilter==='FORWARD'?'btn-amber':'btn-blue'}" style="font-size:11px">🌱 Forward (${globalLots.filter(l=>l.marketplaceType==='FORWARD').length})</a>
+  </div>`
 
-  <!-- Currency Banner -->
-  <div class="alert alert-green" style="margin-bottom:24px;font-family:var(--font-mono);font-size:11px">
-    <i class="fa fa-coins"></i>
-    USD → SAR effective rate: <strong>${effRate.toFixed(4)}</strong>
-    &nbsp;(spot ${lastKnownUsdToSar.toFixed(4)} + ${exchangeRateBuffer}% buffer)
-    &nbsp;·&nbsp; EUR → SAR: <strong>${(lastKnownEurToSar*(1+exchangeRateBuffer/100)).toFixed(4)}</strong>
-    &nbsp;·&nbsp; 15% ZATCA VAT included in Landed Price
-  </div>
-
-  ${globalLots.map(lot => {
-    const vendor  = globalVendors.find(v => v.id === lot.vendorId)
+  const lotCards = filtered.map(lot => {
+    const vendor  = globalVendors.find(v=>v.id===lot.vendorId)
     const landed  = calcLandedPrice(lot)
-    const scaVerified = lot.scaGoldStorage
+    const isSpot  = lot.marketplaceType === 'SPOT'
+    const isFwd   = lot.marketplaceType === 'FORWARD'
 
-    // Climate Passport section
+    // ── Climate Passport ──────────────────────────────────────────
+    const rhOk = lot.warehouseHumidity!=null && lot.warehouseHumidity>=50 && lot.warehouseHumidity<=60
     const passport = `
-    <div style="margin-top:14px;padding:12px;background:${scaVerified ? 'rgba(74,222,128,0.06)' : 'rgba(255,255,255,0.03)'};border:1px solid ${scaVerified ? 'rgba(74,222,128,0.3)' : 'var(--border)'};border-radius:6px">
-      <div style="font-size:10px;font-family:var(--font-mono);color:${scaVerified ? 'var(--green)' : 'var(--text-muted)'};margin-bottom:6px">
-        <i class="fa fa-shield${scaVerified ? '-check' : ''}"></i>
-        DIGITAL CLIMATE PASSPORT — ${scaVerified ? '✓ SCA GOLD STORAGE VERIFIED' : 'UNVERIFIED'}
+    <div style="margin-top:14px;padding:12px;background:${lot.scaGoldStorage?'rgba(34,211,238,.05)':'rgba(255,255,255,.02)'};
+                border:1px solid ${lot.scaGoldStorage?'rgba(34,211,238,.25)':'var(--border)'};border-radius:6px">
+      <div style="font-size:9px;font-family:var(--mono);color:${lot.scaGoldStorage?'var(--cyan)':'var(--muted)'};margin-bottom:8px;letter-spacing:.08em">
+        <i class="fa fa-passport"></i> DIGITAL CLIMATE PASSPORT — ${lot.scaGoldStorage?'✓ SCA GOLD STORAGE CERTIFIED':'STANDARD STORAGE'}
       </div>
-      <div style="display:flex;gap:20px;flex-wrap:wrap;font-size:11px;font-family:var(--font-mono)">
-        <span>RH: <strong style="color:${lot.warehouseHumidity && lot.warehouseHumidity >= 50 && lot.warehouseHumidity <= 60 ? 'var(--green)' : 'var(--amber)'}">${lot.warehouseHumidity ?? '—'}%</strong> ${lot.warehouseHumidity ? (lot.warehouseHumidity >= 50 && lot.warehouseHumidity <= 60 ? '✓ Optimal' : '⚠ Out of range') : ''}</span>
-        ${scaVerified ? `<span>Certified: <strong style="color:var(--green)">${lot.climateCertifiedAt?.split('T')[0] ?? '—'}</strong></span>` : ''}
-        <span>Threshold: <strong>50–60% RH</strong> (SCA Gold Storage standard)</span>
-        <span>IoT Source: <strong>Producer Warehouse Sensors</strong></span>
+      <div class="climate-timeline">
+        ${lot.climateLog.map(cl=>`
+        <div class="cl-row cl-${cl.phase.toLowerCase()}">
+          <div style="color:var(--text);font-weight:600">${cl.location}</div>
+          <div style="color:var(--muted);font-family:var(--mono);font-size:10px">
+            ${cl.ts.split('T')[0]} · RH <strong style="color:${cl.humidity>=50&&cl.humidity<=60?'var(--cyan)':cl.humidity>70?'var(--red)':'var(--amber)'}">${cl.humidity}%</strong>
+            · Temp <strong>${cl.temp}°C</strong>
+            ${cl.note?`· <em style="color:var(--muted)">${cl.note}</em>`:''}
+          </div>
+        </div>`).join('')}
       </div>
+      ${lot.scaGoldStorage?`<div style="margin-top:6px;font-size:9px;font-family:var(--mono);color:var(--cyan)">✓ Certified ${lot.climateCertifiedAt?.split('T')[0]} · SCA threshold 50–60% RH</div>`:''}
     </div>`
 
-    // Landed Price Breakdown
-    const landedBreakdown = `
-    <div style="margin-top:12px;padding:12px;background:rgba(245,158,11,0.05);border:1px solid rgba(245,158,11,0.2);border-radius:6px">
-      <div style="font-size:10px;font-family:var(--font-mono);color:var(--amber);margin-bottom:8px"><i class="fa fa-calculator"></i> LANDED PRICE CALCULATOR — ${lot.greenWeightKg.toLocaleString()} kg lot</div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px;font-size:11px;font-family:var(--font-mono)">
-        <div><span style="color:var(--text-muted)">FOB Price:</span><br><strong>$${landed.fobPriceUsd.toFixed(2)}/kg → ${landed.fobPriceSar.toFixed(2)} SAR/kg</strong></div>
-        <div><span style="color:var(--text-muted)">Shipping (est.):</span><br><strong style="color:var(--amber)">${landed.shippingEstimateSar.toLocaleString('en-SA')} SAR</strong></div>
-        <div><span style="color:var(--text-muted)">Customs (5% CIF):</span><br><strong style="color:var(--amber)">${landed.customsFeesSar.toLocaleString('en-SA')} SAR</strong></div>
-        <div><span style="color:var(--text-muted)">ZATCA VAT (15%):</span><br><strong style="color:var(--red)">${landed.vatSar.toLocaleString('en-SA')} SAR</strong></div>
-        <div><span style="color:var(--text-muted)">Landed Total:</span><br><strong style="color:var(--green);font-size:14px">${landed.landedPriceSar.toLocaleString('en-SA')} SAR</strong></div>
-        <div><span style="color:var(--text-muted)">Per Kg:</span><br><strong style="color:var(--green);font-size:16px">${landed.landedPricePerKg.toFixed(2)} SAR/kg</strong></div>
+    // ── Ship Tracker (if shipped/delivered) ───────────────────────
+    const shipPanel = lot.shipTracker ? `
+    <div style="margin-top:12px;padding:12px;background:rgba(96,165,250,.04);border:1px solid rgba(96,165,250,.2);border-radius:6px">
+      <div style="font-size:9px;font-family:var(--mono);color:var(--blue);margin-bottom:8px;letter-spacing:.08em">
+        <i class="fa fa-ship"></i> FLEXPORT LIVE SHIP TRACKER — ${lot.shipTracker.status}
+      </div>
+      <div style="display:flex;gap:20px;flex-wrap:wrap;font-size:11px;font-family:var(--mono);margin-bottom:10px">
+        <span>Vessel: <strong>${lot.shipTracker.vessel}</strong></span>
+        <span>Voyage: <strong>${lot.shipTracker.voyageNumber}</strong></span>
+        <span>ETD: <strong>${lot.shipTracker.etd}</strong></span>
+        <span>ETA: <strong>${lot.shipTracker.eta}</strong></span>
+      </div>
+      <div class="tracker-bar"><div class="tracker-fill" style="width:${lot.shipTracker.progressPct}%"></div></div>
+      <div style="font-size:10px;color:var(--muted);font-family:var(--mono);margin-top:4px">
+        ${lot.shipTracker.currentLocation} · ${lot.shipTracker.progressPct}% complete
+      </div>
+      <div class="tracker-events" style="margin-top:10px">
+        ${lot.shipTracker.events.map(ev=>`
+        <div class="tracker-event">
+          <div style="font-weight:600">${ev.location}</div>
+          <div style="color:var(--muted);font-size:10px;font-family:var(--mono)">${ev.ts.replace('T',' ').slice(0,16)} — ${ev.description}</div>
+        </div>`).join('')}
+      </div>
+    </div>` : ''
+
+    // ── Forward-specific panels ───────────────────────────────────
+    const fwdPanel = isFwd ? `
+    <div style="margin-top:12px;display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="sas-box">
+        <div style="color:var(--purple);font-weight:700;margin-bottom:4px"><i class="fa fa-file-signature"></i> SAS Clause</div>
+        ${lot.sasClause
+          ? `Subject to Approval of Sample — final contract conditional on sample approval by buyer's Q.C. team.`
+          : `No SAS clause — lot confirmed on contract signing.`}
+      </div>
+      <div style="background:rgba(245,158,11,.05);border:1px dashed rgba(245,158,11,.3);border-radius:var(--radius);padding:12px 14px;font-size:11px;font-family:var(--mono)">
+        <div style="color:var(--amber);font-weight:700;margin-bottom:6px"><i class="fa fa-calendar-check"></i> Milestone Payments</div>
+        <div>Deposit (${lot.depositPct}%) → on contract signing</div>
+        <div style="color:var(--muted)">Pre-ship (${Math.round((100-lot.depositPct)*0.4)}%) → on shipping confirmation</div>
+        <div style="color:var(--muted)">On delivery (${Math.round((100-lot.depositPct)*0.6)}%) → on arrival</div>
+        <div style="margin-top:6px;font-size:9px;color:var(--muted)">Harvest: ${lot.harvestDate ?? 'TBD'}</div>
+      </div>
+    </div>` : ''
+
+    // ── Landed Price ──────────────────────────────────────────────
+    const landedPanel = `
+    <div style="margin-top:12px;padding:12px;background:rgba(245,158,11,.04);border:1px solid rgba(245,158,11,.15);border-radius:6px">
+      <div style="font-size:9px;font-family:var(--mono);color:var(--amber);margin-bottom:8px;letter-spacing:.08em"><i class="fa fa-calculator"></i> LANDED PRICE CALCULATOR</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:6px;font-size:11px;font-family:var(--mono)">
+        <div><span style="color:var(--muted)">FOB USD/kg:</span><br><strong>$${landed.fobPriceUsd.toFixed(2)} → ${landed.fobPriceSar.toFixed(2)} SAR</strong></div>
+        <div><span style="color:var(--muted)">Shipping:</span><br><strong style="color:var(--amber)">${landed.shippingEstimateSar.toLocaleString()} SAR</strong></div>
+        <div><span style="color:var(--muted)">Customs (5%):</span><br><strong style="color:var(--amber)">${landed.customsFeesSar.toLocaleString()} SAR</strong></div>
+        <div><span style="color:var(--muted)">VAT 15%:</span><br><strong style="color:var(--red)">${landed.vatSar.toLocaleString()} SAR</strong></div>
+        <div><span style="color:var(--muted)">Per kg:</span><br><strong style="color:var(--green);font-size:14px">${landed.landedPricePerKg.toFixed(2)} SAR/kg</strong></div>
+        <div><span style="color:var(--muted)">Total lot:</span><br><strong style="color:var(--green)">${landed.landedPriceSar.toLocaleString()} SAR</strong></div>
       </div>
     </div>`
 
     return `
-    <div class="card" style="border-color:${scaVerified ? 'rgba(74,222,128,0.3)' : 'var(--border)'}">
-      <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:12px">
-        <div>
-          <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
-            <span style="font-family:var(--font-mono);font-size:11px;color:var(--text-muted)">${lot.id}</span>
-            ${scaVerified ? `<span class="badge badge-gold"><i class="fa fa-certificate"></i> SCA GOLD STORAGE</span>` : ''}
-            <span class="badge ${lot.status === 'AVAILABLE' ? 'badge-available' : 'badge-contracted'}">${lot.status}</span>
+    <div class="card" style="border-color:${isSpot?'rgba(74,222,128,.2)':isFwd?'rgba(245,158,11,.25)':'var(--border)'}">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px">
+        <div style="flex:1;min-width:240px">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap">
+            <span style="font-family:var(--mono);font-size:10px;color:var(--muted)">${lot.id}</span>
+            <span class="${isSpot?'track-spot':'track-fwd'}">${isSpot?'⚡ SPOT':'🌱 FORWARD'}</span>
+            ${lot.scaGoldStorage?`<span class="badge b-cyan"><i class="fa fa-certificate"></i> SCA GOLD</span>`:''}
+            ${lot.sasClause?`<span class="badge b-purple">SAS</span>`:''}
+            <span class="badge ${lot.status==='AVAILABLE'?'b-green':'b-muted'}">${lot.status}</span>
           </div>
-          <div style="font-size:18px;font-weight:700">${lot.origin}</div>
-          <div style="font-size:12px;color:var(--text-muted);margin-top:2px">
-            ${lot.variety} · ${lot.process} · ${lot.harvestYear} harvest · ${vendor?.companyName ?? ''} (${vendor?.country ?? ''})
-          </div>
+          <div style="font-size:18px;font-weight:700;margin-bottom:3px">${lot.origin}</div>
+          <div style="font-size:11px;color:var(--muted)">${lot.variety} · ${lot.process} · ${lot.harvestYear} · ${vendor?.companyName??''} (${vendor?.country??''})</div>
           <div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px">
-            ${lot.flavorNotes.map(n => `<span style="font-size:10px;background:rgba(255,255,255,0.06);padding:2px 6px;border-radius:3px;color:var(--text-muted)">${n}</span>`).join('')}
+            ${lot.flavorNotes.map(n=>`<span style="font-size:9px;background:rgba(255,255,255,.05);padding:2px 6px;border-radius:3px;color:var(--muted)">${n}</span>`).join('')}
           </div>
         </div>
-        <div style="text-align:right">
-          <div style="font-size:10px;color:var(--text-muted);font-family:var(--font-mono)">SCA Grade</div>
-          <div style="font-size:28px;font-weight:700;color:var(--green)">${lot.gradeScore}</div>
-          <div style="font-size:10px;color:var(--text-muted)">${lot.greenWeightKg.toLocaleString()} kg available</div>
-          <div style="font-size:11px;color:var(--text-muted);margin-top:4px"><i class="fa fa-ship"></i> ~${lot.shipmentEstimateDays ?? '?'} days to KSA</div>
-          <a href="/buyer/contract?lotId=${lot.id}" class="btn btn-amber" style="margin-top:8px;font-size:11px">
-            <i class="fa fa-file-contract"></i> Contract Lot
-          </a>
+        <div style="text-align:right;flex-shrink:0">
+          <div style="font-size:9px;color:var(--muted);font-family:var(--mono)">SCA Score</div>
+          <div style="font-size:26px;font-weight:700;color:var(--green)">${lot.gradeScore}</div>
+          <div style="font-size:10px;color:var(--muted)">${lot.greenWeightKg.toLocaleString()} kg</div>
+          <div style="font-size:10px;color:var(--muted)">~${lot.shipmentEstimateDays??'?'}d to KSA</div>
+          <div style="display:flex;flex-direction:column;gap:5px;margin-top:8px">
+            <a href="/buyer/contract?lotId=${lot.id}" class="btn ${isSpot?'btn-green':'btn-amber'}" style="font-size:10px">
+              <i class="fa fa-file-contract"></i> ${isSpot?'Order Spot':'Pre-order'}
+            </a>
+            <a href="/exchange/climate/${lot.id}" class="btn btn-blue" style="font-size:9px;padding:4px 10px">
+              <i class="fa fa-passport"></i> Climate Passport
+            </a>
+            ${lot.shipTracker?`<a href="/exchange/shiptrack/${lot.id}" class="btn btn-blue" style="font-size:9px;padding:4px 10px">
+              <i class="fa fa-ship"></i> Ship Tracker
+            </a>`:''}
+          </div>
         </div>
       </div>
       ${passport}
-      ${landedBreakdown}
+      ${shipPanel}
+      ${fwdPanel}
+      ${landedPanel}
     </div>`
-  }).join('')}`
+  }).join('')
+
+  const content = `
+  <div class="pg-title"><i class="fa fa-list" style="color:var(--green)"></i>Global Coffee Catalog</div>
+  <div class="pg-sub">Real-time SAR pricing · Digital Climate Passports · Landed cost · Ship tracking</div>
+  <div class="alert al-green" style="font-family:var(--mono);font-size:10px">
+    <i class="fa fa-coins"></i>
+    USD → SAR effective: <strong>${effRate.toFixed(4)}</strong> (SAMA ${samaReferenceRate.toFixed(4)} + ${exchangeRateBuffer}% buffer) ·
+    EUR: <strong>${(lastKnownEurToSar*(1+exchangeRateBuffer/100)).toFixed(4)}</strong> ·
+    15% ZATCA VAT included in landed price · 60s Rate Lock on contract
+  </div>
+  ${tabBar}
+  ${lotCards}`
 
   return c.html(exchangeLayout('Global Catalog', 'catalog', content))
 })
 
-// ── GET /vendor — Vendor Portal ───────────────────────────────────────────────
+// ── GET /vendor ───────────────────────────────────────────────────────────────
 app.get('/vendor', (c) => {
   const content = `
-  <div class="page-title"><i class="fa fa-store" style="color:var(--blue);margin-right:8px"></i>Vendor Portal</div>
-  <div class="page-sub">Register as a global coffee producer · List lots · Manage Climate Passport data</div>
-
-  <div style="display:flex;gap:12px;margin-bottom:24px;flex-wrap:wrap">
-    <a href="/vendor/register" class="btn btn-green"><i class="fa fa-plus"></i> Register as Vendor</a>
-    <a href="/vendor/lots/new" class="btn btn-blue"><i class="fa fa-seedling"></i> List a New Lot</a>
+  <div class="pg-title"><i class="fa fa-store" style="color:var(--blue)"></i>Vendor Portal</div>
+  <div class="pg-sub">Registered global coffee producers · Climate passport · Lot management</div>
+  <div style="display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap">
+    <a href="/vendor/register" class="btn btn-green"><i class="fa fa-plus"></i> Register Vendor</a>
+    <a href="/vendor/lots/new" class="btn btn-blue"><i class="fa fa-seedling"></i> List New Lot</a>
   </div>
 
-  <!-- Registered Vendors -->
   <div class="card">
-    <div class="card-title"><i class="fa fa-building" style="color:var(--blue)"></i> Registered Vendors</div>
-    <table class="table">
-      <thead><tr>
-        <th>Vendor ID</th><th>Company</th><th>Country / Region</th><th>Contact</th><th>Warehouse RH</th><th>Status</th><th>Registered</th>
-      </tr></thead>
+    <div class="card-hdr"><i class="fa fa-building" style="color:var(--blue)"></i>Registered Vendors</div>
+    <table class="tbl">
+      <thead><tr><th>ID</th><th>Company</th><th>Country · Region</th><th>Contact</th><th>RH / Temp</th><th>Status</th><th>Since</th></tr></thead>
       <tbody>
-        ${globalVendors.map(v => {
-          const rhColor = v.warehouseHumidity && v.warehouseHumidity >= 50 && v.warehouseHumidity <= 60 ? 'var(--green)' : 'var(--amber)'
-          const statusBadge = v.status === 'VERIFIED'
-            ? `<span class="badge badge-verified"><i class="fa fa-check"></i> VERIFIED</span>`
-            : v.status === 'PENDING_REVIEW'
-            ? `<span class="badge badge-pending">PENDING</span>`
-            : `<span class="badge" style="background:rgba(248,113,113,0.1);color:var(--red);border:1px solid rgba(248,113,113,0.3)">SUSPENDED</span>`
+        ${globalVendors.map(v=>{
+          const rhOk  = v.warehouseHumidity!=null&&v.warehouseHumidity>=50&&v.warehouseHumidity<=60
+          const rhClr = v.warehouseHumidity==null?'var(--muted)':rhOk?'var(--cyan)':v.warehouseHumidity>70?'var(--red)':'var(--amber)'
+          const sb    = v.status==='VERIFIED'?'<span class="badge b-blue">VERIFIED</span>':
+                        v.status==='PENDING_REVIEW'?'<span class="badge b-amber">PENDING</span>':
+                        '<span class="badge b-red">SUSPENDED</span>'
           return `<tr>
-            <td style="font-family:var(--font-mono);color:var(--blue)">${v.id}</td>
+            <td style="font-family:var(--mono);color:var(--blue)">${v.id}</td>
             <td><strong>${v.companyName}</strong></td>
-            <td style="font-size:11px;color:var(--text-muted)">${v.country} · ${v.region}</td>
-            <td style="font-size:11px">
-              <div>${v.contactName}</div>
-              <div style="color:var(--text-muted)">${v.contactEmail}</div>
+            <td style="font-size:11px;color:var(--muted)">${v.country} · ${v.region}</td>
+            <td style="font-size:11px"><div>${v.contactName}</div><div style="color:var(--muted)">${v.contactEmail}</div></td>
+            <td style="font-family:var(--mono)">
+              <span style="color:${rhClr}">${v.warehouseHumidity??'—'}% RH</span>
+              <span style="color:var(--muted)"> / ${v.warehouseTemp??'—'}°C</span>
+              ${rhOk?'<span class="badge b-cyan" style="margin-left:4px">SCA ✓</span>':''}
             </td>
-            <td style="font-family:var(--font-mono)">
-              <strong style="color:${rhColor}">${v.warehouseHumidity ?? '—'}%</strong>
-              ${v.warehouseHumidity && v.warehouseHumidity >= 50 && v.warehouseHumidity <= 60 ? ' <span style="font-size:10px;color:var(--green)">SCA ✓</span>' : ''}
-            </td>
-            <td>${statusBadge}</td>
-            <td style="font-size:10px;color:var(--text-muted);font-family:var(--font-mono)">${v.registeredAt.split('T')[0]}</td>
+            <td>${sb}</td>
+            <td style="font-size:10px;color:var(--muted);font-family:var(--mono)">${v.registeredAt.slice(0,10)}</td>
           </tr>`
         }).join('')}
       </tbody>
     </table>
   </div>
 
-  <!-- Vendor Lots -->
   <div class="card">
-    <div class="card-title"><i class="fa fa-seedling" style="color:var(--green)"></i> Listed Lots</div>
-    <table class="table">
-      <thead><tr><th>Lot ID</th><th>Vendor</th><th>Origin</th><th>Weight</th><th>FOB USD/kg</th><th>Grade</th><th>Climate</th><th>Status</th></tr></thead>
+    <div class="card-hdr"><i class="fa fa-seedling" style="color:var(--green)"></i>Listed Lots</div>
+    <table class="tbl">
+      <thead><tr><th>ID</th><th>Vendor</th><th>Origin</th><th>Track</th><th>Weight</th><th>FOB USD</th><th>Harvest</th><th>Climate</th><th>Status</th></tr></thead>
       <tbody>
-        ${globalLots.map(lot => {
-          const vendor = globalVendors.find(v => v.id === lot.vendorId)
-          const climBadge = lot.scaGoldStorage
-            ? `<span class="badge badge-gold"><i class="fa fa-certificate"></i> SCA Gold</span>`
-            : `<span style="font-size:10px;color:var(--text-muted)">RH ${lot.warehouseHumidity ?? '—'}%</span>`
+        ${globalLots.map(l=>{
+          const v  = globalVendors.find(x=>x.id===l.vendorId)
+          const cl = l.scaGoldStorage?'<span class="badge b-cyan">SCA Gold</span>':'<span class="badge b-muted">'+l.warehouseHumidity+'% RH</span>'
           return `<tr>
-            <td style="font-family:var(--font-mono);color:var(--green)">${lot.id}</td>
-            <td style="font-size:11px">${vendor?.companyName ?? lot.vendorId}</td>
-            <td>${lot.origin}</td>
-            <td style="font-family:var(--font-mono)">${lot.greenWeightKg.toLocaleString()} kg</td>
-            <td style="font-family:var(--font-mono);color:var(--amber)">$${lot.fobPriceUsd.toFixed(2)}</td>
-            <td style="font-family:var(--font-mono);color:var(--green)">${lot.gradeScore}</td>
-            <td>${climBadge}</td>
-            <td><span class="badge ${lot.status === 'AVAILABLE' ? 'badge-available' : 'badge-contracted'}">${lot.status}</span></td>
+            <td style="font-family:var(--mono);color:var(--green)">${l.id}</td>
+            <td style="font-size:11px">${v?.companyName??l.vendorId}</td>
+            <td>${l.origin}</td>
+            <td><span class="${l.marketplaceType==='SPOT'?'track-spot':'track-fwd'}">${l.marketplaceType}</span></td>
+            <td style="font-family:var(--mono)">${l.greenWeightKg.toLocaleString()} kg</td>
+            <td style="font-family:var(--mono);color:var(--amber)">$${l.fobPriceUsd.toFixed(2)}</td>
+            <td style="font-size:10px;color:var(--muted);font-family:var(--mono)">${l.harvestDate??l.harvestYear}</td>
+            <td>${cl}</td>
+            <td><span class="badge ${l.status==='AVAILABLE'?'b-green':'b-muted'}">${l.status}</span></td>
           </tr>`
         }).join('')}
       </tbody>
     </table>
   </div>`
-
   return c.html(exchangeLayout('Vendor Portal', 'vendor', content))
 })
 
-// ── GET /vendor/register — Vendor Registration Form ──────────────────────────
+// ── GET /vendor/register ──────────────────────────────────────────────────────
 app.get('/vendor/register', (c) => {
   const msg = c.req.query('msg')
   const content = `
-  <div class="page-title"><i class="fa fa-store" style="color:var(--blue);margin-right:8px"></i>Register as Vendor</div>
-  <div class="page-sub">Global coffee producers — join the Qabban B2B network</div>
-
-  ${msg === 'ok' ? `<div class="alert alert-green"><i class="fa fa-check"></i> Registration submitted! Your application is under review.</div>` : ''}
-
-  <div class="card" style="max-width:600px">
+  <div class="pg-title"><i class="fa fa-user-plus" style="color:var(--blue)"></i>Register as Vendor</div>
+  <div class="pg-sub">Global coffee producers — join the Qabban B2B network</div>
+  ${msg==='ok'?`<div class="alert al-green"><i class="fa fa-check"></i>Registration submitted! Under review.</div>`:''}
+  <div class="card" style="max-width:580px">
     <form method="POST" action="/vendor/register">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-        <div class="form-group" style="grid-column:1/-1">
-          <label class="form-label">Company / Farm Name *</label>
-          <input name="companyName" class="form-input" placeholder="e.g. Yirgacheffe Highland Estate" required/>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Contact Person *</label>
-          <input name="contactName" class="form-input" placeholder="Full name" required/>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Contact Email *</label>
-          <input name="contactEmail" type="email" class="form-input" placeholder="email@company.com" required/>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Country *</label>
-          <select name="country" class="form-select" required>
-            <option value="">Select country…</option>
-            ${['Ethiopia','Brazil','Colombia','Yemen','Kenya','Indonesia','Guatemala','Costa Rica','Rwanda','Peru'].map(c => `<option>${c}</option>`).join('')}
+        <div class="fg" style="grid-column:1/-1"><label class="fl">Company / Farm Name *</label><input name="companyName" class="fi" required/></div>
+        <div class="fg"><label class="fl">Contact Person *</label><input name="contactName" class="fi" required/></div>
+        <div class="fg"><label class="fl">Contact Email *</label><input name="contactEmail" type="email" class="fi" required/></div>
+        <div class="fg">
+          <label class="fl">Country *</label>
+          <select name="country" class="fs" required>
+            <option value="">Select…</option>
+            ${['Ethiopia','Brazil','Colombia','Yemen','Kenya','Indonesia','Guatemala','Costa Rica','Rwanda','Peru'].map(c=>`<option>${c}</option>`).join('')}
           </select>
         </div>
-        <div class="form-group">
-          <label class="form-label">Growing Region *</label>
-          <input name="region" class="form-input" placeholder="e.g. Yirgacheffe, Huila…" required/>
-        </div>
-        <div class="form-group" style="grid-column:1/-1">
-          <label class="form-label">Warehouse Humidity (% RH) — IoT Reading</label>
-          <input name="warehouseHumidity" type="number" min="0" max="100" step="0.1" class="form-input" placeholder="e.g. 57"/>
-          <div style="font-size:10px;color:var(--text-muted);margin-top:4px;font-family:var(--font-mono)">
-            50–60% RH = SCA Gold Storage badge · Refreshed automatically from IoT sensors
-          </div>
-        </div>
+        <div class="fg"><label class="fl">Growing Region *</label><input name="region" class="fi" placeholder="e.g. Yirgacheffe" required/></div>
+        <div class="fg"><label class="fl">Warehouse Humidity (% RH) — IoT</label><input name="warehouseHumidity" type="number" min="0" max="100" step="0.1" class="fi" placeholder="50–60% = SCA Gold"/></div>
+        <div class="fg"><label class="fl">Warehouse Temperature (°C) — IoT</label><input name="warehouseTemp" type="number" min="0" max="50" step="0.1" class="fi" placeholder="e.g. 18"/></div>
       </div>
-      <button type="submit" class="btn btn-green" style="width:100%;justify-content:center;padding:11px">
-        <i class="fa fa-paper-plane"></i> SUBMIT REGISTRATION
-      </button>
+      <button type="submit" class="btn btn-green" style="width:100%;justify-content:center;padding:11px;font-size:12px"><i class="fa fa-paper-plane"></i>SUBMIT REGISTRATION</button>
     </form>
   </div>`
-
-  return c.html(exchangeLayout('Vendor Registration', 'vendor', content))
+  return c.html(exchangeLayout('Register Vendor', 'vreg', content))
 })
 
 // ── POST /vendor/register ─────────────────────────────────────────────────────
 app.post('/vendor/register', async (c) => {
   try {
-    const body = await c.req.parseBody()
-    const id = `VND-${String(globalVendors.length + 1).padStart(3, '0')}`
-    const rh  = parseFloat(body.warehouseHumidity as string)
-    const newVendor: GlobalVendor = {
-      id,
-      companyName:       String(body.companyName || '').trim(),
-      contactName:       String(body.contactName || '').trim(),
-      contactEmail:      String(body.contactEmail || '').trim(),
-      country:           String(body.country || '').trim(),
-      region:            String(body.region || '').trim(),
-      warehouseHumidity: isNaN(rh) ? undefined : rh,
-      status:            'PENDING_REVIEW',
-      registeredAt:      new Date().toISOString(),
-    }
-    globalVendors.push(newVendor)
+    const b  = await c.req.parseBody()
+    const rh = parseFloat(b.warehouseHumidity as string)
+    const tp = parseFloat(b.warehouseTemp as string)
+    const id = `VND-${String(globalVendors.length+1).padStart(3,'0')}`
+    globalVendors.push({
+      id, companyName: String(b.companyName||'').trim(),
+      contactName: String(b.contactName||'').trim(), contactEmail: String(b.contactEmail||'').trim(),
+      country: String(b.country||'').trim(), region: String(b.region||'').trim(),
+      warehouseHumidity: isNaN(rh)?undefined:rh, warehouseTemp: isNaN(tp)?undefined:tp,
+      status: 'PENDING_REVIEW', registeredAt: new Date().toISOString(),
+    })
     return c.redirect('/vendor/register?msg=ok')
-  } catch {
-    return c.redirect('/vendor/register?msg=error')
-  }
+  } catch { return c.redirect('/vendor/register?msg=error') }
 })
 
-// ── GET /vendor/lots/new — List a New Lot ────────────────────────────────────
+// ── GET /vendor/lots/new ──────────────────────────────────────────────────────
 app.get('/vendor/lots/new', (c) => {
   const msg = c.req.query('msg')
-  const verifiedVendors = globalVendors.filter(v => v.status === 'VERIFIED')
-
+  const verifiedVendors = globalVendors.filter(v=>v.status==='VERIFIED')
   const content = `
-  <div class="page-title"><i class="fa fa-seedling" style="color:var(--green);margin-right:8px"></i>List a New Lot</div>
-  <div class="page-sub">Submit your green coffee lot to the Qabban Global Exchange catalog</div>
-
-  ${msg === 'ok' ? `<div class="alert alert-green"><i class="fa fa-check"></i> Lot listed successfully! It is now visible in the catalog.</div>` : ''}
-  ${verifiedVendors.length === 0 ? `<div class="alert alert-amber"><i class="fa fa-warning"></i> No verified vendors yet. Register a vendor first.</div>` : ''}
-
+  <div class="pg-title"><i class="fa fa-seedling" style="color:var(--green)"></i>List a New Lot</div>
+  <div class="pg-sub">Submit your green coffee lot to the Qabban Global Exchange catalog</div>
+  ${msg==='ok'?`<div class="alert al-green"><i class="fa fa-check"></i>Lot listed! Visible in catalog.</div>`:''}
+  ${verifiedVendors.length===0?`<div class="alert al-amber"><i class="fa fa-warning"></i>No verified vendors yet.</div>`:''}
   <div class="card" style="max-width:680px">
     <form method="POST" action="/vendor/lots/new">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-        <div class="form-group">
-          <label class="form-label">Vendor *</label>
-          <select name="vendorId" class="form-select" required>
-            <option value="">Select vendor…</option>
-            ${verifiedVendors.map(v => `<option value="${v.id}">${v.companyName} (${v.country})</option>`).join('')}
+        <div class="fg">
+          <label class="fl">Vendor *</label>
+          <select name="vendorId" class="fs" required>
+            <option value="">Select…</option>
+            ${verifiedVendors.map(v=>`<option value="${v.id}">${v.companyName} (${v.country})</option>`).join('')}
           </select>
         </div>
-        <div class="form-group">
-          <label class="form-label">Origin *</label>
-          <input name="origin" class="form-input" placeholder="e.g. Ethiopia Yirgacheffe" required/>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Variety *</label>
-          <input name="variety" class="form-input" placeholder="e.g. Heirloom, Caturra…" required/>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Process Method *</label>
-          <select name="process" class="form-select" required>
-            ${['Natural','Washed','Honey','Wet-Hulled','Anaerobic','Other'].map(p => `<option>${p}</option>`).join('')}
+        <div class="fg"><label class="fl">Origin *</label><input name="origin" class="fi" placeholder="e.g. Ethiopia Yirgacheffe" required/></div>
+        <div class="fg"><label class="fl">Variety *</label><input name="variety" class="fi" required/></div>
+        <div class="fg">
+          <label class="fl">Process *</label>
+          <select name="process" class="fs" required>
+            ${['Natural','Washed','Honey','Wet-Hulled','Anaerobic','Other'].map(p=>`<option>${p}</option>`).join('')}
           </select>
         </div>
-        <div class="form-group">
-          <label class="form-label">Green Weight (kg) *</label>
-          <input name="greenWeightKg" type="number" min="1" class="form-input" required/>
+
+        <!-- Dual-Track Toggle -->
+        <div class="fg" style="grid-column:1/-1">
+          <label class="fl">Marketplace Type *</label>
+          <div style="display:flex;gap:10px">
+            <label style="flex:1;cursor:pointer">
+              <input type="radio" name="marketplaceType" value="SPOT" checked style="accent-color:var(--green)"/>
+              <span class="track-spot" style="margin-left:6px">⚡ SPOT</span>
+              <div style="font-size:10px;color:var(--muted);margin-top:3px;padding-left:22px">Immediate dispatch · 100% payment on contract</div>
+            </label>
+            <label style="flex:1;cursor:pointer">
+              <input type="radio" name="marketplaceType" value="FORWARD" style="accent-color:var(--amber)"/>
+              <span class="track-fwd" style="margin-left:6px">🌱 FORWARD</span>
+              <div style="font-size:10px;color:var(--muted);margin-top:3px;padding-left:22px">Pre-harvest order · 30% deposit · milestone payments</div>
+            </label>
+          </div>
         </div>
-        <div class="form-group">
-          <label class="form-label">FOB Price (USD/kg) *</label>
-          <input name="fobPriceUsd" type="number" min="0.01" step="0.01" class="form-input" required/>
+
+        <div class="fg"><label class="fl">Green Weight (kg) *</label><input name="greenWeightKg" type="number" min="1" class="fi" required/></div>
+        <div class="fg"><label class="fl">FOB Price (USD/kg) *</label><input name="fobPriceUsd" type="number" min="0.01" step="0.01" class="fi" required/></div>
+        <div class="fg"><label class="fl">SCA Grade Score</label><input name="gradeScore" type="number" min="60" max="100" class="fi" placeholder="80–100"/></div>
+        <div class="fg"><label class="fl">Harvest Year</label><input name="harvestYear" type="number" min="2024" max="2030" class="fi" placeholder="2025"/></div>
+        <div class="fg"><label class="fl">Expected Harvest Date (FORWARD)</label><input name="harvestDate" type="date" class="fi"/></div>
+        <div class="fg">
+          <label class="fl">SAS Clause</label>
+          <select name="sasClause" class="fs">
+            <option value="false">No SAS — contract confirmed on signing</option>
+            <option value="true">Yes — Subject to Approval of Sample</option>
+          </select>
         </div>
-        <div class="form-group">
-          <label class="form-label">SCA Grade Score</label>
-          <input name="gradeScore" type="number" min="60" max="100" class="form-input" placeholder="80–100"/>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Harvest Year</label>
-          <input name="harvestYear" type="number" min="2020" max="2030" class="form-input" placeholder="2025"/>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Warehouse Humidity (% RH)</label>
-          <input name="warehouseHumidity" type="number" min="0" max="100" step="0.1" class="form-input" placeholder="IoT reading"/>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Ship to KSA (est. days)</label>
-          <input name="shipmentDays" type="number" min="1" max="90" class="form-input" placeholder="e.g. 21"/>
-        </div>
-        <div class="form-group" style="grid-column:1/-1">
-          <label class="form-label">Flavor Notes (comma-separated)</label>
-          <input name="flavorNotes" class="form-input" placeholder="e.g. Blueberry, Jasmine, Dark Chocolate"/>
-        </div>
+        <div class="fg"><label class="fl">Warehouse Humidity (% RH) — IoT</label><input name="warehouseHumidity" type="number" min="0" max="100" step="0.1" class="fi" placeholder="50–60% earns SCA Gold badge"/></div>
+        <div class="fg"><label class="fl">Warehouse Temp (°C) — IoT</label><input name="warehouseTemp" type="number" min="0" max="50" step="0.1" class="fi"/></div>
+        <div class="fg"><label class="fl">Ship to KSA (est. days)</label><input name="shipmentDays" type="number" min="1" max="90" class="fi" placeholder="21"/></div>
+        <div class="fg" style="grid-column:1/-1"><label class="fl">Flavor Notes (comma-separated)</label><input name="flavorNotes" class="fi" placeholder="e.g. Blueberry, Jasmine, Dark Chocolate"/></div>
       </div>
-      <div style="font-size:10px;color:var(--text-muted);font-family:var(--font-mono);margin-bottom:12px">
-        50–60% RH warehouse humidity → SCA Gold Storage badge awarded automatically
-      </div>
-      <button type="submit" class="btn btn-green" style="width:100%;justify-content:center;padding:11px">
-        <i class="fa fa-plus"></i> LIST LOT ON EXCHANGE
-      </button>
+      <div style="font-size:10px;color:var(--muted);font-family:var(--mono);margin-bottom:12px">50–60% RH → SCA Gold Storage badge awarded automatically</div>
+      <button type="submit" class="btn btn-green" style="width:100%;justify-content:center;padding:11px"><i class="fa fa-plus"></i>LIST LOT ON EXCHANGE</button>
     </form>
   </div>`
-
-  return c.html(exchangeLayout('List New Lot', 'vendor', content))
+  return c.html(exchangeLayout('List New Lot', 'vnew', content))
 })
 
 // ── POST /vendor/lots/new ─────────────────────────────────────────────────────
@@ -7598,94 +7684,114 @@ app.post('/vendor/lots/new', async (c) => {
   try {
     const b   = await c.req.parseBody()
     const rh  = parseFloat(b.warehouseHumidity as string)
-    const sca = !isNaN(rh) && rh >= 50 && rh <= 60
-    const id  = `GLOT-${String(globalLots.length + 1).padStart(3, '0')}`
-    const notes = String(b.flavorNotes || '').split(',').map(s => s.trim()).filter(Boolean)
-
+    const tp  = parseFloat(b.warehouseTemp as string)
+    const sca = !isNaN(rh) && rh>=50 && rh<=60
+    const id  = `GLOT-${String(globalLots.length+1).padStart(3,'0')}`
+    const mkt = (b.marketplaceType as string)==='FORWARD'?'FORWARD':'SPOT'
+    const notes = String(b.flavorNotes||'').split(',').map(s=>s.trim()).filter(Boolean)
     const newLot: GlobalLot = {
-      id,
-      vendorId:            String(b.vendorId),
-      origin:              String(b.origin || '').trim(),
-      variety:             String(b.variety || '').trim(),
-      process:             (b.process as any) || 'Other',
-      greenWeightKg:       parseFloat(b.greenWeightKg as string) || 0,
-      fobPriceUsd:         parseFloat(b.fobPriceUsd as string) || 0,
-      gradeScore:          parseFloat(b.gradeScore as string) || 80,
-      flavorNotes:         notes.length ? notes : ['—'],
-      harvestYear:         parseInt(b.harvestYear as string) || new Date().getFullYear(),
-      warehouseHumidity:   isNaN(rh) ? undefined : rh,
-      scaGoldStorage:      sca,
-      climateCertifiedAt:  sca ? new Date().toISOString() : undefined,
-      status:              'AVAILABLE',
-      listedAt:            new Date().toISOString(),
-      shipmentEstimateDays: parseInt(b.shipmentDays as string) || 21,
-      customsHsCode:       '0901.11',
+      id, vendorId: String(b.vendorId), origin: String(b.origin||'').trim(),
+      variety: String(b.variety||'').trim(), process: (b.process as any)||'Other',
+      greenWeightKg: parseFloat(b.greenWeightKg as string)||0,
+      fobPriceUsd: parseFloat(b.fobPriceUsd as string)||0,
+      gradeScore: parseFloat(b.gradeScore as string)||80,
+      flavorNotes: notes.length?notes:['—'],
+      harvestYear: parseInt(b.harvestYear as string)||new Date().getFullYear(),
+      marketplaceType: mkt, sasClause: b.sasClause==='true', depositPct: mkt==='FORWARD'?30:100,
+      harvestDate: mkt==='FORWARD'&&b.harvestDate?String(b.harvestDate):undefined,
+      warehouseHumidity: isNaN(rh)?undefined:rh, warehouseTemp: isNaN(tp)?undefined:tp,
+      scaGoldStorage: sca, climateCertifiedAt: sca?new Date().toISOString():undefined,
+      climateLog: [{
+        ts: new Date().toISOString(), location: `Origin Warehouse — ${String(b.origin||'')}`,
+        phase: 'ORIGIN', humidity: isNaN(rh)?55:rh, temp: isNaN(tp)?20:tp,
+        note: 'Initial listing climate check',
+      }],
+      status: 'AVAILABLE', listedAt: new Date().toISOString(),
+      shipmentEstimateDays: parseInt(b.shipmentDays as string)||21, customsHsCode: '0901.11',
     }
     globalLots.push(newLot)
     return c.redirect('/vendor/lots/new?msg=ok')
-  } catch {
-    return c.redirect('/vendor/lots/new?msg=error')
-  }
+  } catch { return c.redirect('/vendor/lots/new?msg=error') }
 })
 
-// ── GET /buyer — Buyer Portal ─────────────────────────────────────────────────
+// ── GET /buyer ────────────────────────────────────────────────────────────────
 app.get('/buyer', (c) => {
   const content = `
-  <div class="page-title"><i class="fa fa-handshake" style="color:var(--amber);margin-right:8px"></i>Buyer Portal</div>
-  <div class="page-sub">Saudi roasteries — browse global lots · calculate landed prices · contract and invoice</div>
-
-  <div style="display:flex;gap:12px;margin-bottom:24px;flex-wrap:wrap">
-    <a href="/buyer/register" class="btn btn-amber"><i class="fa fa-plus"></i> Register as Buyer</a>
-    <a href="/exchange/catalog" class="btn btn-green"><i class="fa fa-list"></i> Browse Catalog</a>
+  <div class="pg-title"><i class="fa fa-handshake" style="color:var(--amber)"></i>Buyer Portal</div>
+  <div class="pg-sub">Saudi roasteries · Browse lots · Contract · Live ship tracking · ZATCA invoices</div>
+  <div style="display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap">
+    <a href="/buyer/register" class="btn btn-amber"><i class="fa fa-plus"></i>Register Buyer</a>
+    <a href="/exchange/catalog" class="btn btn-green"><i class="fa fa-list"></i>Browse Catalog</a>
+    <a href="/buyer/contract" class="btn btn-blue"><i class="fa fa-file-contract"></i>New Contract</a>
   </div>
 
-  <!-- Registered Buyers -->
   <div class="card">
-    <div class="card-title"><i class="fa fa-building" style="color:var(--amber)"></i> Registered Saudi Roasteries</div>
-    <table class="table">
-      <thead><tr><th>Buyer ID</th><th>Roastery</th><th>City</th><th>Contact</th><th>VAT Number</th><th>Status</th><th>Registered</th></tr></thead>
+    <div class="card-hdr"><i class="fa fa-building" style="color:var(--amber)"></i>Registered Saudi Roasteries</div>
+    <table class="tbl">
+      <thead><tr><th>ID</th><th>Roastery</th><th>City</th><th>Contact</th><th>VAT</th><th>Status</th></tr></thead>
       <tbody>
-        ${globalBuyers.map(b => `<tr>
-          <td style="font-family:var(--font-mono);color:var(--amber)">${b.id}</td>
-          <td><strong>${b.roasteryName}</strong></td>
-          <td>${b.city}</td>
-          <td style="font-size:11px"><div>${b.contactName}</div><div style="color:var(--text-muted)">${b.contactEmail}</div></td>
-          <td style="font-family:var(--font-mono);font-size:11px">${b.vatNumber}</td>
-          <td><span class="badge badge-available">${b.status}</span></td>
-          <td style="font-size:10px;color:var(--text-muted);font-family:var(--font-mono)">${b.registeredAt.split('T')[0]}</td>
+        ${globalBuyers.map(b=>`<tr>
+          <td style="font-family:var(--mono);color:var(--amber)">${b.id}</td>
+          <td><strong>${b.roasteryName}</strong></td><td>${b.city}</td>
+          <td style="font-size:11px"><div>${b.contactName}</div><div style="color:var(--muted)">${b.contactEmail}</div></td>
+          <td style="font-family:var(--mono);font-size:10px">${b.vatNumber}</td>
+          <td><span class="badge b-green">${b.status}</span></td>
         </tr>`).join('')}
       </tbody>
     </table>
   </div>
 
-  <!-- Active Contracts -->
+  <!-- Spot Contracts -->
   <div class="card">
-    <div class="card-title"><i class="fa fa-file-contract" style="color:var(--purple)"></i> Active Contracts</div>
-    ${globalContracts.length === 0
-      ? `<div style="font-size:12px;color:var(--text-muted);padding:12px 0">No contracts yet. <a href="/exchange/catalog" style="color:var(--green)">Browse catalog</a> to contract a lot.</div>`
-      : `<table class="table">
-          <thead><tr><th>Contract ID</th><th>Lot</th><th>Buyer</th><th>Qty (kg)</th><th>FOB USD</th><th>Contracted</th><th>Status</th><th>Invoice</th></tr></thead>
-          <tbody>
-            ${globalContracts.map(con => {
-              const lot   = globalLots.find(l => l.id === con.lotId)
-              const buyer = globalBuyers.find(b => b.id === con.buyerId)
-              const inv   = zatcaInvoices.find(i => i.lotId === con.lotId)
-              return `<tr>
-                <td style="font-family:var(--font-mono);color:var(--purple)">${con.id}</td>
-                <td style="font-size:11px">${lot?.origin ?? con.lotId}</td>
-                <td style="font-size:11px">${buyer?.roasteryName ?? con.buyerId}</td>
-                <td style="font-family:var(--font-mono)">${con.quantityKg.toLocaleString()}</td>
-                <td style="font-family:var(--font-mono);color:var(--amber)">$${con.agreedFobUsd.toFixed(2)}</td>
-                <td style="font-size:10px;font-family:var(--font-mono)">${con.contractedAt.split('T')[0]}</td>
-                <td><span class="badge badge-available">${con.status}</span></td>
-                <td>${inv ? `<a href="/buyer/invoice/${inv.uuid}" class="btn btn-blue" style="font-size:10px;padding:3px 8px"><i class="fa fa-receipt"></i> View</a>` : '—'}</td>
-              </tr>`
-            }).join('')}
-          </tbody>
-        </table>`
-    }
-  </div>`
+    <div class="card-hdr"><i class="fa fa-bolt" style="color:var(--green)"></i>Spot Contracts</div>
+    ${globalContracts.length===0
+      ?`<div style="font-size:12px;color:var(--muted)">No spot contracts yet. <a href="/exchange/catalog?type=SPOT" style="color:var(--green)">Browse Spot lots →</a></div>`
+      :`<table class="tbl"><thead><tr><th>ID</th><th>Lot</th><th>Buyer</th><th>Qty kg</th><th>FOB USD</th><th>Date</th><th>Status</th><th>Invoice</th></tr></thead><tbody>
+      ${globalContracts.map(con=>{
+        const lot=globalLots.find(l=>l.id===con.lotId); const buyer=globalBuyers.find(b=>b.id===con.buyerId)
+        const inv=zatcaInvoices.find(i=>i.lotId===con.lotId)
+        return `<tr>
+          <td style="font-family:var(--mono);color:var(--green)">${con.id}</td>
+          <td style="font-size:11px">${lot?.origin??con.lotId}</td>
+          <td style="font-size:11px">${buyer?.roasteryName??con.buyerId}</td>
+          <td style="font-family:var(--mono)">${con.quantityKg.toLocaleString()}</td>
+          <td style="font-family:var(--mono);color:var(--amber)">$${con.agreedFobUsd.toFixed(2)}</td>
+          <td style="font-size:10px;font-family:var(--mono)">${con.contractedAt.slice(0,10)}</td>
+          <td><span class="badge b-green">${con.status}</span></td>
+          <td>${inv?`<a href="/buyer/invoice/${inv.uuid}" class="btn btn-blue" style="font-size:9px;padding:3px 7px"><i class="fa fa-receipt"></i>View</a>`:'—'}</td>
+        </tr>`}).join('')}
+      </tbody></table>`}
+  </div>
 
+  <!-- Forward Contracts -->
+  <div class="card">
+    <div class="card-hdr"><i class="fa fa-seedling" style="color:var(--amber)"></i>Forward Pre-orders</div>
+    ${forwardContracts.length===0
+      ?`<div style="font-size:12px;color:var(--muted)">No forward contracts yet. <a href="/exchange/catalog?type=FORWARD" style="color:var(--amber)">Browse Forward lots →</a></div>`
+      :`<table class="tbl"><thead><tr><th>ID</th><th>Lot</th><th>Buyer</th><th>Qty kg</th><th>SAS</th><th>Deposit Paid</th><th>Status</th><th>Invoice</th></tr></thead><tbody>
+      ${forwardContracts.map(fc=>{
+        const lot=globalLots.find(l=>l.id===fc.lotId); const buyer=globalBuyers.find(b=>b.id===fc.buyerId)
+        const inv=zatcaInvoices.find(i=>i.lotId===fc.lotId)
+        const paid=fc.milestones.filter(m=>m.status==='PAID')
+        const sas=fc.sasStatus==='SAMPLE_APPROVED'?`<span class="badge b-green">APPROVED</span>`:
+                  fc.sasStatus==='SAMPLE_REJECTED'?`<span class="badge b-red">REJECTED</span>`:
+                  fc.sasStatus==='WAIVED'?`<span class="badge b-muted">WAIVED</span>`:
+                  `<span class="badge b-amber">PENDING</span>`
+        return `<tr>
+          <td style="font-family:var(--mono);color:var(--amber)"><a href="/exchange/forward/${fc.id}" style="color:var(--amber)">${fc.id}</a></td>
+          <td style="font-size:11px">${lot?.origin??fc.lotId}</td>
+          <td style="font-size:11px">${buyer?.roasteryName??fc.buyerId}</td>
+          <td style="font-family:var(--mono)">${fc.quantityKg.toLocaleString()}</td>
+          <td>${sas}</td>
+          <td style="font-size:11px;font-family:var(--mono)">${paid.length}/${fc.milestones.length} paid</td>
+          <td><span class="badge b-amber">${fc.status}</span></td>
+          <td style="display:flex;gap:4px;flex-wrap:wrap">
+            ${inv?`<a href="/buyer/invoice/${inv.uuid}" class="btn btn-blue" style="font-size:9px;padding:3px 7px"><i class="fa fa-receipt"></i>Invoice</a>`:''}
+            <a href="/exchange/forward/${fc.id}" class="btn btn-amber" style="font-size:9px;padding:3px 7px"><i class="fa fa-seedling"></i>Dashboard</a>
+          </td>
+        </tr>`}).join('')}
+      </tbody></table>`}
+  </div>`
   return c.html(exchangeLayout('Buyer Portal', 'buyer', content))
 })
 
@@ -7693,184 +7799,252 @@ app.get('/buyer', (c) => {
 app.get('/buyer/register', (c) => {
   const msg = c.req.query('msg')
   const content = `
-  <div class="page-title"><i class="fa fa-handshake" style="color:var(--amber);margin-right:8px"></i>Register as Buyer</div>
-  <div class="page-sub">Saudi roasteries — join the Qabban B2B trade network</div>
-
-  ${msg === 'ok' ? `<div class="alert alert-green"><i class="fa fa-check"></i> Registered successfully! You can now contract lots.</div>` : ''}
-
-  <div class="card" style="max-width:560px">
+  <div class="pg-title"><i class="fa fa-user-plus" style="color:var(--amber)"></i>Register as Buyer</div>
+  <div class="pg-sub">Saudi roasteries — join the Qabban B2B trade network</div>
+  ${msg==='ok'?`<div class="alert al-green"><i class="fa fa-check"></i>Registered! You can now contract lots.</div>`:''}
+  <div class="card" style="max-width:520px">
     <form method="POST" action="/buyer/register">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-        <div class="form-group" style="grid-column:1/-1">
-          <label class="form-label">Roastery Name *</label>
-          <input name="roasteryName" class="form-input" placeholder="e.g. Najd Specialty Roasters" required/>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Contact Person *</label>
-          <input name="contactName" class="form-input" required/>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Contact Email *</label>
-          <input name="contactEmail" type="email" class="form-input" required/>
-        </div>
-        <div class="form-group">
-          <label class="form-label">City *</label>
-          <select name="city" class="form-select" required>
-            <option>Riyadh</option><option>Jeddah</option><option>Dammam</option>
-            <option>Makkah</option><option>Madinah</option><option>Khobar</option><option>Other</option>
+        <div class="fg" style="grid-column:1/-1"><label class="fl">Roastery Name *</label><input name="roasteryName" class="fi" required/></div>
+        <div class="fg"><label class="fl">Contact Person *</label><input name="contactName" class="fi" required/></div>
+        <div class="fg"><label class="fl">Contact Email *</label><input name="contactEmail" type="email" class="fi" required/></div>
+        <div class="fg"><label class="fl">City *</label>
+          <select name="city" class="fs" required>
+            ${['Riyadh','Jeddah','Dammam','Makkah','Madinah','Khobar','Other'].map(c=>`<option>${c}</option>`).join('')}
           </select>
         </div>
-        <div class="form-group">
-          <label class="form-label">Saudi VAT Number *</label>
-          <input name="vatNumber" class="form-input" placeholder="15-digit VAT number" required/>
-        </div>
+        <div class="fg"><label class="fl">Saudi VAT Number *</label><input name="vatNumber" class="fi" placeholder="15-digit" required/></div>
       </div>
-      <button type="submit" class="btn btn-amber" style="width:100%;justify-content:center;padding:11px">
-        <i class="fa fa-paper-plane"></i> REGISTER
-      </button>
+      <button type="submit" class="btn btn-amber" style="width:100%;justify-content:center;padding:11px"><i class="fa fa-paper-plane"></i>REGISTER</button>
     </form>
   </div>`
-
-  return c.html(exchangeLayout('Buyer Registration', 'buyer', content))
+  return c.html(exchangeLayout('Register Buyer', 'breg', content))
 })
 
 // ── POST /buyer/register ──────────────────────────────────────────────────────
 app.post('/buyer/register', async (c) => {
   try {
     const b  = await c.req.parseBody()
-    const id = `BYR-${String(globalBuyers.length + 1).padStart(3, '0')}`
+    const id = `BYR-${String(globalBuyers.length+1).padStart(3,'0')}`
     globalBuyers.push({
-      id,
-      roasteryName: String(b.roasteryName || '').trim(),
-      contactName:  String(b.contactName  || '').trim(),
-      contactEmail: String(b.contactEmail || '').trim(),
-      city:         String(b.city         || 'Riyadh'),
-      vatNumber:    String(b.vatNumber    || '').trim(),
-      status:       'ACTIVE',
-      registeredAt: new Date().toISOString(),
+      id, roasteryName: String(b.roasteryName||'').trim(),
+      contactName: String(b.contactName||'').trim(), contactEmail: String(b.contactEmail||'').trim(),
+      city: String(b.city||'Riyadh'), vatNumber: String(b.vatNumber||'').trim(),
+      status: 'ACTIVE', registeredAt: new Date().toISOString(),
     })
     return c.redirect('/buyer/register?msg=ok')
-  } catch {
-    return c.redirect('/buyer/register?msg=error')
-  }
+  } catch { return c.redirect('/buyer/register?msg=error') }
 })
 
-// ── GET /buyer/contract — Contract a Lot ─────────────────────────────────────
+// ── GET /buyer/contract — Contract form (Spot + Forward) ─────────────────────
 app.get('/buyer/contract', (c) => {
   const lotId = c.req.query('lotId')
-  const lot   = lotId ? globalLots.find(l => l.id === lotId) : null
+  const lot   = lotId ? globalLots.find(l=>l.id===lotId) : null
   const msg   = c.req.query('msg')
+  const isLockPage = c.req.query('lock') === '1'
+
+  const effRate = lastKnownUsdToSar*(1+exchangeRateBuffer/100)
+
+  // Check for active rate lock for demo buyer
+  const demoBuyerId = globalBuyers[0]?.id ?? 'BYR-001'
+  const activeLock  = lot ? getActiveLock(demoBuyerId, lot.id) : undefined
+  const lockSecsLeft = activeLock
+    ? Math.max(0, Math.round((new Date(activeLock.expiresAt).getTime()-Date.now())/1000))
+    : 0
 
   const content = `
-  <div class="page-title"><i class="fa fa-file-contract" style="color:var(--purple);margin-right:8px"></i>Contract a Lot</div>
-  <div class="page-sub">Agree on price · Calculate landed cost · Generate ZATCA Phase-2 invoice</div>
+  <div class="pg-title"><i class="fa fa-file-contract" style="color:var(--purple)"></i>${lot?.marketplaceType==='FORWARD'?'Forward Pre-order':'Spot Order'} Contract</div>
+  <div class="pg-sub">Lock rate · Calculate landed cost · Generate ZATCA Phase-2 invoice</div>
 
-  ${msg === 'ok'   ? `<div class="alert alert-green"><i class="fa fa-check"></i> Contract created! ZATCA invoice generated. <a href="/buyer" style="color:var(--green)">View in Buyer Portal →</a></div>` : ''}
-  ${msg === 'sold' ? `<div class="alert" style="background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.25);color:var(--red)"><i class="fa fa-warning"></i> This lot has already been contracted.</div>` : ''}
+  ${msg==='ok'?`<div class="alert al-green"><i class="fa fa-check"></i>Contract created! ZATCA invoice generated. <a href="/buyer" style="color:var(--green)">View in Buyer Portal →</a></div>`:''}
+  ${msg==='sold'?`<div class="alert al-red"><i class="fa fa-warning"></i>This lot has already been contracted.</div>`:''}
 
-  <div class="card" style="max-width:640px">
+  <!-- Rate Lock Panel -->
+  <div class="ratelock-box" style="margin-bottom:20px">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+      <div>
+        <div style="font-size:10px;color:var(--muted);font-family:var(--mono);margin-bottom:2px"><i class="fa fa-lock"></i> 60-SECOND RATE EXECUTION LOCK</div>
+        <div style="font-size:12px;font-family:var(--mono)">
+          SAMA ref: <strong>${samaReferenceRate.toFixed(4)}</strong> ·
+          Buffer: <strong>+${exchangeRateBuffer}%</strong> ·
+          Effective: <strong style="color:var(--amber)">${effRate.toFixed(4)} SAR/USD</strong>
+        </div>
+      </div>
+      <div style="text-align:right">
+        ${activeLock
+          ? `<div class="ratelock-timer" id="lockTimer">${lockSecsLeft}s</div>
+             <div style="font-size:9px;color:var(--muted);font-family:var(--mono)">Rate locked at ${activeLock.lockedRate.toFixed(4)} SAR/USD</div>`
+          : `<div style="font-size:12px;color:var(--muted);font-family:var(--mono)">No active lock</div>`}
+        <button onclick="lockRate()" class="btn btn-amber" style="margin-top:6px;font-size:10px"><i class="fa fa-lock"></i>LOCK RATE (60s)</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="max-width:680px">
     <form method="POST" action="/buyer/contract">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-
-        <div class="form-group">
-          <label class="form-label">Select Lot *</label>
-          <select name="lotId" class="form-select" required onchange="updateLotInfo(this.value)">
+        <div class="fg">
+          <label class="fl">Select Lot *</label>
+          <select name="lotId" class="fs" required onchange="onLotChange(this.value)">
             <option value="">Select lot…</option>
-            ${globalLots.filter(l => l.status === 'AVAILABLE').map(l => `<option value="${l.id}" ${lot?.id === l.id ? 'selected' : ''}>${l.id} — ${l.origin} (${l.greenWeightKg}kg @ $${l.fobPriceUsd}/kg)</option>`).join('')}
+            ${globalLots.filter(l=>l.status==='AVAILABLE').map(l=>`
+              <option value="${l.id}" ${lot?.id===l.id?'selected':''}>
+                ${l.id} [${l.marketplaceType}] — ${l.origin} (${l.greenWeightKg}kg @ $${l.fobPriceUsd}/kg)
+              </option>`).join('')}
           </select>
         </div>
-
-        <div class="form-group">
-          <label class="form-label">Buyer *</label>
-          <select name="buyerId" class="form-select" required>
+        <div class="fg">
+          <label class="fl">Buyer *</label>
+          <select name="buyerId" class="fs" required>
             <option value="">Select buyer…</option>
-            ${globalBuyers.filter(b => b.status === 'ACTIVE').map(b => `<option value="${b.id}">${b.roasteryName} (${b.city})</option>`).join('')}
+            ${globalBuyers.filter(b=>b.status==='ACTIVE').map(b=>`<option value="${b.id}">${b.roasteryName} (${b.city})</option>`).join('')}
           </select>
         </div>
+        <div class="fg"><label class="fl">Quantity (kg) *</label><input name="quantityKg" id="qtyInput" type="number" min="1" class="fi" required oninput="updateCalc()"/></div>
+        <div class="fg"><label class="fl">Agreed FOB Price (USD/kg) *</label><input name="agreedFobUsd" id="fobInput" type="number" min="0.01" step="0.01" class="fi" value="${lot?.fobPriceUsd??''}" required oninput="updateCalc()"/></div>
+      </div>
 
-        <div class="form-group">
-          <label class="form-label">Quantity (kg) *</label>
-          <input name="quantityKg" id="qtyInput" type="number" min="1" class="form-input" placeholder="Max available kg" required oninput="updateLandedCalc()"/>
+      <!-- Forward-specific: SAS + milestones -->
+      <div id="fwdSection" style="display:${lot?.marketplaceType==='FORWARD'?'block':'none'}">
+        <div class="sas-box" style="margin-bottom:12px">
+          <div style="color:var(--purple);font-weight:700;margin-bottom:6px"><i class="fa fa-file-signature"></i> SAS — Subject to Approval of Sample</div>
+          <div id="sasCopy" style="font-size:11px">${lot?.sasClause?`This lot carries a SAS clause. The contract becomes binding only after the buyer's Q.C. team approves a physical sample. Sample to be dispatched within 7 days of contract signing.`:`No SAS clause on this lot.`}</div>
         </div>
-
-        <div class="form-group">
-          <label class="form-label">Agreed FOB Price (USD/kg) *</label>
-          <input name="agreedFobUsd" id="fobInput" type="number" min="0.01" step="0.01" class="form-input" value="${lot?.fobPriceUsd ?? ''}" required oninput="updateLandedCalc()"/>
+        <div style="padding:12px 14px;background:rgba(245,158,11,.05);border:1px dashed rgba(245,158,11,.3);border-radius:var(--radius);margin-bottom:12px">
+          <div style="font-size:10px;color:var(--amber);font-family:var(--mono);font-weight:700;margin-bottom:8px"><i class="fa fa-calendar-check"></i> MILESTONE PAYMENT SCHEDULE</div>
+          <div class="milestone-step">
+            <div class="ms-dot" style="background:rgba(245,158,11,.2);color:var(--amber)">1</div>
+            <div><div style="font-size:12px;font-weight:600">Deposit (30%)</div><div style="font-size:10px;color:var(--muted)">Due on contract signing — locks the lot and triggers sample dispatch</div></div>
+            <div id="m1-amt" style="margin-left:auto;font-family:var(--mono);font-size:12px;color:var(--amber)">—</div>
+          </div>
+          <div class="milestone-step">
+            <div class="ms-dot" style="background:rgba(96,165,250,.15);color:var(--blue)">2</div>
+            <div><div style="font-size:12px;font-weight:600">Pre-shipment (40%)</div><div style="font-size:10px;color:var(--muted)">Due on shipping confirmation + B/L upload</div></div>
+            <div id="m2-amt" style="margin-left:auto;font-family:var(--mono);font-size:12px;color:var(--blue)">—</div>
+          </div>
+          <div class="milestone-step">
+            <div class="ms-dot" style="background:rgba(74,222,128,.15);color:var(--green)">3</div>
+            <div><div style="font-size:12px;font-weight:600">On delivery (30%)</div><div style="font-size:10px;color:var(--muted)">Due on delivery confirmation at KSA warehouse</div></div>
+            <div id="m3-amt" style="margin-left:auto;font-family:var(--mono);font-size:12px;color:var(--green)">—</div>
+          </div>
         </div>
       </div>
 
-      <!-- Live Landed Price Calculator -->
-      <div id="landedCalc" style="margin:16px 0;padding:14px;background:rgba(245,158,11,0.05);border:1px solid rgba(245,158,11,0.2);border-radius:6px;font-family:var(--font-mono);font-size:11px">
-        <div style="color:var(--amber);margin-bottom:8px"><i class="fa fa-calculator"></i> LIVE LANDED PRICE CALCULATOR</div>
-        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px">
-          <div><span style="color:var(--text-muted)">FOB (SAR/kg):</span><br><strong id="lc-fob">—</strong></div>
-          <div><span style="color:var(--text-muted)">Shipping:</span><br><strong id="lc-ship">—</strong></div>
-          <div><span style="color:var(--text-muted)">Customs (5%):</span><br><strong id="lc-customs">—</strong></div>
-          <div><span style="color:var(--text-muted)">VAT (15%):</span><br><strong id="lc-vat" style="color:var(--red)">—</strong></div>
-          <div><span style="color:var(--text-muted)">Landed/kg:</span><br><strong id="lc-perkg" style="color:var(--green);font-size:15px">—</strong></div>
-          <div><span style="color:var(--text-muted)">Total:</span><br><strong id="lc-total" style="color:var(--green)">—</strong></div>
+      <!-- Live Landed Calculator -->
+      <div style="margin:14px 0;padding:13px;background:rgba(245,158,11,.04);border:1px solid rgba(245,158,11,.18);border-radius:6px">
+        <div style="font-size:9px;font-family:var(--mono);color:var(--amber);margin-bottom:8px;letter-spacing:.08em"><i class="fa fa-calculator"></i> LIVE LANDED PRICE CALCULATOR</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:6px;font-size:11px;font-family:var(--mono)">
+          <div><span style="color:var(--muted)">FOB SAR/kg:</span><br><strong id="lc-fob">—</strong></div>
+          <div><span style="color:var(--muted)">Shipping:</span><br><strong id="lc-ship">—</strong></div>
+          <div><span style="color:var(--muted)">Customs 5%:</span><br><strong id="lc-customs">—</strong></div>
+          <div><span style="color:var(--muted)">VAT 15%:</span><br><strong id="lc-vat" style="color:var(--red)">—</strong></div>
+          <div><span style="color:var(--muted)">Landed/kg:</span><br><strong id="lc-perkg" style="color:var(--green);font-size:14px">—</strong></div>
+          <div><span style="color:var(--muted)">Total:</span><br><strong id="lc-total" style="color:var(--green)">—</strong></div>
         </div>
       </div>
 
-      <div style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted);margin-bottom:14px;padding:10px;background:rgba(74,222,128,0.04);border:1px dashed rgba(74,222,128,0.2);border-radius:4px">
-        <strong style="color:var(--green)">ZATCA Phase-2:</strong>
-        Submitting this form generates a ZATCA-compliant e-invoice with UUID, UBL 2.1 XML, and QR code (TLV payload per ZATCA e-Invoice specifications).
-        Exchange rate: ${lastKnownUsdToSar.toFixed(4)} SAR/USD + ${exchangeRateBuffer}% buffer = <strong>${(lastKnownUsdToSar*(1+exchangeRateBuffer/100)).toFixed(4)} SAR/USD</strong>
+      <div style="font-family:var(--mono);font-size:9px;color:var(--muted);margin-bottom:12px;padding:9px;background:rgba(74,222,128,.03);border:1px dashed rgba(74,222,128,.18);border-radius:4px">
+        <strong style="color:var(--green)">ZATCA Phase-2:</strong> Submitting generates a UUID v4 · UBL 2.1 XML · TLV QR code (ZATCA e-Invoice spec).
+        Rate: ${samaReferenceRate.toFixed(4)} SAR/USD (SAMA) + ${exchangeRateBuffer}% buffer = <strong>${effRate.toFixed(4)} SAR/USD</strong>
       </div>
 
-      <button type="submit" class="btn btn-green" style="width:100%;justify-content:center;padding:11px">
-        <i class="fa fa-file-invoice"></i> CREATE CONTRACT &amp; GENERATE ZATCA INVOICE
+      <button type="submit" class="btn btn-green" style="width:100%;justify-content:center;padding:11px;font-size:12px">
+        <i class="fa fa-file-invoice"></i>CREATE CONTRACT &amp; GENERATE ZATCA INVOICE
       </button>
     </form>
   </div>
 
   <script>
-  var LOTS = ${JSON.stringify(globalLots.map(l => ({ id: l.id, fob: l.fobPriceUsd, kg: l.greenWeightKg })))};
-  var EFF_RATE = ${lastKnownUsdToSar * (1 + exchangeRateBuffer / 100)};
-  var SHIP_BASE = ${shippingEstimateBaseSar};
-  var CUSTOMS_RATE = ${SAUDI_CUSTOMS_RATE};
-  var VAT_RATE = ${ZATCA_VAT_RATE};
+  var LOTS = ${JSON.stringify(globalLots.map(l=>({id:l.id,fob:l.fobPriceUsd,kg:l.greenWeightKg,type:l.marketplaceType,sas:l.sasClause,dep:l.depositPct})))};
+  var EFF  = ${effRate};
+  var SHIP = ${shippingEstimateBaseSar};
+  var CUS  = ${SAUDI_CUSTOMS_RATE};
+  var VAT  = ${ZATCA_VAT_RATE};
 
-  function updateLotInfo(lotId) {
-    var lot = LOTS.find(function(l){ return l.id === lotId; });
-    if (!lot) return;
-    document.getElementById('fobInput').value = lot.fob;
-    document.getElementById('qtyInput').max = lot.kg;
-    updateLandedCalc();
+  function onLotChange(id) {
+    var l = LOTS.find(function(x){return x.id===id;});
+    if(!l) return;
+    document.getElementById('fobInput').value = l.fob;
+    document.getElementById('fwdSection').style.display = l.type==='FORWARD'?'block':'none';
+    if(l.type==='FORWARD'){
+      document.getElementById('sasCopy').textContent = l.sas
+        ? 'This lot carries a SAS clause. Contract binding only after buyer Q.C. approves physical sample.'
+        : 'No SAS clause on this lot.';
+    }
+    updateCalc();
   }
 
-  function updateLandedCalc() {
+  function updateCalc() {
     var fob = parseFloat(document.getElementById('fobInput').value);
     var qty = parseFloat(document.getElementById('qtyInput').value);
-    if (isNaN(fob) || isNaN(qty) || qty <= 0) return;
+    if(isNaN(fob)||isNaN(qty)||qty<=0) return;
+    var fobSar  = fob * EFF;
+    var fobTot  = fobSar * qty;
+    var cif     = fobTot + SHIP;
+    var customs = Math.round(cif * CUS * 100)/100;
+    var vat     = Math.round((cif+customs) * VAT * 100)/100;
+    var total   = Math.round((fobTot+SHIP+customs+vat)*100)/100;
+    var perKg   = Math.round(total/qty*100)/100;
+    var fmt = function(n){return n.toLocaleString('en-SA',{minimumFractionDigits:2,maximumFractionDigits:2});};
+    document.getElementById('lc-fob').textContent     = fmt(fobSar)+' SAR/kg';
+    document.getElementById('lc-ship').textContent    = fmt(SHIP)+' SAR';
+    document.getElementById('lc-customs').textContent = fmt(customs)+' SAR';
+    document.getElementById('lc-vat').textContent     = fmt(vat)+' SAR';
+    document.getElementById('lc-perkg').textContent   = perKg.toFixed(2)+' SAR/kg';
+    document.getElementById('lc-total').textContent   = fmt(total)+' SAR';
+    // Milestones
+    var dep   = Math.round(total*0.30*100)/100;
+    var pre   = Math.round(total*0.40*100)/100;
+    var deliv = Math.round(total*0.30*100)/100;
+    var m1=document.getElementById('m1-amt'),m2=document.getElementById('m2-amt'),m3=document.getElementById('m3-amt');
+    if(m1)m1.textContent=fmt(dep)+' SAR';
+    if(m2)m2.textContent=fmt(pre)+' SAR';
+    if(m3)m3.textContent=fmt(deliv)+' SAR';
+  }
 
-    var fobSarKg  = Math.round(fob * EFF_RATE * 100) / 100;
-    var fobTotal  = fobSarKg * qty;
-    var ship      = SHIP_BASE;
-    var cifTotal  = fobTotal + ship;
-    var customs   = Math.round(cifTotal * CUSTOMS_RATE * 100) / 100;
-    var vatBase   = cifTotal + customs;
-    var vat       = Math.round(vatBase * VAT_RATE * 100) / 100;
-    var total     = Math.round((fobTotal + ship + customs + vat) * 100) / 100;
-    var perKg     = Math.round((total / qty) * 100) / 100;
+  /* Rate Lock */
+  var _lockEnd = null;
+  var _lockTimer = null;
+  function lockRate() {
+    var lotSel = document.querySelector('select[name="lotId"]');
+    var lotId  = lotSel ? lotSel.value : '';
+    if(!lotId){ alert('Select a lot first'); return; }
+    fetch('/api/exchange/rate-lock', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({buyerId:'BYR-001', lotId: lotId})
+    }).then(function(r){return r.json();}).then(function(d){
+      if(d.ok){
+        _lockEnd = new Date(d.lock.expiresAt).getTime();
+        startCountdown(d.lock.lockedRate);
+      }
+    });
+  }
 
-    var fmt = function(n){ return n.toLocaleString('en-SA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); };
-    document.getElementById('lc-fob').textContent     = fobSarKg.toFixed(2) + ' SAR/kg';
-    document.getElementById('lc-ship').textContent    = fmt(ship) + ' SAR';
-    document.getElementById('lc-customs').textContent = fmt(customs) + ' SAR';
-    document.getElementById('lc-vat').textContent     = fmt(vat) + ' SAR';
-    document.getElementById('lc-perkg').textContent   = perKg.toFixed(2) + ' SAR/kg';
-    document.getElementById('lc-total').textContent   = fmt(total) + ' SAR';
+  function startCountdown(rate) {
+    var el = document.getElementById('lockTimer');
+    if(!el){ var box=document.querySelector('.ratelock-box');
+      var div=document.createElement('div');
+      div.innerHTML='<div class="ratelock-timer" id="lockTimer">60s</div><div style="font-size:9px;color:var(--muted);font-family:var(--mono)">Rate locked at '+rate.toFixed(4)+' SAR/USD</div>';
+      box.querySelector('[onclick="lockRate()"]').parentElement.insertBefore(div,box.querySelector('[onclick="lockRate()"]').parentElement.lastChild);
+      el = document.getElementById('lockTimer');
+    }
+    if(_lockTimer) clearInterval(_lockTimer);
+    _lockTimer = setInterval(function(){
+      var s = Math.max(0, Math.round((_lockEnd - Date.now())/1000));
+      el.textContent = s+'s';
+      el.style.color = s <= 10 ? 'var(--red)' : 'var(--amber)';
+      if(s===0){ clearInterval(_lockTimer); el.textContent='EXPIRED'; el.style.color='var(--muted)'; }
+    }, 500);
   }
 
   // Auto-fill if lot is pre-selected
   (function(){
     var sel = document.querySelector('select[name="lotId"]');
-    if (sel && sel.value) updateLotInfo(sel.value);
+    if(sel && sel.value) onLotChange(sel.value);
   })();
   </script>`
 
-  return c.html(exchangeLayout('Contract a Lot', 'buyer', content))
+  return c.html(exchangeLayout('Contract a Lot', 'bcon', content))
 })
 
 // ── POST /buyer/contract ──────────────────────────────────────────────────────
@@ -7881,197 +8055,838 @@ app.post('/buyer/contract', async (c) => {
     const buyId = String(b.buyerId)
     const qty   = parseFloat(b.quantityKg as string)
     const fob   = parseFloat(b.agreedFobUsd as string)
-
-    const lot   = globalLots.find(l => l.id === lotId)
-    const buyer = globalBuyers.find(b => b.id === buyId)
-
-    if (!lot || lot.status !== 'AVAILABLE') return c.redirect('/buyer/contract?msg=sold')
+    const lot   = globalLots.find(l=>l.id===lotId)
+    const buyer = globalBuyers.find(b=>b.id===buyId)
+    if (!lot||lot.status!=='AVAILABLE') return c.redirect('/buyer/contract?msg=sold')
     if (!buyer) return c.redirect('/buyer/contract?msg=error')
+    lot.status = 'CONTRACTED'; lot.contractedByBuyerId = buyId
+    const landed  = calcLandedPrice(lot, qty)
+    const invoice = generateZatcaInvoice({ buyer, lot, quantityKg: qty, unitPriceSar: landed.landedPricePerKg })
 
-    // Create contract
-    const conId = `CON-${String(globalContracts.length + 1).padStart(3, '0')}`
-    globalContracts.push({
-      id:           conId,
-      lotId,
-      buyerId:      buyId,
-      quantityKg:   qty,
-      agreedFobUsd: fob,
-      contractedAt: new Date().toISOString(),
-      status:       'ACTIVE',
-    })
-
-    // Mark lot contracted
-    lot.status = 'CONTRACTED'
-    lot.contractedByBuyerId = buyId
-
-    // Compute landed unit price per kg in SAR
-    const landed    = calcLandedPrice(lot, qty)
-    const unitPrice = landed.landedPricePerKg
-
-    // Generate ZATCA Phase-2 invoice
-    const invoice = generateZatcaInvoice({ buyer, lot, quantityKg: qty, unitPriceSar: unitPrice })
-
-    // Link invoice to contract
-    const con = globalContracts[globalContracts.length - 1]
-    con.invoiceId = invoice.uuid
-
+    if (lot.marketplaceType === 'FORWARD') {
+      const conId = `FWD-${String(forwardContracts.length+1).padStart(3,'0')}`
+      const total = landed.landedPriceSar
+      const fwdCon: ForwardContract = {
+        id: conId, lotId, buyerId: buyId, quantityKg: qty, agreedFobUsd: fob,
+        contractedAt: new Date().toISOString(),
+        sasStatus: lot.sasClause ? 'PENDING_SAMPLE' : 'WAIVED',
+        milestones: [
+          { id:'M1', label:`Deposit (30%)`,       pct:30, dueEvent:'Contract signing',       status:'PENDING' },
+          { id:'M2', label:`Pre-shipment (40%)`,   pct:40, dueEvent:'Shipping confirmation', status:'PENDING' },
+          { id:'M3', label:`On delivery (30%)`,    pct:30, dueEvent:'Delivery confirmation', status:'PENDING' },
+        ],
+        status: 'ACTIVE', invoiceId: invoice.uuid,
+      }
+      forwardContracts.push(fwdCon)
+    } else {
+      const conId = `CON-${String(globalContracts.length+1).padStart(3,'0')}`
+      globalContracts.push({ id:conId, lotId, buyerId:buyId, quantityKg:qty, agreedFobUsd:fob,
+        contractedAt:new Date().toISOString(), status:'ACTIVE', invoiceId:invoice.uuid })
+    }
     return c.redirect('/buyer/contract?msg=ok')
-  } catch {
-    return c.redirect('/buyer/contract?msg=error')
-  }
+  } catch { return c.redirect('/buyer/contract?msg=error') }
 })
 
 // ── GET /buyer/invoice/:uuid — ZATCA Invoice Viewer ──────────────────────────
 app.get('/buyer/invoice/:uuid', (c) => {
   const uuid    = c.req.param('uuid')
-  const invoice = zatcaInvoices.find(i => i.uuid === uuid)
-
-  if (!invoice) return c.html(exchangeLayout('Invoice Not Found', 'buyer', `
-    <div class="alert" style="background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.25);color:var(--red)">
-      <i class="fa fa-warning"></i> Invoice not found.
-    </div>
-    <a href="/buyer" class="btn btn-blue">← Back to Buyer Portal</a>`))
-
-  const qrSvg = `<div style="background:#fff;padding:16px;border-radius:8px;display:inline-block">
-    <div style="color:#000;font-size:10px;font-family:monospace;word-break:break-all;max-width:240px;line-height:1.4">${invoice.qrCodeData.slice(0, 80)}…</div>
-    <div style="font-size:9px;color:#666;margin-top:4px">ZATCA TLV QR Payload (Base64)</div>
-  </div>`
+  const invoice = zatcaInvoices.find(i=>i.uuid===uuid)
+  if (!invoice) return c.html(exchangeLayout('Invoice Not Found', 'buyer',
+    `<div class="alert al-red"><i class="fa fa-warning"></i>Invoice not found.</div>
+     <a href="/buyer" class="btn btn-blue">← Back</a>`))
 
   const content = `
-  <div class="page-title"><i class="fa fa-receipt" style="color:var(--green);margin-right:8px"></i>ZATCA Phase-2 E-Invoice</div>
-  <div class="page-sub">UUID: <span style="font-family:var(--font-mono);color:var(--green)">${invoice.uuid}</span></div>
+  <div class="pg-title"><i class="fa fa-receipt" style="color:var(--green)"></i>ZATCA Phase-2 E-Invoice</div>
+  <div class="pg-sub" style="font-family:var(--mono);color:var(--green)">${invoice.uuid}</div>
 
-  <div style="display:grid;grid-template-columns:1fr auto;gap:20px;flex-wrap:wrap">
+  <div style="display:grid;grid-template-columns:1fr 220px;gap:18px;align-items:start;flex-wrap:wrap">
     <div>
-      <!-- Invoice Header -->
-      <div class="card" style="border-color:rgba(74,222,128,0.35)">
-        <div class="card-title"><i class="fa fa-file-invoice" style="color:var(--green)"></i> Invoice Details</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px 24px;font-size:12px;font-family:var(--font-mono)">
-          <div><span style="color:var(--text-muted)">Invoice Number:</span><br><strong style="color:var(--green)">${invoice.invoiceNumber}</strong></div>
-          <div><span style="color:var(--text-muted)">Issue Date/Time:</span><br><strong>${invoice.issueDate} ${invoice.issueTime}</strong></div>
-          <div><span style="color:var(--text-muted)">Seller:</span><br><strong>${invoice.sellerName}</strong><br><span style="color:var(--text-muted)">VAT: ${invoice.sellerVat}</span></div>
-          <div><span style="color:var(--text-muted)">Buyer:</span><br><strong>${invoice.buyerName}</strong><br><span style="color:var(--text-muted)">VAT: ${invoice.buyerVat}</span></div>
+      <div class="card" style="border-color:rgba(74,222,128,.25)">
+        <div class="card-hdr"><i class="fa fa-file-invoice" style="color:var(--green)"></i>Invoice Details</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 20px;font-size:11px;font-family:var(--mono)">
+          <div><span style="color:var(--muted)">Invoice #:</span><br><strong style="color:var(--green)">${invoice.invoiceNumber}</strong></div>
+          <div><span style="color:var(--muted)">Issue Date/Time:</span><br><strong>${invoice.issueDate} ${invoice.issueTime}</strong></div>
+          <div><span style="color:var(--muted)">Seller:</span><br><strong>${invoice.sellerName}</strong><br><span style="color:var(--muted)">VAT: ${invoice.sellerVat}</span></div>
+          <div><span style="color:var(--muted)">Buyer:</span><br><strong>${invoice.buyerName}</strong><br><span style="color:var(--muted)">VAT: ${invoice.buyerVat}</span></div>
         </div>
       </div>
-
-      <!-- Line Item -->
       <div class="card">
-        <div class="card-title"><i class="fa fa-seedling" style="color:var(--amber)"></i> Line Item</div>
-        <div style="font-size:12px;font-family:var(--font-mono);margin-bottom:14px">
-          <strong>${invoice.origin}</strong> · Lot ${invoice.lotId}
-        </div>
-        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;font-size:11px;font-family:var(--font-mono)">
-          <div><span style="color:var(--text-muted)">Quantity:</span><br><strong>${invoice.quantityKg.toLocaleString()} kg</strong></div>
-          <div><span style="color:var(--text-muted)">Unit Price:</span><br><strong>${invoice.unitPriceSar.toFixed(2)} SAR/kg</strong></div>
-          <div><span style="color:var(--text-muted)">Subtotal:</span><br><strong>${invoice.subtotalSar.toLocaleString('en-SA', {minimumFractionDigits:2})} SAR</strong></div>
-          <div><span style="color:var(--text-muted)">VAT (${invoice.vatPct}%):</span><br><strong style="color:var(--red)">${invoice.vatAmountSar.toLocaleString('en-SA', {minimumFractionDigits:2})} SAR</strong></div>
-          <div><span style="color:var(--text-muted)">TOTAL:</span><br><strong style="color:var(--green);font-size:16px">${invoice.totalSar.toLocaleString('en-SA', {minimumFractionDigits:2})} SAR</strong></div>
+        <div class="card-hdr"><i class="fa fa-seedling" style="color:var(--amber)"></i>Line Item</div>
+        <div style="font-size:12px;font-family:var(--mono);margin-bottom:12px"><strong>${invoice.origin}</strong> · Lot ${invoice.lotId}</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px;font-size:11px;font-family:var(--mono)">
+          <div><span style="color:var(--muted)">Qty:</span><br><strong>${invoice.quantityKg.toLocaleString()} kg</strong></div>
+          <div><span style="color:var(--muted)">Unit:</span><br><strong>${invoice.unitPriceSar.toFixed(2)} SAR/kg</strong></div>
+          <div><span style="color:var(--muted)">Subtotal:</span><br><strong>${invoice.subtotalSar.toLocaleString('en-SA',{minimumFractionDigits:2})} SAR</strong></div>
+          <div><span style="color:var(--muted)">VAT 15%:</span><br><strong style="color:var(--red)">${invoice.vatAmountSar.toLocaleString('en-SA',{minimumFractionDigits:2})} SAR</strong></div>
+          <div><span style="color:var(--muted)">TOTAL:</span><br><strong style="color:var(--green);font-size:15px">${invoice.totalSar.toLocaleString('en-SA',{minimumFractionDigits:2})} SAR</strong></div>
         </div>
       </div>
-
-      <!-- XML Payload -->
       <div class="card">
-        <div class="card-title"><i class="fa fa-code" style="color:var(--blue)"></i> UBL 2.1 XML Payload</div>
-        <pre style="font-size:9px;font-family:var(--font-mono);color:var(--text-muted);overflow-x:auto;max-height:240px;line-height:1.5;white-space:pre-wrap">${invoice.xmlPayload.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</pre>
-        <a href="/buyer/invoice/${invoice.uuid}/xml" class="btn btn-blue" style="margin-top:10px;font-size:11px">
-          <i class="fa fa-download"></i> DOWNLOAD XML
-        </a>
+        <div class="card-hdr"><i class="fa fa-code" style="color:var(--blue)"></i>UBL 2.1 XML Payload
+          <a href="/buyer/invoice/${invoice.uuid}/xml" class="btn btn-blue" style="margin-left:auto;font-size:9px;padding:3px 8px"><i class="fa fa-download"></i>Download XML</a>
+        </div>
+        <pre style="font-size:9px;font-family:var(--mono);color:var(--muted);overflow-x:auto;max-height:220px;line-height:1.5;white-space:pre-wrap">${invoice.xmlPayload.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</pre>
       </div>
     </div>
 
-    <!-- QR Code panel -->
-    <div style="min-width:200px">
-      <div class="card" style="border-color:rgba(74,222,128,0.35);text-align:center">
-        <div style="font-size:10px;font-family:var(--font-mono);color:var(--green);margin-bottom:12px">ZATCA QR CODE</div>
-        ${qrSvg}
-        <div style="font-size:9px;color:var(--text-muted);margin-top:8px;font-family:var(--font-mono)">
-          TLV fields: seller · VAT · date · total · VAT amount
+    <!-- QR + Compliance -->
+    <div>
+      <div class="card" style="border-color:rgba(74,222,128,.25);text-align:center">
+        <div style="font-size:9px;font-family:var(--mono);color:var(--green);margin-bottom:10px;letter-spacing:.1em">ZATCA QR CODE</div>
+        <div style="background:#fff;padding:12px;border-radius:6px;display:inline-block;margin-bottom:8px">
+          <div style="color:#000;font-size:8px;font-family:monospace;word-break:break-all;max-width:180px;line-height:1.4">${invoice.qrCodeData.slice(0,72)}…</div>
         </div>
+        <div style="font-size:9px;color:var(--muted);font-family:var(--mono)">TLV: seller · VAT · date · total · VAT amt</div>
       </div>
-      <div class="card" style="text-align:center">
-        <div style="font-size:10px;font-family:var(--font-mono);color:var(--green);margin-bottom:6px">COMPLIANCE</div>
-        <div style="font-size:11px;font-family:var(--font-mono);line-height:1.8">
-          <div>✓ ZATCA Phase-2</div>
-          <div>✓ UUID v4</div>
-          <div>✓ UBL 2.1</div>
-          <div>✓ 15% VAT</div>
-          <div>✓ SAR currency</div>
+      <div class="card">
+        <div style="font-size:9px;font-family:var(--mono);color:var(--green);margin-bottom:8px;letter-spacing:.1em">COMPLIANCE</div>
+        <div style="font-size:11px;font-family:var(--mono);line-height:2;color:var(--text)">
+          <div>✓ ZATCA Phase-2</div><div>✓ UUID v4</div><div>✓ UBL 2.1 XML</div>
+          <div>✓ 15% VAT</div><div>✓ SAR currency</div><div>✓ TLV QR payload</div>
         </div>
       </div>
     </div>
   </div>
-
-  <a href="/buyer" class="btn btn-blue" style="margin-top:8px">← Back to Buyer Portal</a>`
+  <a href="/buyer" class="btn btn-blue" style="margin-top:6px">← Buyer Portal</a>`
 
   return c.html(exchangeLayout(`Invoice ${invoice.invoiceNumber}`, 'buyer', content))
 })
 
-// ── GET /buyer/invoice/:uuid/xml — Download UBL XML ──────────────────────────
+// ── GET /buyer/invoice/:uuid/xml ──────────────────────────────────────────────
 app.get('/buyer/invoice/:uuid/xml', (c) => {
-  const uuid    = c.req.param('uuid')
-  const invoice = zatcaInvoices.find(i => i.uuid === uuid)
-  if (!invoice) return c.text('Not found', 404)
+  const invoice = zatcaInvoices.find(i=>i.uuid===c.req.param('uuid'))
+  if (!invoice) return c.text('Not found',404)
   return new Response(invoice.xmlPayload, {
     headers: {
-      'Content-Type':        'application/xml; charset=utf-8',
+      'Content-Type': 'application/xml; charset=utf-8',
       'Content-Disposition': `attachment; filename="${invoice.invoiceNumber}.xml"`,
-      'Cache-Control':       'no-store',
+      'Cache-Control': 'no-store',
     },
   })
 })
 
-// ── GET /api/exchange/lots — JSON catalog ─────────────────────────────────────
+// ── GET /api/exchange/lots ────────────────────────────────────────────────────
 app.get('/api/exchange/lots', (c) => {
-  const lots = globalLots.map(lot => ({
-    ...lot,
-    landed:   calcLandedPrice(lot),
-    vendor:   globalVendors.find(v => v.id === lot.vendorId),
-  }))
-  return c.json({ lots, exchangeRate: lastKnownUsdToSar, effectiveRate: lastKnownUsdToSar*(1+exchangeRateBuffer/100), exchangeBufferPct: exchangeRateBuffer })
+  const typeFilter = c.req.query('type') as 'SPOT'|'FORWARD'|undefined
+  const lots = (typeFilter ? globalLots.filter(l=>l.marketplaceType===typeFilter) : globalLots)
+    .map(lot => ({ ...lot, landed: calcLandedPrice(lot), vendor: globalVendors.find(v=>v.id===lot.vendorId) }))
+  return c.json({ lots, exchangeRate: lastKnownUsdToSar, samaRate: samaReferenceRate,
+    effectiveRate: lastKnownUsdToSar*(1+exchangeRateBuffer/100), exchangeBufferPct: exchangeRateBuffer })
 })
 
-// ── GET /api/exchange/vendors — JSON vendor list ──────────────────────────────
+// ── GET /api/exchange/vendors ─────────────────────────────────────────────────
 app.get('/api/exchange/vendors', (c) => c.json({ vendors: globalVendors }))
 
-// ── GET /api/exchange/buyers — JSON buyer list ────────────────────────────────
+// ── GET /api/exchange/buyers ──────────────────────────────────────────────────
 app.get('/api/exchange/buyers', (c) => c.json({ buyers: globalBuyers }))
 
-// ── GET /api/exchange/contracts — JSON contracts ──────────────────────────────
-app.get('/api/exchange/contracts', (c) => c.json({ contracts: globalContracts, invoices: zatcaInvoices }))
+// ── GET /api/exchange/contracts ───────────────────────────────────────────────
+app.get('/api/exchange/contracts', (c) => c.json({
+  spotContracts: globalContracts, forwardContracts, invoices: zatcaInvoices
+}))
 
-// ── POST /api/exchange/iot-update — IoT humidity push ─────────────────────────
-// Vendors' IoT sensors can push live humidity readings here.
-// Body: { vendorId, warehouseHumidity }
+// ── POST /api/exchange/rate-lock — Create 60s execution lock ─────────────────
+app.post('/api/exchange/rate-lock', async (c) => {
+  try {
+    const { buyerId, lotId } = await c.req.json()
+    if (!buyerId || !lotId) return c.json({ error: 'buyerId and lotId required' }, 400)
+    const lot = globalLots.find(l=>l.id===lotId)
+    if (!lot||lot.status!=='AVAILABLE') return c.json({ error: 'Lot not available' }, 404)
+    const lock = createRateLock(String(buyerId), String(lotId))
+    return c.json({ ok: true, lock })
+  } catch { return c.json({ error: 'Invalid request' }, 400) }
+})
+
+// ── GET /api/exchange/rate-lock/:id — Check lock status ──────────────────────
+app.get('/api/exchange/rate-lock/:id', (c) => {
+  const lock = rateLocks.find(rl=>rl.id===c.req.param('id'))
+  if (!lock) return c.json({ error: 'Not found' }, 404)
+  const secsLeft = Math.max(0, Math.round((new Date(lock.expiresAt).getTime()-Date.now())/1000))
+  const status   = secsLeft > 0 && lock.status==='ACTIVE' ? 'ACTIVE' : 'EXPIRED'
+  if (status==='EXPIRED' && lock.status==='ACTIVE') lock.status = 'EXPIRED'
+  return c.json({ lock, secsLeft, status })
+})
+
+// ── POST /api/exchange/iot-update — IoT humidity push ────────────────────────
 app.post('/api/exchange/iot-update', async (c) => {
   try {
-    const { vendorId, warehouseHumidity } = await c.req.json()
-    const vendor = globalVendors.find(v => v.id === vendorId)
+    const { vendorId, warehouseHumidity, warehouseTemp } = await c.req.json()
+    const vendor = globalVendors.find(v=>v.id===vendorId)
     if (!vendor) return c.json({ error: 'Vendor not found' }, 404)
     const rh = parseFloat(warehouseHumidity)
-    if (isNaN(rh) || rh < 0 || rh > 100) return c.json({ error: 'Invalid humidity' }, 400)
+    const tp = parseFloat(warehouseTemp)
+    if (isNaN(rh)||rh<0||rh>100) return c.json({ error: 'Invalid humidity' }, 400)
     vendor.warehouseHumidity = rh
-
-    // Update SCA badge on all AVAILABLE lots for this vendor
+    if (!isNaN(tp)) vendor.warehouseTemp = tp
     const updatedLots: string[] = []
     for (const lot of globalLots) {
-      if (lot.vendorId === vendorId && lot.status === 'AVAILABLE') {
+      if (lot.vendorId===vendorId && lot.status==='AVAILABLE') {
+        const ts = new Date().toISOString()
         lot.warehouseHumidity    = rh
-        lot.scaGoldStorage       = rh >= 50 && rh <= 60
-        lot.climateCertifiedAt   = new Date().toISOString()
+        if (!isNaN(tp)) lot.warehouseTemp = tp
+        lot.scaGoldStorage       = rh>=50 && rh<=60
+        lot.climateCertifiedAt   = ts
+        lot.climateLog.push({
+          ts, location: `Origin Warehouse — IoT Update`, phase: 'ORIGIN',
+          humidity: rh, temp: isNaN(tp)?lot.warehouseTemp??20:tp, note: 'Automated IoT sensor reading',
+        })
         updatedLots.push(lot.id)
       }
     }
+    return c.json({ ok: true, vendorId, humidity: rh, temp: isNaN(tp)?undefined:tp,
+      scaGoldBadge: rh>=50&&rh<=60, updatedLots })
+  } catch { return c.json({ error: 'Invalid request' }, 400) }
+})
 
-    return c.json({
-      ok:           true,
-      vendorId,
-      humidity:     rh,
-      scaGoldBadge: rh >= 50 && rh <= 60,
-      updatedLots,
-    })
-  } catch {
-    return c.json({ error: 'Invalid request' }, 400)
+// ── GET /exchange/climate/:lotId — Digital Climate Passport Detail Page ───────
+app.get('/exchange/climate/:lotId', (c) => {
+  const lot = globalLots.find(l => l.id === c.req.param('lotId'))
+  if (!lot) return c.html(exchangeLayout('Climate Passport', 'catalog',
+    `<div class="alert al-red"><i class="fa fa-warning"></i>Lot not found.</div>
+     <a href="/exchange/catalog" class="btn btn-blue">← Catalog</a>`))
+
+  const vendor = globalVendors.find(v => v.id === lot.vendorId)
+  const rhOk   = lot.warehouseHumidity != null && lot.warehouseHumidity >= 50 && lot.warehouseHumidity <= 60
+  const rhClr  = !lot.warehouseHumidity ? 'var(--muted)'
+                 : rhOk ? 'var(--cyan)'
+                 : lot.warehouseHumidity > 70 ? 'var(--red)' : 'var(--amber)'
+
+  // Build phase summary
+  const phases = ['ORIGIN','TRANSIT','PORT','ARRIVAL'] as const
+  const phaseSummary = phases.map(ph => {
+    const logs = lot.climateLog.filter(cl => cl.phase === ph)
+    if (!logs.length) return ''
+    const avgRH   = Math.round(logs.reduce((s,l)=>s+l.humidity,0)/logs.length*10)/10
+    const avgTemp = Math.round(logs.reduce((s,l)=>s+l.temp,0)/logs.length*10)/10
+    const phaseIcon = ph==='ORIGIN'?'fa-seedling':ph==='TRANSIT'?'fa-ship':ph==='PORT'?'fa-anchor':'fa-warehouse'
+    const phaseClr  = ph==='ORIGIN'?'var(--green)':ph==='TRANSIT'?'var(--amber)':ph==='PORT'?'var(--blue)':'var(--cyan)'
+    const scaOk     = avgRH >= 50 && avgRH <= 60
+    return `
+    <div style="background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:6px;padding:14px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+        <i class="fa ${phaseIcon}" style="color:${phaseClr}"></i>
+        <span style="font-size:10px;font-family:var(--mono);font-weight:700;color:${phaseClr};letter-spacing:.1em">${ph}</span>
+        ${scaOk?`<span class="badge b-cyan" style="margin-left:auto">✓ SCA Range</span>`:`<span class="badge b-amber" style="margin-left:auto">RH ${avgRH}%</span>`}
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:11px;font-family:var(--mono)">
+        <div><span style="color:var(--muted)">Avg RH:</span><br>
+          <strong style="color:${scaOk?'var(--cyan)':'var(--amber)'};font-size:18px">${avgRH}%</strong></div>
+        <div><span style="color:var(--muted)">Avg Temp:</span><br>
+          <strong style="font-size:18px">${avgTemp}°C</strong></div>
+        <div style="grid-column:1/-1"><span style="color:var(--muted)">Readings:</span> ${logs.length} log entries</div>
+      </div>
+    </div>`
+  }).filter(Boolean).join('')
+
+  const content = `
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:4px;flex-wrap:wrap">
+    <div class="pg-title"><i class="fa fa-passport" style="color:${lot.scaGoldStorage?'var(--cyan)':'var(--muted)'}"></i>Digital Climate Passport</div>
+    ${lot.scaGoldStorage
+      ? `<span class="badge b-cyan" style="font-size:11px;padding:4px 10px"><i class="fa fa-certificate"></i> SCA GOLD STORAGE CERTIFIED</span>`
+      : `<span class="badge b-muted" style="font-size:11px;padding:4px 10px">STANDARD STORAGE</span>`}
+  </div>
+  <div class="pg-sub" style="font-family:var(--mono)">${lot.id} · ${lot.origin} · ${lot.variety} · ${vendor?.companyName??''}</div>
+
+  <!-- Summary Strip -->
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;margin-bottom:20px">
+    <div class="stat-card" style="border-color:${rhOk?'rgba(34,211,238,.3)':'rgba(245,158,11,.2)'}">
+      <div class="stat-lbl">Current RH</div>
+      <div class="stat-val" style="color:${rhClr}">${lot.warehouseHumidity??'—'}%</div>
+      <div class="stat-sub">${rhOk?'✓ SCA Gold threshold (50–60%)':'Outside SCA optimal range'}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-lbl">Current Temp</div>
+      <div class="stat-val">${lot.warehouseTemp??'—'}°C</div>
+      <div class="stat-sub">Origin warehouse</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-lbl">Climate Logs</div>
+      <div class="stat-val" style="color:var(--blue)">${lot.climateLog.length}</div>
+      <div class="stat-sub">Sensor readings total</div>
+    </div>
+    <div class="stat-card" style="border-color:rgba(74,222,128,.2)">
+      <div class="stat-lbl">Certified</div>
+      <div class="stat-val" style="font-size:13px;color:var(--green)">${lot.climateCertifiedAt?.slice(0,10)??'—'}</div>
+      <div class="stat-sub">${lot.scaGoldStorage?'SCA Gold verified':'Not certified'}</div>
+    </div>
+  </div>
+
+  ${lot.scaGoldStorage ? `
+  <div class="alert al-green" style="margin-bottom:20px">
+    <i class="fa fa-certificate"></i>
+    <div>
+      <strong>SCA Gold Storage Certification Active</strong><br>
+      <span style="font-size:11px;font-family:var(--mono)">
+        IoT sensors confirm warehouse humidity remains within the SCA optimal range of 50–60% RH.
+        This certification ensures maximum bean integrity, flavour preservation, and green coffee longevity.
+        Certified: ${lot.climateCertifiedAt?.replace('T',' ').slice(0,16) ?? '—'}
+      </span>
+    </div>
+  </div>` : `
+  <div class="alert al-amber" style="margin-bottom:20px">
+    <i class="fa fa-triangle-exclamation"></i>
+    <div>
+      <strong>Standard Storage</strong> — Not SCA Gold certified.<br>
+      <span style="font-size:11px;font-family:var(--mono)">
+        Current RH of ${lot.warehouseHumidity??'unknown'}% is outside the 50–60% optimal range.
+        SCA Gold Storage badge is awarded automatically when IoT sensors report 50–60% RH.
+      </span>
+    </div>
+  </div>`}
+
+  <!-- Phase Summary Grid -->
+  <div class="card" style="margin-bottom:18px">
+    <div class="card-hdr"><i class="fa fa-chart-line" style="color:var(--cyan)"></i>Phase-by-Phase Summary</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px">
+      ${phaseSummary}
+      ${!phaseSummary?`<div style="color:var(--muted);font-size:12px">No phase data yet.</div>`:''}
+    </div>
+  </div>
+
+  <!-- Full Climate Timeline -->
+  <div class="card">
+    <div class="card-hdr"><i class="fa fa-timeline" style="color:var(--cyan)"></i>Full Climate Log Timeline
+      <span style="margin-left:auto;font-size:10px;color:var(--muted);font-family:var(--mono)">${lot.climateLog.length} entries</span>
+    </div>
+    ${lot.climateLog.length === 0
+      ? `<div style="font-size:12px;color:var(--muted)">No climate log entries yet.</div>`
+      : `<div class="climate-timeline">
+        ${[...lot.climateLog].reverse().map((cl, i) => {
+          const isOk   = cl.humidity >= 50 && cl.humidity <= 60
+          const isWarm = cl.humidity > 70
+          const rhClrCl = isOk ? 'var(--cyan)' : isWarm ? 'var(--red)' : 'var(--amber)'
+          const phClr   = cl.phase==='ORIGIN'?'cl-origin':cl.phase==='TRANSIT'?'cl-transit':cl.phase==='PORT'?'cl-port':'cl-arrival'
+          return `<div class="cl-row ${phClr}">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+              <span style="font-weight:600;font-size:12px">${cl.location}</span>
+              <span class="badge b-muted" style="font-size:9px">${cl.phase}</span>
+              ${isOk?`<span class="badge b-cyan" style="font-size:9px">✓ SCA Gold</span>`:''}
+            </div>
+            <div style="display:flex;gap:16px;flex-wrap:wrap;color:var(--muted);font-family:var(--mono);font-size:10px;margin-top:3px">
+              <span>${cl.ts.replace('T',' ').slice(0,16)}</span>
+              <span>RH: <strong style="color:${rhClrCl}">${cl.humidity}%</strong></span>
+              <span>Temp: <strong style="color:var(--text)">${cl.temp}°C</strong></span>
+              ${cl.note?`<span style="font-style:italic;color:var(--muted)">${cl.note}</span>`:''}
+            </div>
+          </div>`
+        }).join('')}
+      </div>`}
+  </div>
+
+  <!-- SCA Reference -->
+  <div class="card" style="border-color:rgba(34,211,238,.2)">
+    <div class="card-hdr"><i class="fa fa-info-circle" style="color:var(--cyan)"></i>SCA Storage Standards Reference</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;font-size:11px;font-family:var(--mono)">
+      <div style="padding:10px;background:rgba(74,222,128,.05);border:1px solid rgba(74,222,128,.2);border-radius:5px">
+        <div style="color:var(--green);font-weight:700;margin-bottom:4px">✓ SCA Gold (50–60% RH)</div>
+        <div style="color:var(--muted)">Maximum bean integrity. Flavour locked. Eligible for SCA Gold Storage badge.</div>
+      </div>
+      <div style="padding:10px;background:rgba(245,158,11,.05);border:1px solid rgba(245,158,11,.2);border-radius:5px">
+        <div style="color:var(--amber);font-weight:700;margin-bottom:4px">⚠ Acceptable (40–70% RH)</div>
+        <div style="color:var(--muted)">Acceptable storage. Some flavour degradation risk over time.</div>
+      </div>
+      <div style="padding:10px;background:rgba(248,113,113,.05);border:1px solid rgba(248,113,113,.2);border-radius:5px">
+        <div style="color:var(--red);font-weight:700;margin-bottom:4px">✗ Risk (>70% or <30% RH)</div>
+        <div style="color:var(--muted)">High mould risk (&gt;70%) or excessive drying (&lt;30%). Recall recommended.</div>
+      </div>
+    </div>
+  </div>
+
+  <div style="display:flex;gap:10px;margin-top:6px;flex-wrap:wrap">
+    <a href="/exchange/catalog" class="btn btn-blue">← Global Catalog</a>
+    <a href="/buyer/contract?lotId=${lot.id}" class="btn ${lot.marketplaceType==='SPOT'?'btn-green':'btn-amber'}">
+      <i class="fa fa-file-contract"></i>${lot.marketplaceType==='SPOT'?'Order Spot':'Pre-order Forward'}
+    </a>
+    ${lot.shipTracker?`<a href="/exchange/shiptrack/${lot.id}" class="btn btn-blue"><i class="fa fa-ship"></i>Ship Tracker</a>`:''}
+  </div>`
+
+  return c.html(exchangeLayout(`Climate Passport — ${lot.id}`, 'catalog', content))
+})
+
+// ── GET /exchange/shiptrack/:lotId — Flexport Live Ship Tracker ───────────────
+app.get('/exchange/shiptrack/:lotId', (c) => {
+  const lot = globalLots.find(l => l.id === c.req.param('lotId'))
+  if (!lot) return c.html(exchangeLayout('Ship Tracker', 'catalog',
+    `<div class="alert al-red"><i class="fa fa-warning"></i>Lot not found.</div>
+     <a href="/exchange/catalog" class="btn btn-blue">← Catalog</a>`))
+
+  const vendor = globalVendors.find(v => v.id === lot.vendorId)
+  const tracker = lot.shipTracker
+
+  const content = `
+  <div class="pg-title"><i class="fa fa-ship" style="color:var(--blue)"></i>Live Ship Tracker</div>
+  <div class="pg-sub" style="font-family:var(--mono)">${lot.id} · ${lot.origin} · ${lot.variety} · ${vendor?.companyName??''}</div>
+
+  ${!tracker ? `
+  <div class="alert al-amber">
+    <i class="fa fa-satellite-dish"></i>
+    <div>
+      <strong>No live shipment data yet</strong><br>
+      <span style="font-size:11px;font-family:var(--mono)">
+        Flexport tracking activates after contract signing and B/L (Bill of Lading) upload.
+        Estimated transit time: ~${lot.shipmentEstimateDays} days to KSA.
+      </span>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-hdr"><i class="fa fa-route" style="color:var(--amber)"></i>Estimated Shipment Plan</div>
+    <div style="font-size:11px;font-family:var(--mono);line-height:2.2">
+      <div><i class="fa fa-circle-dot" style="color:var(--green)"></i> <strong>Origin:</strong> ${lot.origin}</div>
+      <div style="padding-left:14px;border-left:1px dashed rgba(255,255,255,.1);margin-left:6px">
+        <div><i class="fa fa-anchor" style="color:var(--blue)"></i> Transit port of loading</div>
+        <div><i class="fa fa-ship" style="color:var(--amber)"></i> Ocean freight (~${Math.round((lot.shipmentEstimateDays??21)*0.6)} days at sea)</div>
+        <div><i class="fa fa-anchor" style="color:var(--cyan)"></i> Port of Jeddah / Dammam (KSA)</div>
+      </div>
+      <div><i class="fa fa-warehouse" style="color:var(--cyan)"></i> <strong>KSA Warehouse</strong> · Est. ${lot.shipmentEstimateDays??21} days total</div>
+    </div>
+  </div>` : `
+  <!-- Live Tracker Banner -->
+  <div class="card" style="border-color:rgba(96,165,250,.3);margin-bottom:18px">
+    <div class="card-hdr"><i class="fa fa-satellite-dish" style="color:var(--blue)"></i>Flexport Live Tracking
+      <span class="badge b-blue" style="margin-left:8px;font-size:9px">LIVE</span>
+      <span style="margin-left:auto;font-size:10px;font-family:var(--mono);color:var(--muted)">${tracker.status}</span>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-bottom:16px;font-size:11px;font-family:var(--mono)">
+      <div><span style="color:var(--muted)">Vessel:</span><br><strong style="color:var(--text)">${tracker.vessel}</strong></div>
+      <div><span style="color:var(--muted)">Voyage:</span><br><strong>${tracker.voyageNumber}</strong></div>
+      <div><span style="color:var(--muted)">Flexport ID:</span><br><strong style="color:var(--blue)">${lot.flexportShipmentId??'Simulated'}</strong></div>
+      <div><span style="color:var(--muted)">HS Code:</span><br><strong>${lot.customsHsCode}</strong></div>
+      <div><span style="color:var(--muted)">ETD:</span><br><strong>${tracker.etd}</strong></div>
+      <div><span style="color:var(--muted)">ETA:</span><br><strong style="color:var(--green)">${tracker.eta}</strong></div>
+      <div><span style="color:var(--muted)">Current Position:</span><br><strong style="color:var(--amber)">${tracker.currentLocation}</strong></div>
+      <div><span style="color:var(--muted)">Progress:</span><br><strong style="color:var(--cyan);font-size:18px">${tracker.progressPct}%</strong></div>
+    </div>
+
+    <!-- Progress Bar -->
+    <div style="margin-bottom:6px;font-size:10px;font-family:var(--mono);color:var(--muted)">
+      <span>${lot.origin}</span>
+      <span style="float:right">Jeddah / Dammam, KSA</span>
+    </div>
+    <div class="tracker-bar">
+      <div class="tracker-fill" style="width:${tracker.progressPct}%"></div>
+    </div>
+    <div style="font-size:10px;color:var(--muted);font-family:var(--mono);margin-top:4px;text-align:center">
+      ${tracker.currentLocation} · ${tracker.progressPct}% of journey complete
+    </div>
+  </div>
+
+  <!-- Events Timeline -->
+  <div class="card">
+    <div class="card-hdr"><i class="fa fa-list-check" style="color:var(--blue)"></i>Shipment Events</div>
+    <div class="tracker-events">
+      ${tracker.events.map(ev => `
+      <div class="tracker-event">
+        <div style="font-weight:600;font-size:12px">${ev.location}</div>
+        <div style="color:var(--muted);font-size:10px;font-family:var(--mono);margin-top:2px">${ev.ts.replace('T',' ').slice(0,16)} · ${ev.description}</div>
+      </div>`).join('')}
+    </div>
+  </div>
+
+  <!-- Documents -->
+  <div class="card">
+    <div class="card-hdr"><i class="fa fa-folder-open" style="color:var(--amber)"></i>Shipment Documents</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;font-size:11px;font-family:var(--mono)">
+      <div style="padding:10px;background:rgba(74,222,128,.05);border:1px solid rgba(74,222,128,.2);border-radius:5px">
+        <div style="color:var(--green);font-weight:700;margin-bottom:4px"><i class="fa fa-file-pdf"></i> Bill of Lading</div>
+        <div style="color:var(--muted)">B/L #${tracker.voyageNumber}-BL001</div>
+        <div style="color:var(--muted);font-size:9px">Auto-linked on vessel departure</div>
+      </div>
+      <div style="padding:10px;background:rgba(96,165,250,.05);border:1px solid rgba(96,165,250,.2);border-radius:5px">
+        <div style="color:var(--blue);font-weight:700;margin-bottom:4px"><i class="fa fa-certificate"></i> Certificate of Origin</div>
+        <div style="color:var(--muted)">HS: ${lot.customsHsCode}</div>
+        <div style="color:var(--muted);font-size:9px">Saudi Customs compliance</div>
+      </div>
+      <div style="padding:10px;background:rgba(34,211,238,.05);border:1px solid rgba(34,211,238,.2);border-radius:5px">
+        <div style="color:var(--cyan);font-weight:700;margin-bottom:4px"><i class="fa fa-passport"></i> Climate Passport</div>
+        <div style="color:var(--muted)">${lot.scaGoldStorage?'SCA Gold Certified':'Standard'}</div>
+        <a href="/exchange/climate/${lot.id}" style="color:var(--cyan);font-size:9px">View →</a>
+      </div>
+    </div>
+  </div>`}
+
+  <!-- Saudi Customs Info -->
+  <div class="card" style="border-color:rgba(245,158,11,.2)">
+    <div class="card-hdr"><i class="fa fa-shield-halved" style="color:var(--amber)"></i>Saudi Customs & ZATCA</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;font-size:11px;font-family:var(--mono)">
+      <div><span style="color:var(--muted)">HS Code:</span><br><strong>${lot.customsHsCode}</strong></div>
+      <div><span style="color:var(--muted)">Customs Duty:</span><br><strong>5% of CIF value</strong></div>
+      <div><span style="color:var(--muted)">ZATCA VAT:</span><br><strong style="color:var(--red)">15% on CIF + Customs</strong></div>
+      <div><span style="color:var(--muted)">Est. Transit:</span><br><strong>${lot.shipmentEstimateDays??21} days</strong></div>
+    </div>
+  </div>
+
+  <div style="display:flex;gap:10px;margin-top:6px;flex-wrap:wrap">
+    <a href="/exchange/catalog" class="btn btn-blue">← Catalog</a>
+    <a href="/exchange/climate/${lot.id}" class="btn btn-blue"><i class="fa fa-passport"></i>Climate Passport</a>
+    ${lot.status==='AVAILABLE'?`<a href="/buyer/contract?lotId=${lot.id}" class="btn ${lot.marketplaceType==='SPOT'?'btn-green':'btn-amber'}">
+      <i class="fa fa-file-contract"></i>${lot.marketplaceType==='SPOT'?'Order Spot':'Pre-order Forward'}
+    </a>`:''}
+  </div>`
+
+  return c.html(exchangeLayout(`Ship Tracker — ${lot.id}`, 'catalog', content))
+})
+
+// ── GET /exchange/forward/:contractId — Forward Contract Milestone Dashboard ──
+app.get('/exchange/forward/:contractId', (c) => {
+  const fc      = forwardContracts.find(f => f.id === c.req.param('contractId'))
+  if (!fc) return c.html(exchangeLayout('Forward Contract', 'buyer',
+    `<div class="alert al-red"><i class="fa fa-warning"></i>Contract not found.</div>
+     <a href="/buyer" class="btn btn-blue">← Buyer Portal</a>`))
+
+  const lot    = globalLots.find(l => l.id === fc.lotId)
+  const buyer  = globalBuyers.find(b => b.id === fc.buyerId)
+  const invoice = zatcaInvoices.find(i => i.lotId === fc.lotId)
+  const landed  = lot ? calcLandedPrice(lot, fc.quantityKg) : null
+
+  const milestoneTotal = landed?.landedPriceSar ?? 0
+  const paidTotal = fc.milestones
+    .filter(m => m.status === 'PAID')
+    .reduce((s, m) => s + Math.round(milestoneTotal * m.pct / 100 * 100) / 100, 0)
+
+  const sasColor = fc.sasStatus==='SAMPLE_APPROVED'?'var(--green)':
+                   fc.sasStatus==='SAMPLE_REJECTED'?'var(--red)':
+                   fc.sasStatus==='WAIVED'?'var(--muted)':'var(--amber)'
+  const sasBadge = fc.sasStatus==='SAMPLE_APPROVED'?'<span class="badge b-green">APPROVED</span>':
+                   fc.sasStatus==='SAMPLE_REJECTED'?'<span class="badge b-red">REJECTED</span>':
+                   fc.sasStatus==='WAIVED'?'<span class="badge b-muted">WAIVED</span>':
+                   '<span class="badge b-amber">PENDING SAMPLE</span>'
+
+  const content = `
+  <div class="pg-title"><i class="fa fa-seedling" style="color:var(--amber)"></i>Forward Pre-order Dashboard</div>
+  <div class="pg-sub" style="font-family:var(--mono)">${fc.id} · ${lot?.origin??fc.lotId} · ${buyer?.roasteryName??fc.buyerId}</div>
+
+  <!-- Status Overview -->
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;margin-bottom:20px">
+    <div class="stat-card" style="border-color:rgba(245,158,11,.3)">
+      <div class="stat-lbl">Contract Status</div>
+      <div class="stat-val" style="font-size:14px;color:var(--amber)">${fc.status}</div>
+      <div class="stat-sub">${fc.contractedAt.slice(0,10)}</div>
+    </div>
+    <div class="stat-card" style="border-color:${sasColor===`var(--green)`?'rgba(74,222,128,.3)':'rgba(245,158,11,.2)'}">
+      <div class="stat-lbl">SAS Status</div>
+      <div class="stat-val" style="font-size:12px;color:${sasColor}">${fc.sasStatus.replace('_',' ')}</div>
+      <div class="stat-sub">Sample approval clause</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-lbl">Quantity</div>
+      <div class="stat-val">${fc.quantityKg.toLocaleString()}</div>
+      <div class="stat-sub">kg green coffee</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-lbl">Paid So Far</div>
+      <div class="stat-val" style="color:var(--green);font-size:15px">${paidTotal.toLocaleString('en-SA',{minimumFractionDigits:2})} SAR</div>
+      <div class="stat-sub">of ${milestoneTotal.toLocaleString('en-SA',{minimumFractionDigits:2})} SAR total</div>
+    </div>
+  </div>
+
+  <!-- SAS Clause Banner -->
+  ${fc.sasStatus !== 'WAIVED' ? `
+  <div class="sas-box" style="margin-bottom:18px">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+      <i class="fa fa-file-signature" style="color:var(--purple)"></i>
+      <strong style="color:var(--purple)">Subject to Approval of Sample (SAS) Clause</strong>
+      ${sasBadge}
+    </div>
+    <div style="font-size:11px;line-height:1.8;font-family:var(--mono)">
+      ${fc.sasStatus==='SAMPLE_APPROVED'
+        ? `✓ Physical sample approved by buyer's Q.C. team. Contract is now fully binding.`
+        : fc.sasStatus==='SAMPLE_REJECTED'
+        ? `✗ Physical sample rejected. Lot renegotiation or cancellation required.`
+        : `⏳ Awaiting physical sample dispatch and buyer Q.C. approval. Contract binding upon approval.
+           Sample to be dispatched within 7 days of contract signing (${fc.contractedAt.slice(0,10)}).`}
+    </div>
+  </div>` : ''}
+
+  <!-- Milestone Payments -->
+  <div class="card" style="margin-bottom:18px">
+    <div class="card-hdr"><i class="fa fa-calendar-check" style="color:var(--amber)"></i>Milestone Payment Schedule</div>
+    ${fc.milestones.map((ms, i) => {
+      const amt = Math.round(milestoneTotal * ms.pct / 100 * 100) / 100
+      const isPaid = ms.status === 'PAID'
+      const dotBg = isPaid ? 'background:rgba(74,222,128,.3);color:var(--green)' : 'background:rgba(255,255,255,.05);color:var(--muted)'
+      return `
+      <div class="milestone-step" style="${isPaid?'border-color:rgba(74,222,128,.25);background:rgba(74,222,128,.03)':''}">
+        <div class="ms-dot" style="${dotBg}">${isPaid?'✓':(i+1)}</div>
+        <div style="flex:1">
+          <div style="font-size:12px;font-weight:600">${ms.label}</div>
+          <div style="font-size:10px;color:var(--muted);font-family:var(--mono)">Due: ${ms.dueEvent}</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-family:var(--mono);font-size:13px;color:${isPaid?'var(--green)':'var(--text)'}">${amt.toLocaleString('en-SA',{minimumFractionDigits:2})} SAR</div>
+          <div><span class="badge ${isPaid?'b-green':'b-amber'}">${ms.status}</span></div>
+        </div>
+      </div>`
+    }).join('')}
+    <div style="border-top:1px solid var(--border);padding-top:12px;margin-top:8px;display:flex;justify-content:space-between;font-family:var(--mono);font-size:13px">
+      <span style="color:var(--muted)">Total Contract Value</span>
+      <strong style="color:var(--green)">${milestoneTotal.toLocaleString('en-SA',{minimumFractionDigits:2})} SAR</strong>
+    </div>
+  </div>
+
+  <!-- Landed Price Breakdown -->
+  ${landed ? `
+  <div class="card" style="margin-bottom:18px">
+    <div class="card-hdr"><i class="fa fa-calculator" style="color:var(--amber)"></i>Landed Price Breakdown</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;font-size:11px;font-family:var(--mono)">
+      <div><span style="color:var(--muted)">FOB USD/kg:</span><br><strong>$${landed.fobPriceUsd.toFixed(2)}</strong></div>
+      <div><span style="color:var(--muted)">Eff. Rate:</span><br><strong>${landed.effectiveRate.toFixed(4)} SAR/USD</strong></div>
+      <div><span style="color:var(--muted)">FOB SAR/kg:</span><br><strong>${landed.fobPriceSar.toFixed(2)} SAR</strong></div>
+      <div><span style="color:var(--muted)">Shipping:</span><br><strong style="color:var(--amber)">${landed.shippingEstimateSar.toLocaleString()} SAR</strong></div>
+      <div><span style="color:var(--muted)">Customs 5%:</span><br><strong style="color:var(--amber)">${landed.customsFeesSar.toLocaleString()} SAR</strong></div>
+      <div><span style="color:var(--muted)">VAT 15%:</span><br><strong style="color:var(--red)">${landed.vatSar.toLocaleString()} SAR</strong></div>
+      <div><span style="color:var(--muted)">Per kg landed:</span><br><strong style="color:var(--green);font-size:14px">${landed.landedPricePerKg.toFixed(2)} SAR/kg</strong></div>
+      <div><span style="color:var(--muted)">Total (${fc.quantityKg}kg):</span><br><strong style="color:var(--green)">${landed.landedPriceSar.toLocaleString('en-SA',{minimumFractionDigits:2})} SAR</strong></div>
+    </div>
+  </div>` : ''}
+
+  <!-- Climate Passport Summary -->
+  ${lot ? `
+  <div class="card" style="margin-bottom:18px;border-color:${lot.scaGoldStorage?'rgba(34,211,238,.25)':'var(--border)'}">
+    <div class="card-hdr">
+      <i class="fa fa-passport" style="color:${lot.scaGoldStorage?'var(--cyan)':'var(--muted)'}"></i>
+      Climate Passport
+      ${lot.scaGoldStorage?`<span class="badge b-cyan" style="margin-left:8px">SCA GOLD</span>`:''}
+      <a href="/exchange/climate/${lot.id}" class="btn btn-blue" style="margin-left:auto;font-size:9px;padding:3px 8px">View Full Passport →</a>
+    </div>
+    <div style="font-size:11px;font-family:var(--mono)">
+      Current RH: <strong style="color:${lot.scaGoldStorage?'var(--cyan)':'var(--amber)'}">${lot.warehouseHumidity??'—'}%</strong> ·
+      Temp: <strong>${lot.warehouseTemp??'—'}°C</strong> ·
+      ${lot.climateLog.length} sensor readings
+    </div>
+  </div>` : ''}
+
+  <!-- ZATCA Invoice Link -->
+  ${invoice ? `
+  <div class="card" style="border-color:rgba(74,222,128,.2)">
+    <div class="card-hdr"><i class="fa fa-receipt" style="color:var(--green)"></i>ZATCA Phase-2 E-Invoice</div>
+    <div style="font-size:11px;font-family:var(--mono);margin-bottom:10px">
+      Invoice #: <strong>${invoice.invoiceNumber}</strong> ·
+      Total: <strong style="color:var(--green)">${invoice.totalSar.toLocaleString('en-SA',{minimumFractionDigits:2})} SAR</strong> ·
+      VAT: <strong style="color:var(--red)">${invoice.vatAmountSar.toLocaleString('en-SA',{minimumFractionDigits:2})} SAR</strong>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <a href="/buyer/invoice/${invoice.uuid}" class="btn btn-green"><i class="fa fa-receipt"></i>View Invoice</a>
+      <a href="/buyer/invoice/${invoice.uuid}/xml" class="btn btn-blue"><i class="fa fa-download"></i>Download XML</a>
+    </div>
+  </div>` : ''}
+
+  <div style="display:flex;gap:10px;margin-top:6px;flex-wrap:wrap">
+    <a href="/buyer" class="btn btn-blue">← Buyer Portal</a>
+    ${lot?.shipTracker?`<a href="/exchange/shiptrack/${lot.id}" class="btn btn-blue"><i class="fa fa-ship"></i>Ship Tracker</a>`:''}
+  </div>`
+
+  return c.html(exchangeLayout(`Forward Contract — ${fc.id}`, 'buyer', content))
+})
+
+// ── GET /exchange/analytics — Global Exchange Analytics ───────────────────────
+app.get('/exchange/analytics', (c) => {
+  const effRate   = lastKnownUsdToSar * (1 + exchangeRateBuffer / 100)
+  const spotLots  = globalLots.filter(l => l.marketplaceType === 'SPOT')
+  const fwdLots   = globalLots.filter(l => l.marketplaceType === 'FORWARD')
+  const availLots = globalLots.filter(l => l.status === 'AVAILABLE')
+  const contLots  = globalLots.filter(l => l.status === 'CONTRACTED')
+
+  // Volume by origin
+  const originVol: Record<string, {kg: number, usd: number, lots: number}> = {}
+  for (const lot of globalLots) {
+    const o = lot.origin.split(' ')[0]
+    if (!originVol[o]) originVol[o] = {kg:0, usd:0, lots:0}
+    originVol[o].kg   += lot.greenWeightKg
+    originVol[o].usd  += lot.greenWeightKg * lot.fobPriceUsd
+    originVol[o].lots += 1
   }
+  const topOrigins = Object.entries(originVol).sort((a,b)=>b[1].kg-a[1].kg)
+
+  // Financial metrics
+  const totalFobUsd = globalLots.reduce((s,l)=>s+l.greenWeightKg*l.fobPriceUsd, 0)
+  const totalLandedSar = globalLots.reduce((s,l)=>{
+    const lp = calcLandedPrice(l); return s + lp.landedPriceSar
+  }, 0)
+  const scaBadged  = globalLots.filter(l=>l.scaGoldStorage).length
+  const avgGrade   = Math.round(globalLots.reduce((s,l)=>s+l.gradeScore,0)/Math.max(globalLots.length,1)*10)/10
+
+  const content = `
+  <div class="pg-title"><i class="fa fa-chart-bar" style="color:var(--amber)"></i>Exchange Analytics</div>
+  <div class="pg-sub">Portfolio intelligence · Financial pulse · Origin breakdown</div>
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;margin-bottom:20px">
+    <div class="stat-card" style="border-color:rgba(74,222,128,.25)">
+      <div class="stat-lbl">Total Volume</div>
+      <div class="stat-val" style="color:var(--green)">${globalLots.reduce((s,l)=>s+l.greenWeightKg,0).toLocaleString()}</div>
+      <div class="stat-sub">kg total (all lots)</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-lbl">Total FOB Value</div>
+      <div class="stat-val" style="font-size:15px;color:var(--amber)">$${Math.round(totalFobUsd/1000)}k</div>
+      <div class="stat-sub">USD (all lots)</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-lbl">Total Landed (SAR)</div>
+      <div class="stat-val" style="font-size:13px;color:var(--green)">${Math.round(totalLandedSar/1000).toLocaleString()}k</div>
+      <div class="stat-sub">SAR incl. VAT</div>
+    </div>
+    <div class="stat-card" style="border-color:rgba(34,211,238,.25)">
+      <div class="stat-lbl">SCA Gold Lots</div>
+      <div class="stat-val" style="color:var(--cyan)">${scaBadged} / ${globalLots.length}</div>
+      <div class="stat-sub">${Math.round(scaBadged/Math.max(globalLots.length,1)*100)}% certified</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-lbl">Avg SCA Grade</div>
+      <div class="stat-val" style="color:var(--blue)">${avgGrade}</div>
+      <div class="stat-sub">Specialty threshold 80+</div>
+    </div>
+    <div class="stat-card" style="border-color:rgba(245,158,11,.2)">
+      <div class="stat-lbl">Effective Rate</div>
+      <div class="stat-val" style="color:var(--amber);font-size:16px">${effRate.toFixed(4)}</div>
+      <div class="stat-sub">SAR/USD (SAMA+${exchangeRateBuffer}%)</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-lbl">Contracts</div>
+      <div class="stat-val">${globalContracts.length + forwardContracts.length}</div>
+      <div class="stat-sub">${globalContracts.length} spot · ${forwardContracts.length} fwd</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-lbl">ZATCA Invoices</div>
+      <div class="stat-val" style="color:var(--purple)">${zatcaInvoices.length}</div>
+      <div class="stat-sub">Phase-2 compliant</div>
+    </div>
+  </div>
+
+  <!-- Dual-Track Distribution -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">
+    <div class="card" style="border-color:rgba(74,222,128,.2)">
+      <div class="card-hdr"><span class="track-spot">⚡ SPOT MARKET</span></div>
+      <div style="font-size:11px;font-family:var(--mono);margin-bottom:12px;color:var(--muted)">Immediate dispatch from origin warehouses</div>
+      <div style="font-size:24px;font-weight:700;color:var(--green);margin-bottom:4px">${spotLots.length}</div>
+      <div style="font-size:11px;color:var(--muted)">${spotLots.filter(l=>l.status==='AVAILABLE').length} available · ${spotLots.reduce((s,l)=>s+l.greenWeightKg,0).toLocaleString()} kg</div>
+      <div style="margin-top:10px;font-family:var(--mono);font-size:11px">Avg FOB: <strong>$${spotLots.length?Math.round(spotLots.reduce((s,l)=>s+l.fobPriceUsd,0)/spotLots.length*100)/100:0}/kg</strong></div>
+    </div>
+    <div class="card" style="border-color:rgba(245,158,11,.2)">
+      <div class="card-hdr"><span class="track-fwd">🌱 FORWARD MARKET</span></div>
+      <div style="font-size:11px;font-family:var(--mono);margin-bottom:12px;color:var(--muted)">Pre-harvest orders · 30% deposit · SAS clause</div>
+      <div style="font-size:24px;font-weight:700;color:var(--amber);margin-bottom:4px">${fwdLots.length}</div>
+      <div style="font-size:11px;color:var(--muted)">${fwdLots.filter(l=>l.status==='AVAILABLE').length} available · ${fwdLots.reduce((s,l)=>s+l.greenWeightKg,0).toLocaleString()} kg</div>
+      <div style="margin-top:10px;font-family:var(--mono);font-size:11px">Active fwd contracts: <strong>${forwardContracts.length}</strong></div>
+    </div>
+  </div>
+
+  <!-- Origin Breakdown -->
+  <div class="card">
+    <div class="card-hdr"><i class="fa fa-earth-africa" style="color:var(--green)"></i>Volume by Origin</div>
+    <table class="tbl">
+      <thead><tr><th>Origin</th><th>Lots</th><th>Volume (kg)</th><th>FOB Value (USD)</th><th>Landed (SAR)</th></tr></thead>
+      <tbody>
+        ${topOrigins.map(([origin, data]) => `
+        <tr>
+          <td><strong>${origin}</strong></td>
+          <td style="font-family:var(--mono)">${data.lots}</td>
+          <td style="font-family:var(--mono)">${data.kg.toLocaleString()} kg</td>
+          <td style="font-family:var(--mono);color:var(--amber)">$${Math.round(data.usd).toLocaleString()}</td>
+          <td style="font-family:var(--mono);color:var(--green)">${Math.round(data.usd * effRate).toLocaleString()} SAR</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Financial Pulse: Exchange Rate -->
+  <div class="card" style="border-color:rgba(245,158,11,.25)">
+    <div class="card-hdr"><i class="fa fa-coins" style="color:var(--amber)"></i>Financial Pulse — SAMA Rates + XE Buffer</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;margin-bottom:12px">
+      <div style="text-align:center;padding:14px;background:rgba(245,158,11,.05);border:1px solid rgba(245,158,11,.15);border-radius:6px">
+        <div style="font-size:9px;color:var(--muted);font-family:var(--mono)">SAMA REFERENCE</div>
+        <div style="font-size:24px;font-weight:700;color:var(--amber)">${samaReferenceRate.toFixed(4)}</div>
+        <div style="font-size:10px;color:var(--muted)">SAR per 1 USD (official peg)</div>
+      </div>
+      <div style="text-align:center;padding:14px;background:rgba(74,222,128,.05);border:1px solid rgba(74,222,128,.15);border-radius:6px">
+        <div style="font-size:9px;color:var(--muted);font-family:var(--mono)">WITH +${exchangeRateBuffer}% BUFFER</div>
+        <div style="font-size:24px;font-weight:700;color:var(--green)">${effRate.toFixed(4)}</div>
+        <div style="font-size:10px;color:var(--muted)">Effective rate used in pricing</div>
+      </div>
+      <div style="text-align:center;padding:14px;background:rgba(96,165,250,.05);border:1px solid rgba(96,165,250,.15);border-radius:6px">
+        <div style="font-size:9px;color:var(--muted);font-family:var(--mono)">EUR → SAR (effective)</div>
+        <div style="font-size:24px;font-weight:700;color:var(--blue)">${(lastKnownEurToSar*(1+exchangeRateBuffer/100)).toFixed(4)}</div>
+        <div style="font-size:10px;color:var(--muted)">SAR per 1 EUR</div>
+      </div>
+      <div style="text-align:center;padding:14px;background:rgba(167,139,250,.05);border:1px solid rgba(167,139,250,.15);border-radius:6px">
+        <div style="font-size:9px;color:var(--muted);font-family:var(--mono)">RATE LOCK WINDOW</div>
+        <div style="font-size:24px;font-weight:700;color:var(--purple)">60s</div>
+        <div style="font-size:10px;color:var(--muted)">Execution lock for buyers</div>
+      </div>
+    </div>
+    <div style="font-family:var(--mono);font-size:10px;color:var(--muted)">
+      ${exchangeRateUpdatedAt?`XE API last refresh: ${exchangeRateUpdatedAt}`:'Using SAMA peg fallback (3.75 SAR/USD · XE_API_ID + XE_API_KEY not configured)'} ·
+      <a href="/admin/finance" style="color:var(--amber)">Configure in Finance →</a>
+    </div>
+  </div>
+
+  <a href="/exchange" class="btn btn-blue" style="margin-top:6px">← Exchange Hub</a>`
+
+  return c.html(exchangeLayout('Analytics', 'hub', content))
+})
+
+// ── POST /api/exchange/forward/:id/milestone — Update milestone status ─────────
+app.post('/api/exchange/forward/:id/milestone', async (c) => {
+  try {
+    const fc = forwardContracts.find(f => f.id === c.req.param('id'))
+    if (!fc) return c.json({ error: 'Contract not found' }, 404)
+    const { milestoneId, status } = await c.req.json()
+    const ms = fc.milestones.find(m => m.id === milestoneId)
+    if (!ms) return c.json({ error: 'Milestone not found' }, 404)
+    const valid = ['PENDING','PAID','OVERDUE']
+    if (!valid.includes(status)) return c.json({ error: 'Invalid status' }, 400)
+    ms.status = status
+    return c.json({ ok: true, milestone: ms, contract: fc })
+  } catch { return c.json({ error: 'Invalid request' }, 400) }
+})
+
+// ── POST /api/exchange/forward/:id/sas — Update SAS status ───────────────────
+app.post('/api/exchange/forward/:id/sas', async (c) => {
+  try {
+    const fc = forwardContracts.find(f => f.id === c.req.param('id'))
+    if (!fc) return c.json({ error: 'Contract not found' }, 404)
+    const { sasStatus } = await c.req.json()
+    const valid = ['PENDING_SAMPLE','SAMPLE_APPROVED','SAMPLE_REJECTED','WAIVED']
+    if (!valid.includes(sasStatus)) return c.json({ error: 'Invalid sasStatus' }, 400)
+    fc.sasStatus = sasStatus
+    return c.json({ ok: true, sasStatus: fc.sasStatus, contract: fc })
+  } catch { return c.json({ error: 'Invalid request' }, 400) }
+})
+
+// ── GET /api/exchange/analytics — Analytics snapshot ─────────────────────────
+app.get('/api/exchange/analytics', (c) => {
+  const effRate  = lastKnownUsdToSar * (1 + exchangeRateBuffer / 100)
+  const spotLots = globalLots.filter(l => l.marketplaceType === 'SPOT')
+  const fwdLots  = globalLots.filter(l => l.marketplaceType === 'FORWARD')
+  return c.json({
+    totals: {
+      lots: globalLots.length,
+      spotLots: spotLots.length,
+      forwardLots: fwdLots.length,
+      availableLots: globalLots.filter(l=>l.status==='AVAILABLE').length,
+      vendors: globalVendors.length,
+      verifiedVendors: globalVendors.filter(v=>v.status==='VERIFIED').length,
+      buyers: globalBuyers.length,
+      spotContracts: globalContracts.length,
+      forwardContracts: forwardContracts.length,
+      zatcaInvoices: zatcaInvoices.length,
+      scaGoldLots: globalLots.filter(l=>l.scaGoldStorage).length,
+      totalVolumeKg: globalLots.reduce((s,l)=>s+l.greenWeightKg,0),
+    },
+    rates: {
+      samaReference: samaReferenceRate,
+      usdSpot: lastKnownUsdToSar,
+      eurSpot: lastKnownEurToSar,
+      buffer: exchangeRateBuffer,
+      effectiveUsd: effRate,
+      effectiveEur: lastKnownEurToSar*(1+exchangeRateBuffer/100),
+      updatedAt: exchangeRateUpdatedAt || 'fallback',
+      rateLockWindowSecs: 60,
+    },
+    invoiceTotals: {
+      totalSar: Math.round(zatcaInvoices.reduce((s,i)=>s+i.totalSar,0)*100)/100,
+      totalVat:  Math.round(zatcaInvoices.reduce((s,i)=>s+i.vatAmountSar,0)*100)/100,
+    }
+  })
 })
 
 export default app

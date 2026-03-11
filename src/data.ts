@@ -1102,9 +1102,537 @@ export const calcZatcaShrinkageReport = (
 
 // ═════════════════════════════════════════════════════════════════════════════
 //  QABBAN GLOBAL EXCHANGE — Multi-Vendor B2B Coffee Trade Infrastructure
-//  Version 1.0 — Implements Vendor Portal, Buyer Portal, Landed Price
-//  Calculator, Digital Climate Passport, and ZATCA Phase-2 e-Invoice logic.
+//  Version 2.0 — Dual-Track Sourcing · Climate Passport · Ship Tracker
+//  Rate Execution Lock · ZATCA Phase-2 · Forward Contracts + SAS Clauses
 // ═════════════════════════════════════════════════════════════════════════════
+
+// ─── Vendor / Producer types ─────────────────────────────────────────────────
+
+export type VendorStatus = 'PENDING_REVIEW' | 'VERIFIED' | 'SUSPENDED'
+
+export interface GlobalVendor {
+  id: string
+  companyName: string
+  contactName: string
+  contactEmail: string
+  country: string
+  region: string
+  warehouseHumidity?: number    // live IoT RH%
+  warehouseTemp?: number        // live IoT °C
+  status: VendorStatus
+  registeredAt: string
+  verifiedAt?: string
+}
+
+// ─── Digital Climate Passport — IoT log entry ────────────────────────────────
+
+export interface ClimateLogEntry {
+  ts: string          // ISO timestamp
+  location: string    // e.g. "Origin Warehouse", "Port of Djibouti", "Jeddah Port"
+  phase: 'ORIGIN' | 'TRANSIT' | 'PORT' | 'ARRIVAL'
+  humidity: number    // % RH
+  temp: number        // °C
+  note?: string
+}
+
+// ─── Dual-Track Sourcing ──────────────────────────────────────────────────────
+
+export type MarketplaceType = 'SPOT' | 'FORWARD'
+
+// Forward contract milestones
+export interface PaymentMilestone {
+  id: string
+  label: string           // e.g. "Deposit (30%)", "Pre-ship (40%)", "On arrival (30%)"
+  pct: number             // percentage of total
+  dueEvent: string        // e.g. "Contract signing", "Shipping confirmation", "Delivery confirmation"
+  status: 'PENDING' | 'PAID' | 'OVERDUE'
+  paidAt?: string
+}
+
+// Flexport ship tracking
+export interface ShipTrackerData {
+  flexportShipmentId?: string   // Flexport API shipment ID (optional — simulated if absent)
+  vessel: string
+  voyageNumber: string
+  origin: string                // port of loading
+  destination: string           // port of discharge
+  etd: string                   // ISO date — estimated time of departure
+  eta: string                   // ISO date — estimated time of arrival
+  currentLat?: number
+  currentLon?: number
+  currentLocation: string
+  progressPct: number           // 0–100
+  status: 'PRE_TRANSIT' | 'IN_TRANSIT' | 'AT_PORT' | 'DELIVERED' | 'DELAYED'
+  lastUpdated: string
+  events: Array<{ ts: string; location: string; description: string }>
+}
+
+// ─── Global Lot (v2 — includes marketplace type + passport + ship tracker) ───
+
+export type GlobalLotStatus = 'AVAILABLE' | 'CONTRACTED' | 'SHIPPED' | 'RECALLED'
+export type ProcessMethod   = 'Natural' | 'Washed' | 'Honey' | 'Wet-Hulled' | 'Anaerobic' | 'Other'
+
+export interface GlobalLot {
+  id: string
+  vendorId: string
+  origin: string
+  variety: string
+  process: ProcessMethod
+  greenWeightKg: number
+  fobPriceUsd: number
+  gradeScore: number
+  flavorNotes: string[]
+  harvestYear: number
+  // Dual-track
+  marketplaceType: MarketplaceType
+  harvestDate?: string        // FORWARD: expected harvest date (ISO)
+  sasClause: boolean          // Subject to Approval of Sample
+  depositPct: number          // FORWARD: initial deposit % (default 30)
+  // Digital Climate Passport
+  warehouseHumidity?: number
+  warehouseTemp?: number
+  scaGoldStorage: boolean
+  climateCertifiedAt?: string
+  climateLog: ClimateLogEntry[]
+  // Ship tracker (populated once lot is SHIPPED)
+  shipTracker?: ShipTrackerData
+  // Contract
+  status: GlobalLotStatus
+  listedAt: string
+  contractedByBuyerId?: string
+  shipmentEstimateDays?: number
+  customsHsCode?: string
+}
+
+// ─── Buyer (Saudi Roastery) ───────────────────────────────────────────────────
+
+export type BuyerStatus = 'ACTIVE' | 'SUSPENDED'
+
+export interface GlobalBuyer {
+  id: string
+  roasteryName: string
+  contactName: string
+  contactEmail: string
+  city: string
+  vatNumber: string
+  status: BuyerStatus
+  registeredAt: string
+}
+
+// ─── Forward Contract (with milestone payments + SAS) ────────────────────────
+
+export interface ForwardContract {
+  id: string                        // e.g. "FWD-001"
+  lotId: string
+  buyerId: string
+  quantityKg: number
+  agreedFobUsd: number
+  contractedAt: string
+  sasStatus: 'PENDING_SAMPLE' | 'SAMPLE_APPROVED' | 'SAMPLE_REJECTED' | 'WAIVED'
+  milestones: PaymentMilestone[]
+  status: 'ACTIVE' | 'COMPLETED' | 'CANCELLED'
+  invoiceId?: string
+}
+
+// ─── Landed Price Calculator ──────────────────────────────────────────────────
+
+export interface LandedPriceBreakdown {
+  lotId: string
+  fobPriceUsd: number
+  fobPriceSar: number
+  exchangeRate: number
+  exchangeBufferPct: number
+  effectiveRate: number
+  shippingEstimateSar: number
+  customsFeesSar: number
+  vatSar: number
+  landedPriceSar: number
+  landedPricePerKg: number
+}
+
+// ─── ZATCA Phase 2 e-Invoice ──────────────────────────────────────────────────
+
+export interface ZatcaInvoice {
+  uuid: string
+  invoiceNumber: string
+  issueDate: string
+  issueTime: string
+  sellerName: string
+  sellerVat: string
+  buyerName: string
+  buyerVat: string
+  lotId: string
+  origin: string
+  quantityKg: number
+  unitPriceSar: number
+  subtotalSar: number
+  vatPct: number
+  vatAmountSar: number
+  totalSar: number
+  qrCodeData: string
+  xmlPayload: string
+}
+
+// ─── Rate Lock (60-second execution lock for buyer) ──────────────────────────
+
+export interface RateLock {
+  id: string
+  buyerId: string
+  lotId: string
+  lockedRate: number        // USD→SAR effective rate at lock time
+  lockedAt: string          // ISO timestamp
+  expiresAt: string         // lockedAt + 60 seconds
+  status: 'ACTIVE' | 'EXPIRED' | 'EXECUTED'
+}
+
+// ─── Exchange Rate Settings ───────────────────────────────────────────────────
+
+export let exchangeRateBuffer    = 2        // % buffer on spot
+export let lastKnownUsdToSar     = 3.75     // SAMA reference fallback
+export let lastKnownEurToSar     = 4.08
+export let exchangeRateUpdatedAt = ''
+export let samaReferenceRate     = 3.75     // official SAMA peg
+
+export function setExchangeRateBuffer(pct: number) {
+  exchangeRateBuffer = Math.round(Math.min(10, Math.max(0, pct)) * 10) / 10
+}
+export function updateExchangeRates(usd: number, eur: number, updatedAt: string) {
+  if (usd > 0) { lastKnownUsdToSar = Math.round(usd * 10000) / 10000; samaReferenceRate = lastKnownUsdToSar }
+  if (eur > 0) lastKnownEurToSar = Math.round(eur * 10000) / 10000
+  exchangeRateUpdatedAt = updatedAt
+}
+export function usdToSarBuffered(usd: number): number {
+  const effective = lastKnownUsdToSar * (1 + exchangeRateBuffer / 100)
+  return Math.round(usd * effective * 100) / 100
+}
+
+// ─── Rate Lock store + helpers ────────────────────────────────────────────────
+
+export const rateLocks: RateLock[] = []
+
+export function createRateLock(buyerId: string, lotId: string): RateLock {
+  // Expire any old lock for this buyer+lot
+  for (const rl of rateLocks) {
+    if (rl.buyerId === buyerId && rl.lotId === lotId && rl.status === 'ACTIVE') {
+      rl.status = 'EXPIRED'
+    }
+  }
+  const now       = new Date()
+  const expires   = new Date(now.getTime() + 60_000)
+  const effRate   = lastKnownUsdToSar * (1 + exchangeRateBuffer / 100)
+  const lock: RateLock = {
+    id:         `RL-${String(rateLocks.length + 1).padStart(4, '0')}`,
+    buyerId,
+    lotId,
+    lockedRate: Math.round(effRate * 10000) / 10000,
+    lockedAt:   now.toISOString(),
+    expiresAt:  expires.toISOString(),
+    status:     'ACTIVE',
+  }
+  rateLocks.push(lock)
+  return lock
+}
+
+export function getActiveLock(buyerId: string, lotId: string): RateLock | undefined {
+  const now = Date.now()
+  return rateLocks.find(rl =>
+    rl.buyerId === buyerId &&
+    rl.lotId   === lotId   &&
+    rl.status  === 'ACTIVE' &&
+    new Date(rl.expiresAt).getTime() > now
+  )
+}
+
+// ─── In-memory stores ─────────────────────────────────────────────────────────
+
+export const globalVendors: GlobalVendor[] = [
+  {
+    id: 'VND-001', companyName: 'Yirgacheffe Highland Estate',
+    contactName: 'Abebe Girma', contactEmail: 'abebe@highland-estate.et',
+    country: 'Ethiopia', region: 'Yirgacheffe',
+    warehouseHumidity: 57, warehouseTemp: 18,
+    status: 'VERIFIED', registeredAt: '2026-01-10T08:00:00Z', verifiedAt: '2026-01-12T10:30:00Z',
+  },
+  {
+    id: 'VND-002', companyName: 'Cerrado Premium Exports',
+    contactName: 'Carlos Mendez', contactEmail: 'carlos@cerrado-premium.br',
+    country: 'Brazil', region: 'Cerrado Mineiro',
+    warehouseHumidity: 62, warehouseTemp: 22,
+    status: 'VERIFIED', registeredAt: '2026-01-15T09:00:00Z', verifiedAt: '2026-01-17T11:00:00Z',
+  },
+  {
+    id: 'VND-003', companyName: 'Huila Mountain Growers Coop',
+    contactName: 'Maria Torres', contactEmail: 'maria@huila-coop.co',
+    country: 'Colombia', region: 'Huila',
+    warehouseHumidity: 55, warehouseTemp: 17,
+    status: 'VERIFIED', registeredAt: '2026-01-20T07:00:00Z', verifiedAt: '2026-01-22T09:00:00Z',
+  },
+  {
+    id: 'VND-004', companyName: 'Khawlani Heritage Farms',
+    contactName: 'Ahmed Al-Qahwaji', contactEmail: 'ahmed@khawlani-farms.ye',
+    country: 'Yemen', region: 'Bani Matar',
+    warehouseHumidity: 48, warehouseTemp: 24,
+    status: 'PENDING_REVIEW', registeredAt: '2026-02-01T10:00:00Z',
+  },
+  {
+    id: 'VND-005', companyName: 'Sumatra Wet-Hull Collective',
+    contactName: 'Budi Santoso', contactEmail: 'budi@sumatra-collective.id',
+    country: 'Indonesia', region: 'Aceh',
+    warehouseHumidity: 71, warehouseTemp: 26,
+    status: 'VERIFIED', registeredAt: '2026-02-05T06:00:00Z', verifiedAt: '2026-02-07T08:00:00Z',
+  },
+]
+
+export const globalLots: GlobalLot[] = [
+  {
+    id: 'GLOT-001', vendorId: 'VND-001',
+    origin: 'Ethiopia Yirgacheffe', variety: 'Heirloom', process: 'Natural',
+    greenWeightKg: 1200, fobPriceUsd: 8.50, gradeScore: 93,
+    flavorNotes: ['Blueberry', 'Jasmine', 'Dark Chocolate'], harvestYear: 2025,
+    marketplaceType: 'SPOT', sasClause: false, depositPct: 100,
+    warehouseHumidity: 57, warehouseTemp: 18, scaGoldStorage: true,
+    climateCertifiedAt: '2026-03-01T06:00:00Z',
+    climateLog: [
+      { ts: '2026-01-15T06:00:00Z', location: 'Origin Warehouse — Yirgacheffe', phase: 'ORIGIN',   humidity: 57, temp: 18, note: 'Post-harvest storage check' },
+      { ts: '2026-02-10T10:00:00Z', location: 'Port of Djibouti',              phase: 'PORT',     humidity: 72, temp: 30, note: 'Loaded onto vessel MSC RINA' },
+      { ts: '2026-02-18T14:00:00Z', location: 'Red Sea Transit',               phase: 'TRANSIT',  humidity: 68, temp: 28 },
+      { ts: '2026-02-25T08:00:00Z', location: 'Jeddah Islamic Port',           phase: 'ARRIVAL',  humidity: 55, temp: 25, note: 'SFDA customs cleared' },
+    ],
+    shipTracker: {
+      vessel: 'MSC RINA', voyageNumber: 'MS2604E',
+      origin: 'Port of Djibouti', destination: 'Jeddah Islamic Port',
+      etd: '2026-02-10', eta: '2026-02-25',
+      currentLocation: 'Jeddah Islamic Port — Delivered',
+      progressPct: 100, status: 'DELIVERED', lastUpdated: '2026-02-25T08:00:00Z',
+      events: [
+        { ts: '2026-02-10T10:00:00Z', location: 'Djibouti Port', description: 'Container loaded on vessel' },
+        { ts: '2026-02-18T14:00:00Z', location: 'Red Sea', description: 'Vessel in transit' },
+        { ts: '2026-02-25T08:00:00Z', location: 'Jeddah Port', description: 'Delivered — customs cleared' },
+      ],
+    },
+    status: 'AVAILABLE', listedAt: '2026-02-20T08:00:00Z',
+    shipmentEstimateDays: 21, customsHsCode: '0901.11',
+  },
+  {
+    id: 'GLOT-002', vendorId: 'VND-002',
+    origin: 'Brazil Cerrado', variety: 'Yellow Bourbon', process: 'Natural',
+    greenWeightKg: 2000, fobPriceUsd: 5.20, gradeScore: 87,
+    flavorNotes: ['Hazelnut', 'Milk Chocolate', 'Caramel'], harvestYear: 2025,
+    marketplaceType: 'SPOT', sasClause: false, depositPct: 100,
+    warehouseHumidity: 62, warehouseTemp: 22, scaGoldStorage: false,
+    climateLog: [
+      { ts: '2026-01-20T08:00:00Z', location: 'Origin Warehouse — Cerrado',    phase: 'ORIGIN',   humidity: 62, temp: 22 },
+      { ts: '2026-02-14T09:00:00Z', location: 'Port of Santos',                phase: 'PORT',     humidity: 78, temp: 27, note: 'Container sealed' },
+      { ts: '2026-03-05T12:00:00Z', location: 'Atlantic Transit',              phase: 'TRANSIT',  humidity: 70, temp: 24 },
+    ],
+    status: 'AVAILABLE', listedAt: '2026-02-22T09:00:00Z',
+    shipmentEstimateDays: 28, customsHsCode: '0901.11',
+  },
+  {
+    id: 'GLOT-003', vendorId: 'VND-003',
+    origin: 'Colombia Huila', variety: 'Caturra', process: 'Washed',
+    greenWeightKg: 800, fobPriceUsd: 7.80, gradeScore: 91,
+    flavorNotes: ['Red Apple', 'Caramel', 'Brown Sugar'], harvestYear: 2025,
+    marketplaceType: 'SPOT', sasClause: true, depositPct: 100,
+    warehouseHumidity: 55, warehouseTemp: 17, scaGoldStorage: true,
+    climateCertifiedAt: '2026-03-02T07:00:00Z',
+    climateLog: [
+      { ts: '2026-01-25T07:00:00Z', location: 'Origin Warehouse — Huila',      phase: 'ORIGIN',   humidity: 55, temp: 17, note: 'SCA Gold verified' },
+      { ts: '2026-02-20T11:00:00Z', location: 'Cartagena Port',                phase: 'PORT',     humidity: 80, temp: 29 },
+    ],
+    status: 'AVAILABLE', listedAt: '2026-02-25T10:00:00Z',
+    shipmentEstimateDays: 25, customsHsCode: '0901.11',
+  },
+  {
+    id: 'GLOT-004', vendorId: 'VND-005',
+    origin: 'Indonesia Sumatra', variety: 'Ateng', process: 'Wet-Hulled',
+    greenWeightKg: 600, fobPriceUsd: 6.40, gradeScore: 88,
+    flavorNotes: ['Cedar', 'Dark Berry', 'Earthy'], harvestYear: 2025,
+    marketplaceType: 'SPOT', sasClause: false, depositPct: 100,
+    warehouseHumidity: 71, warehouseTemp: 26, scaGoldStorage: false,
+    climateLog: [
+      { ts: '2026-02-01T06:00:00Z', location: 'Origin Warehouse — Aceh',       phase: 'ORIGIN',   humidity: 71, temp: 26 },
+      { ts: '2026-02-20T08:00:00Z', location: 'Port of Belawan',               phase: 'PORT',     humidity: 82, temp: 31, note: 'Container inspection passed' },
+    ],
+    status: 'AVAILABLE', listedAt: '2026-02-28T08:00:00Z',
+    shipmentEstimateDays: 18, customsHsCode: '0901.11',
+  },
+  {
+    id: 'GLOT-005', vendorId: 'VND-001',
+    origin: 'Ethiopia Sidama', variety: 'Heirloom', process: 'Washed',
+    greenWeightKg: 900, fobPriceUsd: 7.20, gradeScore: 90,
+    flavorNotes: ['Lemon', 'Stone Fruit', 'Floral'], harvestYear: 2026,
+    marketplaceType: 'FORWARD', sasClause: true, depositPct: 30,
+    harvestDate: '2026-09-15',
+    warehouseHumidity: 58, warehouseTemp: 17, scaGoldStorage: true,
+    climateCertifiedAt: '2026-03-03T06:00:00Z',
+    climateLog: [
+      { ts: '2026-03-01T06:00:00Z', location: 'Farm — Sidama Zone', phase: 'ORIGIN', humidity: 58, temp: 17, note: 'Pre-harvest crop assessment' },
+    ],
+    status: 'AVAILABLE', listedAt: '2026-03-01T09:00:00Z',
+    shipmentEstimateDays: 22, customsHsCode: '0901.11',
+  },
+  {
+    id: 'GLOT-006', vendorId: 'VND-003',
+    origin: 'Colombia Nariño', variety: 'Typica', process: 'Honey',
+    greenWeightKg: 500, fobPriceUsd: 8.90, gradeScore: 92,
+    flavorNotes: ['Panela', 'Hibiscus', 'Citrus Zest'], harvestYear: 2026,
+    marketplaceType: 'FORWARD', sasClause: true, depositPct: 30,
+    harvestDate: '2026-11-01',
+    warehouseHumidity: 54, warehouseTemp: 16, scaGoldStorage: true,
+    climateCertifiedAt: '2026-03-05T08:00:00Z',
+    climateLog: [
+      { ts: '2026-03-05T08:00:00Z', location: 'Farm — Nariño', phase: 'ORIGIN', humidity: 54, temp: 16, note: 'Forward lot — crop not yet harvested' },
+    ],
+    status: 'AVAILABLE', listedAt: '2026-03-05T10:00:00Z',
+    shipmentEstimateDays: 30, customsHsCode: '0901.11',
+  },
+]
+
+export const globalBuyers: GlobalBuyer[] = [
+  {
+    id: 'BYR-001', roasteryName: 'Najd Specialty Roasters',
+    contactName: 'Khalid Al-Rashid', contactEmail: 'khalid@najd-roasters.sa',
+    city: 'Riyadh', vatNumber: '300000000000003',
+    status: 'ACTIVE', registeredAt: '2026-01-25T10:00:00Z',
+  },
+  {
+    id: 'BYR-002', roasteryName: 'Bahr Al-Kahwa Roastery',
+    contactName: 'Fatima Al-Zahrani', contactEmail: 'fatima@bahr-kahwa.sa',
+    city: 'Jeddah', vatNumber: '300000000000004',
+    status: 'ACTIVE', registeredAt: '2026-02-01T09:00:00Z',
+  },
+]
+
+export const globalContracts: Array<{
+  id: string; lotId: string; buyerId: string; quantityKg: number
+  agreedFobUsd: number; contractedAt: string; status: 'ACTIVE' | 'COMPLETED' | 'CANCELLED'
+  invoiceId?: string
+}> = []
+
+export const forwardContracts: ForwardContract[] = []
+export const zatcaInvoices: ZatcaInvoice[] = []
+
+// ─── Landed Price Calculator ──────────────────────────────────────────────────
+
+export let shippingEstimateBaseSar = 1500
+export const SAUDI_CUSTOMS_RATE    = 0.05
+export const ZATCA_VAT_RATE        = 0.15
+
+export function calcLandedPrice(lot: GlobalLot, quantityKg?: number): LandedPriceBreakdown {
+  const qty     = quantityKg ?? lot.greenWeightKg
+  const effRate = lastKnownUsdToSar * (1 + exchangeRateBuffer / 100)
+  const fobSar  = Math.round(lot.fobPriceUsd * effRate * 100) / 100
+  const fobTot  = Math.round(fobSar * qty * 100) / 100
+  const ship    = shippingEstimateBaseSar
+  const cif     = fobTot + ship
+  const customs = Math.round(cif * SAUDI_CUSTOMS_RATE * 100) / 100
+  const vatBase = cif + customs
+  const vat     = Math.round(vatBase * ZATCA_VAT_RATE * 100) / 100
+  const landed  = Math.round((fobTot + ship + customs + vat) * 100) / 100
+  const perKg   = Math.round((landed / qty) * 100) / 100
+  return {
+    lotId: lot.id, fobPriceUsd: lot.fobPriceUsd, fobPriceSar: fobSar,
+    exchangeRate: lastKnownUsdToSar, exchangeBufferPct: exchangeRateBuffer,
+    effectiveRate: Math.round(effRate * 10000) / 10000,
+    shippingEstimateSar: ship, customsFeesSar: customs, vatSar: vat,
+    landedPriceSar: landed, landedPricePerKg: perKg,
+  }
+}
+
+// ─── ZATCA Phase 2 e-Invoice Generator ───────────────────────────────────────
+
+let _invoiceSeq = 1
+
+function _uuid(): string {
+  const hex = () => Math.floor(Math.random() * 0x10000).toString(16).padStart(4, '0')
+  return `${hex()}${hex()}-${hex()}-4${hex().slice(1)}-${['8','9','a','b'][Math.floor(Math.random()*4)]}${hex().slice(1)}-${hex()}${hex()}${hex()}`
+}
+
+function _tlvField(tag: number, value: string): number[] {
+  const bytes = Array.from(unescape(encodeURIComponent(value))).map(c => c.charCodeAt(0))
+  return [tag, bytes.length, ...bytes]
+}
+
+function _zatcaQr(sellerName: string, sellerVat: string, issueDateTime: string, total: string, vat: string): string {
+  const tlv = [
+    ..._tlvField(1, sellerName), ..._tlvField(2, sellerVat),
+    ..._tlvField(3, issueDateTime), ..._tlvField(4, total), ..._tlvField(5, vat),
+  ]
+  let binary = ''
+  for (const b of tlv) binary += String.fromCharCode(b)
+  return btoa(binary)
+}
+
+export function generateZatcaInvoice(params: {
+  buyer: GlobalBuyer; lot: GlobalLot; quantityKg: number; unitPriceSar: number
+  sellerName?: string; sellerVat?: string
+}): ZatcaInvoice {
+  const { buyer, lot, quantityKg, unitPriceSar } = params
+  const sellerName = params.sellerName ?? 'Qabban Global Exchange LLC'
+  const sellerVat  = params.sellerVat  ?? '300000000000001'
+  const now        = new Date()
+  const isoDate    = now.toISOString().split('T')[0]
+  const isoTime    = now.toISOString().split('T')[1].slice(0, 8)
+  const seq        = String(_invoiceSeq++).padStart(4, '0')
+  const invNumber  = `QGE-INV-${isoDate.slice(0, 4)}-${seq}`
+  const uuid       = _uuid()
+  const subtotal   = Math.round(unitPriceSar * quantityKg * 100) / 100
+  const vatAmt     = Math.round(subtotal * ZATCA_VAT_RATE * 100) / 100
+  const total      = Math.round((subtotal + vatAmt) * 100) / 100
+  const issueDateTime = `${isoDate}T${isoTime}`
+  const qr = _zatcaQr(sellerName, sellerVat, issueDateTime, total.toFixed(2), vatAmt.toFixed(2))
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2"
+         xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2"
+         xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2">
+  <cbc:UBLVersionID>2.1</cbc:UBLVersionID>
+  <cbc:ProfileID>reporting:1.0</cbc:ProfileID>
+  <cbc:ID>${invNumber}</cbc:ID>
+  <cbc:UUID>${uuid}</cbc:UUID>
+  <cbc:IssueDate>${isoDate}</cbc:IssueDate>
+  <cbc:IssueTime>${isoTime}</cbc:IssueTime>
+  <cbc:InvoiceTypeCode name="0200000">388</cbc:InvoiceTypeCode>
+  <cbc:DocumentCurrencyCode>SAR</cbc:DocumentCurrencyCode>
+  <cac:AccountingSupplierParty><cac:Party>
+    <cac:PartyName><cbc:Name>${sellerName}</cbc:Name></cac:PartyName>
+    <cac:PartyTaxScheme><cbc:CompanyID>${sellerVat}</cbc:CompanyID><cac:TaxScheme><cbc:ID>VAT</cbc:ID></cac:TaxScheme></cac:PartyTaxScheme>
+  </cac:Party></cac:AccountingSupplierParty>
+  <cac:AccountingCustomerParty><cac:Party>
+    <cac:PartyName><cbc:Name>${buyer.roasteryName}</cbc:Name></cac:PartyName>
+    <cac:PartyTaxScheme><cbc:CompanyID>${buyer.vatNumber}</cbc:CompanyID><cac:TaxScheme><cbc:ID>VAT</cbc:ID></cac:TaxScheme></cac:PartyTaxScheme>
+  </cac:Party></cac:AccountingCustomerParty>
+  <cac:InvoiceLine>
+    <cbc:ID>1</cbc:ID>
+    <cbc:InvoicedQuantity unitCode="KGM">${quantityKg}</cbc:InvoicedQuantity>
+    <cbc:LineExtensionAmount currencyID="SAR">${subtotal.toFixed(2)}</cbc:LineExtensionAmount>
+    <cac:Item><cbc:Name>${lot.origin} — ${lot.variety} (${lot.process}) — Lot ${lot.id}</cbc:Name></cac:Item>
+    <cac:Price><cbc:PriceAmount currencyID="SAR">${unitPriceSar.toFixed(2)}</cbc:PriceAmount></cac:Price>
+  </cac:InvoiceLine>
+  <cac:TaxTotal>
+    <cbc:TaxAmount currencyID="SAR">${vatAmt.toFixed(2)}</cbc:TaxAmount>
+    <cac:TaxSubtotal>
+      <cbc:TaxableAmount currencyID="SAR">${subtotal.toFixed(2)}</cbc:TaxableAmount>
+      <cbc:TaxAmount currencyID="SAR">${vatAmt.toFixed(2)}</cbc:TaxAmount>
+      <cac:TaxCategory><cbc:ID>S</cbc:ID><cbc:Percent>15</cbc:Percent><cac:TaxScheme><cbc:ID>VAT</cbc:ID></cac:TaxScheme></cac:TaxCategory>
+    </cac:TaxSubtotal>
+  </cac:TaxTotal>
+  <cac:LegalMonetaryTotal>
+    <cbc:LineExtensionAmount currencyID="SAR">${subtotal.toFixed(2)}</cbc:LineExtensionAmount>
+    <cbc:TaxInclusiveAmount currencyID="SAR">${total.toFixed(2)}</cbc:TaxInclusiveAmount>
+    <cbc:PayableAmount currencyID="SAR">${total.toFixed(2)}</cbc:PayableAmount>
+  </cac:LegalMonetaryTotal>
+</Invoice>`
+  const invoice: ZatcaInvoice = {
+    uuid, invoiceNumber: invNumber, issueDate: isoDate, issueTime: isoTime,
+    sellerName, sellerVat, buyerName: buyer.roasteryName, buyerVat: buyer.vatNumber,
+    lotId: lot.id, origin: lot.origin, quantityKg, unitPriceSar,
+    subtotalSar: subtotal, vatPct: 15, vatAmountSar: vatAmt, totalSar: total,
+    qrCodeData: qr, xmlPayload: xml,
+  }
+  zatcaInvoices.push(invoice)
+  return invoice
+}
 
 // ─── Vendor / Producer types ─────────────────────────────────────────────────
 
@@ -1166,451 +1694,3 @@ export interface GlobalBuyer {
   registeredAt: string
 }
 
-// ─── Landed Price Calculator ──────────────────────────────────────────────────
-
-export interface LandedPriceBreakdown {
-  lotId: string
-  fobPriceUsd: number
-  fobPriceSar: number         // converted at spot rate × (1 + buffer)
-  exchangeRate: number        // 1 USD → SAR spot
-  exchangeBufferPct: number   // default 2%
-  effectiveRate: number       // spot × (1 + buffer/100)
-  shippingEstimateSar: number // flat per-lot shipping estimate
-  customsFeesSar: number      // Saudi customs duty (~5% of CIF value)
-  vatSar: number              // ZATCA 15% VAT on (CIF + customs)
-  landedPriceSar: number      // total landed cost per kg in SAR
-  landedPricePerKg: number
-}
-
-// ─── ZATCA Phase 2 e-Invoice ──────────────────────────────────────────────────
-
-export interface ZatcaInvoice {
-  uuid: string                // UUID v4
-  invoiceNumber: string       // e.g. "QGE-INV-2026-0001"
-  issueDate: string           // ISO date
-  issueTime: string           // HH:MM:SS
-  sellerName: string
-  sellerVat: string
-  buyerName: string
-  buyerVat: string
-  lotId: string
-  origin: string
-  quantityKg: number
-  unitPriceSar: number
-  subtotalSar: number
-  vatPct: number              // 15
-  vatAmountSar: number
-  totalSar: number
-  qrCodeData: string          // Base64-encoded TLV QR payload (ZATCA spec)
-  xmlPayload: string          // Simplified UBL 2.1 XML
-}
-
-// ─── Exchange Rate Settings (Finance tab) ────────────────────────────────────
-
-export let exchangeRateBuffer  = 2      // % buffer on top of spot rate
-export let lastKnownUsdToSar   = 3.75   // SAR per 1 USD (fallback / cache)
-export let lastKnownEurToSar   = 4.08   // SAR per 1 EUR (fallback / cache)
-export let exchangeRateUpdatedAt = ''   // ISO timestamp of last XE fetch
-
-export function setExchangeRateBuffer(pct: number) {
-  exchangeRateBuffer = Math.round(Math.min(10, Math.max(0, pct)) * 10) / 10
-}
-export function updateExchangeRates(usd: number, eur: number, updatedAt: string) {
-  if (usd > 0) lastKnownUsdToSar = Math.round(usd * 10000) / 10000
-  if (eur > 0) lastKnownEurToSar = Math.round(eur * 10000) / 10000
-  exchangeRateUpdatedAt = updatedAt
-}
-
-/** Convert USD → SAR with exchange buffer applied */
-export function usdToSarBuffered(usd: number): number {
-  const effective = lastKnownUsdToSar * (1 + exchangeRateBuffer / 100)
-  return Math.round(usd * effective * 100) / 100
-}
-
-// ─── In-memory stores ─────────────────────────────────────────────────────────
-
-export const globalVendors: GlobalVendor[] = [
-  {
-    id: 'VND-001',
-    companyName: 'Yirgacheffe Highland Estate',
-    contactName: 'Abebe Girma',
-    contactEmail: 'abebe@highland-estate.et',
-    country: 'Ethiopia',
-    region: 'Yirgacheffe',
-    warehouseHumidity: 57,
-    status: 'VERIFIED',
-    registeredAt: '2026-01-10T08:00:00Z',
-    verifiedAt: '2026-01-12T10:30:00Z',
-  },
-  {
-    id: 'VND-002',
-    companyName: 'Cerrado Premium Exports',
-    contactName: 'Carlos Mendez',
-    contactEmail: 'carlos@cerrado-premium.br',
-    country: 'Brazil',
-    region: 'Cerrado Mineiro',
-    warehouseHumidity: 62,
-    status: 'VERIFIED',
-    registeredAt: '2026-01-15T09:00:00Z',
-    verifiedAt: '2026-01-17T11:00:00Z',
-  },
-  {
-    id: 'VND-003',
-    companyName: 'Huila Mountain Growers Coop',
-    contactName: 'Maria Torres',
-    contactEmail: 'maria@huila-coop.co',
-    country: 'Colombia',
-    region: 'Huila',
-    warehouseHumidity: 55,
-    status: 'VERIFIED',
-    registeredAt: '2026-01-20T07:00:00Z',
-    verifiedAt: '2026-01-22T09:00:00Z',
-  },
-  {
-    id: 'VND-004',
-    companyName: 'Khawlani Heritage Farms',
-    contactName: 'Ahmed Al-Qahwaji',
-    contactEmail: 'ahmed@khawlani-farms.ye',
-    country: 'Yemen',
-    region: 'Bani Matar',
-    warehouseHumidity: 48,
-    status: 'PENDING_REVIEW',
-    registeredAt: '2026-02-01T10:00:00Z',
-  },
-  {
-    id: 'VND-005',
-    companyName: 'Sumatra Wet-Hull Collective',
-    contactName: 'Budi Santoso',
-    contactEmail: 'budi@sumatra-collective.id',
-    country: 'Indonesia',
-    region: 'Aceh',
-    warehouseHumidity: 71,
-    status: 'VERIFIED',
-    registeredAt: '2026-02-05T06:00:00Z',
-    verifiedAt: '2026-02-07T08:00:00Z',
-  },
-]
-
-export const globalLots: GlobalLot[] = [
-  {
-    id: 'GLOT-001',
-    vendorId: 'VND-001',
-    origin: 'Ethiopia Yirgacheffe',
-    variety: 'Heirloom',
-    process: 'Natural',
-    greenWeightKg: 1200,
-    fobPriceUsd: 8.50,
-    gradeScore: 93,
-    flavorNotes: ['Blueberry', 'Jasmine', 'Dark Chocolate'],
-    harvestYear: 2025,
-    warehouseHumidity: 57,
-    scaGoldStorage: true,
-    climateCertifiedAt: '2026-03-01T06:00:00Z',
-    status: 'AVAILABLE',
-    listedAt: '2026-02-20T08:00:00Z',
-    shipmentEstimateDays: 21,
-    customsHsCode: '0901.11',
-  },
-  {
-    id: 'GLOT-002',
-    vendorId: 'VND-002',
-    origin: 'Brazil Cerrado',
-    variety: 'Yellow Bourbon',
-    process: 'Natural',
-    greenWeightKg: 2000,
-    fobPriceUsd: 5.20,
-    gradeScore: 87,
-    flavorNotes: ['Hazelnut', 'Milk Chocolate', 'Caramel'],
-    harvestYear: 2025,
-    warehouseHumidity: 62,
-    scaGoldStorage: false,
-    status: 'AVAILABLE',
-    listedAt: '2026-02-22T09:00:00Z',
-    shipmentEstimateDays: 28,
-    customsHsCode: '0901.11',
-  },
-  {
-    id: 'GLOT-003',
-    vendorId: 'VND-003',
-    origin: 'Colombia Huila',
-    variety: 'Caturra',
-    process: 'Washed',
-    greenWeightKg: 800,
-    fobPriceUsd: 7.80,
-    gradeScore: 91,
-    flavorNotes: ['Red Apple', 'Caramel', 'Brown Sugar'],
-    harvestYear: 2025,
-    warehouseHumidity: 55,
-    scaGoldStorage: true,
-    climateCertifiedAt: '2026-03-02T07:00:00Z',
-    status: 'AVAILABLE',
-    listedAt: '2026-02-25T10:00:00Z',
-    shipmentEstimateDays: 25,
-    customsHsCode: '0901.11',
-  },
-  {
-    id: 'GLOT-004',
-    vendorId: 'VND-005',
-    origin: 'Indonesia Sumatra',
-    variety: 'Ateng',
-    process: 'Wet-Hulled',
-    greenWeightKg: 600,
-    fobPriceUsd: 6.40,
-    gradeScore: 88,
-    flavorNotes: ['Cedar', 'Dark Berry', 'Earthy'],
-    harvestYear: 2025,
-    warehouseHumidity: 71,
-    scaGoldStorage: false,
-    status: 'AVAILABLE',
-    listedAt: '2026-02-28T08:00:00Z',
-    shipmentEstimateDays: 18,
-    customsHsCode: '0901.11',
-  },
-  {
-    id: 'GLOT-005',
-    vendorId: 'VND-001',
-    origin: 'Ethiopia Sidama',
-    variety: 'Heirloom',
-    process: 'Washed',
-    greenWeightKg: 900,
-    fobPriceUsd: 7.20,
-    gradeScore: 90,
-    flavorNotes: ['Lemon', 'Stone Fruit', 'Floral'],
-    harvestYear: 2025,
-    warehouseHumidity: 58,
-    scaGoldStorage: true,
-    climateCertifiedAt: '2026-03-03T06:00:00Z',
-    status: 'AVAILABLE',
-    listedAt: '2026-03-01T09:00:00Z',
-    shipmentEstimateDays: 22,
-    customsHsCode: '0901.11',
-  },
-]
-
-export const globalBuyers: GlobalBuyer[] = [
-  {
-    id: 'BYR-001',
-    roasteryName: 'Najd Specialty Roasters',
-    contactName: 'Khalid Al-Rashid',
-    contactEmail: 'khalid@najd-roasters.sa',
-    city: 'Riyadh',
-    vatNumber: '300000000000003',
-    status: 'ACTIVE',
-    registeredAt: '2026-01-25T10:00:00Z',
-  },
-  {
-    id: 'BYR-002',
-    roasteryName: 'Bahr Al-Kahwa Roastery',
-    contactName: 'Fatima Al-Zahrani',
-    contactEmail: 'fatima@bahr-kahwa.sa',
-    city: 'Jeddah',
-    vatNumber: '300000000000004',
-    status: 'ACTIVE',
-    registeredAt: '2026-02-01T09:00:00Z',
-  },
-]
-
-export const globalContracts: Array<{
-  id: string
-  lotId: string
-  buyerId: string
-  quantityKg: number
-  agreedFobUsd: number
-  contractedAt: string
-  status: 'ACTIVE' | 'COMPLETED' | 'CANCELLED'
-  invoiceId?: string
-}> = []
-
-export const zatcaInvoices: ZatcaInvoice[] = []
-
-// ─── Landed Price Calculator ──────────────────────────────────────────────────
-
-/** Flat shipping estimate per lot (SAR) — configurable */
-export let shippingEstimateBaseSar = 1500   // ~400 USD for a standard pallet
-
-/** Saudi customs duty rate on green coffee (HS 0901.11) */
-export const SAUDI_CUSTOMS_RATE = 0.05      // 5%
-
-/** ZATCA standard VAT rate */
-export const ZATCA_VAT_RATE = 0.15          // 15%
-
-/**
- * calcLandedPrice
- * Computes full landed cost for a global lot, converting FOB USD→SAR
- * and layering in shipping, customs, and ZATCA 15% VAT.
- */
-export function calcLandedPrice(lot: GlobalLot, quantityKg?: number): LandedPriceBreakdown {
-  const qty       = quantityKg ?? lot.greenWeightKg
-  const effRate   = lastKnownUsdToSar * (1 + exchangeRateBuffer / 100)
-  const fobSar    = Math.round(lot.fobPriceUsd * effRate * 100) / 100
-  const fobTotal  = Math.round(fobSar * qty * 100) / 100
-
-  // CIF estimate: FOB + shipping
-  const shipping  = shippingEstimateBaseSar
-  const cifTotal  = fobTotal + shipping
-
-  // Customs (5% of CIF)
-  const customs   = Math.round(cifTotal * SAUDI_CUSTOMS_RATE * 100) / 100
-
-  // VAT base = CIF + customs
-  const vatBase   = cifTotal + customs
-  const vat       = Math.round(vatBase * ZATCA_VAT_RATE * 100) / 100
-
-  const landed    = Math.round((fobTotal + shipping + customs + vat) * 100) / 100
-  const perKg     = Math.round((landed / qty) * 100) / 100
-
-  return {
-    lotId:               lot.id,
-    fobPriceUsd:         lot.fobPriceUsd,
-    fobPriceSar:         fobSar,
-    exchangeRate:        lastKnownUsdToSar,
-    exchangeBufferPct:   exchangeRateBuffer,
-    effectiveRate:       Math.round(effRate * 10000) / 10000,
-    shippingEstimateSar: shipping,
-    customsFeesSar:      customs,
-    vatSar:              vat,
-    landedPriceSar:      landed,
-    landedPricePerKg:    perKg,
-  }
-}
-
-// ─── ZATCA Phase 2 e-Invoice Generator ───────────────────────────────────────
-
-let _invoiceSeq = 1
-
-/**
- * Generate a simple UUID v4 (no crypto dependency — deterministic seed for
- * Cloudflare Workers compatibility).
- */
-function _uuid(): string {
-  const hex = () => Math.floor(Math.random() * 0x10000).toString(16).padStart(4, '0')
-  return `${hex()}${hex()}-${hex()}-4${hex().slice(1)}-${['8','9','a','b'][Math.floor(Math.random()*4)]}${hex().slice(1)}-${hex()}${hex()}${hex()}`
-}
-
-/**
- * Encode ZATCA TLV QR field (tag, value).
- * Each field: 1-byte tag | 1-byte length | value bytes (UTF-8)
- */
-function _tlvField(tag: number, value: string): number[] {
-  const bytes = Array.from(unescape(encodeURIComponent(value))).map(c => c.charCodeAt(0))
-  return [tag, bytes.length, ...bytes]
-}
-
-/**
- * Build ZATCA Phase-2 QR Code payload (Base64 TLV)
- * Tags: 1=seller, 2=VAT, 3=timestamp, 4=total, 5=VAT amount
- */
-function _zatcaQr(sellerName: string, sellerVat: string, issueDateTime: string, total: string, vat: string): string {
-  const tlv = [
-    ..._tlvField(1, sellerName),
-    ..._tlvField(2, sellerVat),
-    ..._tlvField(3, issueDateTime),
-    ..._tlvField(4, total),
-    ..._tlvField(5, vat),
-  ]
-  // Base64 encode
-  let binary = ''
-  for (const b of tlv) binary += String.fromCharCode(b)
-  return btoa(binary)
-}
-
-/**
- * generateZatcaInvoice
- * Creates a ZATCA Phase-2 compliant e-invoice for a global lot contract.
- */
-export function generateZatcaInvoice(params: {
-  buyer: GlobalBuyer
-  lot: GlobalLot
-  quantityKg: number
-  unitPriceSar: number
-  sellerName?: string
-  sellerVat?: string
-}): ZatcaInvoice {
-  const { buyer, lot, quantityKg, unitPriceSar } = params
-  const sellerName = params.sellerName ?? 'Qabban Global Exchange LLC'
-  const sellerVat  = params.sellerVat  ?? '300000000000001'
-
-  const now       = new Date()
-  const isoDate   = now.toISOString().split('T')[0]
-  const isoTime   = now.toISOString().split('T')[1].slice(0, 8)
-  const seq       = String(_invoiceSeq++).padStart(4, '0')
-  const invNumber = `QGE-INV-${isoDate.slice(0, 4)}-${seq}`
-  const uuid      = _uuid()
-
-  const subtotal  = Math.round(unitPriceSar * quantityKg * 100) / 100
-  const vatAmt    = Math.round(subtotal * ZATCA_VAT_RATE * 100) / 100
-  const total     = Math.round((subtotal + vatAmt) * 100) / 100
-
-  const issueDateTime = `${isoDate}T${isoTime}`
-  const qr = _zatcaQr(sellerName, sellerVat, issueDateTime, total.toFixed(2), vatAmt.toFixed(2))
-
-  const xml = `<?xml version="1.0" encoding="UTF-8"?>
-<Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2"
-         xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2"
-         xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2">
-  <cbc:UBLVersionID>2.1</cbc:UBLVersionID>
-  <cbc:ProfileID>reporting:1.0</cbc:ProfileID>
-  <cbc:ID>${invNumber}</cbc:ID>
-  <cbc:UUID>${uuid}</cbc:UUID>
-  <cbc:IssueDate>${isoDate}</cbc:IssueDate>
-  <cbc:IssueTime>${isoTime}</cbc:IssueTime>
-  <cbc:InvoiceTypeCode name="0200000">388</cbc:InvoiceTypeCode>
-  <cbc:DocumentCurrencyCode>SAR</cbc:DocumentCurrencyCode>
-  <cac:AccountingSupplierParty>
-    <cac:Party>
-      <cac:PartyName><cbc:Name>${sellerName}</cbc:Name></cac:PartyName>
-      <cac:PartyTaxScheme><cbc:CompanyID>${sellerVat}</cbc:CompanyID><cac:TaxScheme><cbc:ID>VAT</cbc:ID></cac:TaxScheme></cac:PartyTaxScheme>
-    </cac:Party>
-  </cac:AccountingSupplierParty>
-  <cac:AccountingCustomerParty>
-    <cac:Party>
-      <cac:PartyName><cbc:Name>${buyer.roasteryName}</cbc:Name></cac:PartyName>
-      <cac:PartyTaxScheme><cbc:CompanyID>${buyer.vatNumber}</cbc:CompanyID><cac:TaxScheme><cbc:ID>VAT</cbc:ID></cac:TaxScheme></cac:PartyTaxScheme>
-    </cac:Party>
-  </cac:AccountingCustomerParty>
-  <cac:InvoiceLine>
-    <cbc:ID>1</cbc:ID>
-    <cbc:InvoicedQuantity unitCode="KGM">${quantityKg}</cbc:InvoicedQuantity>
-    <cbc:LineExtensionAmount currencyID="SAR">${subtotal.toFixed(2)}</cbc:LineExtensionAmount>
-    <cac:Item><cbc:Name>${lot.origin} — ${lot.variety} (${lot.process}) — Lot ${lot.id}</cbc:Name></cac:Item>
-    <cac:Price><cbc:PriceAmount currencyID="SAR">${unitPriceSar.toFixed(2)}</cbc:PriceAmount></cac:Price>
-  </cac:InvoiceLine>
-  <cac:TaxTotal>
-    <cbc:TaxAmount currencyID="SAR">${vatAmt.toFixed(2)}</cbc:TaxAmount>
-    <cac:TaxSubtotal>
-      <cbc:TaxableAmount currencyID="SAR">${subtotal.toFixed(2)}</cbc:TaxableAmount>
-      <cbc:TaxAmount currencyID="SAR">${vatAmt.toFixed(2)}</cbc:TaxAmount>
-      <cac:TaxCategory><cbc:ID>S</cbc:ID><cbc:Percent>15</cbc:Percent><cac:TaxScheme><cbc:ID>VAT</cbc:ID></cac:TaxScheme></cac:TaxCategory>
-    </cac:TaxSubtotal>
-  </cac:TaxTotal>
-  <cac:LegalMonetaryTotal>
-    <cbc:LineExtensionAmount currencyID="SAR">${subtotal.toFixed(2)}</cbc:LineExtensionAmount>
-    <cbc:TaxInclusiveAmount currencyID="SAR">${total.toFixed(2)}</cbc:TaxInclusiveAmount>
-    <cbc:PayableAmount currencyID="SAR">${total.toFixed(2)}</cbc:PayableAmount>
-  </cac:LegalMonetaryTotal>
-</Invoice>`
-
-  const invoice: ZatcaInvoice = {
-    uuid,
-    invoiceNumber: invNumber,
-    issueDate:     isoDate,
-    issueTime:     isoTime,
-    sellerName,
-    sellerVat,
-    buyerName:     buyer.roasteryName,
-    buyerVat:      buyer.vatNumber,
-    lotId:         lot.id,
-    origin:        lot.origin,
-    quantityKg,
-    unitPriceSar,
-    subtotalSar:   subtotal,
-    vatPct:        15,
-    vatAmountSar:  vatAmt,
-    totalSar:      total,
-    qrCodeData:    qr,
-    xmlPayload:    xml,
-  }
-
-  zatcaInvoices.push(invoice)
-  return invoice
-}
