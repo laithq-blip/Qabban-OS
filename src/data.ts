@@ -1196,6 +1196,8 @@ export interface GlobalLot {
   climateLog: ClimateLogEntry[]
   // Ship tracker (populated once lot is SHIPPED)
   shipTracker?: ShipTrackerData
+  // SFDA Audit — sack label photo (base64 data-URL)
+  sfdaLabelUrl?: string
   // Contract
   status: GlobalLotStatus
   listedAt: string
@@ -1245,6 +1247,7 @@ export interface LandedPriceBreakdown {
   effectiveRate: number
   shippingEstimateSar: number
   customsFeesSar: number
+  qabbanFeeSar: number      // Qabban platform fee (default 1.5 % of CIF)
   vatSar: number
   landedPriceSar: number
   landedPricePerKg: number
@@ -1518,24 +1521,27 @@ export const zatcaInvoices: ZatcaInvoice[] = []
 export let shippingEstimateBaseSar = 1500
 export const SAUDI_CUSTOMS_RATE    = 0.05
 export const ZATCA_VAT_RATE        = 0.15
+export const QABBAN_PLATFORM_FEE   = 0.015  // 1.5 % of CIF — Qabban platform service fee
 
 export function calcLandedPrice(lot: GlobalLot, quantityKg?: number): LandedPriceBreakdown {
-  const qty     = quantityKg ?? lot.greenWeightKg
-  const effRate = lastKnownUsdToSar * (1 + exchangeRateBuffer / 100)
-  const fobSar  = Math.round(lot.fobPriceUsd * effRate * 100) / 100
-  const fobTot  = Math.round(fobSar * qty * 100) / 100
-  const ship    = shippingEstimateBaseSar
-  const cif     = fobTot + ship
-  const customs = Math.round(cif * SAUDI_CUSTOMS_RATE * 100) / 100
-  const vatBase = cif + customs
-  const vat     = Math.round(vatBase * ZATCA_VAT_RATE * 100) / 100
-  const landed  = Math.round((fobTot + ship + customs + vat) * 100) / 100
-  const perKg   = Math.round((landed / qty) * 100) / 100
+  const qty       = quantityKg ?? lot.greenWeightKg
+  const effRate   = lastKnownUsdToSar * (1 + exchangeRateBuffer / 100)
+  const fobSar    = Math.round(lot.fobPriceUsd * effRate * 100) / 100
+  const fobTot    = Math.round(fobSar * qty * 100) / 100
+  const ship      = shippingEstimateBaseSar
+  const cif       = fobTot + ship
+  const customs   = Math.round(cif * SAUDI_CUSTOMS_RATE * 100) / 100
+  const qabbanFee = Math.round(cif * QABBAN_PLATFORM_FEE * 100) / 100
+  const vatBase   = cif + customs + qabbanFee
+  const vat       = Math.round(vatBase * ZATCA_VAT_RATE * 100) / 100
+  const landed    = Math.round((fobTot + ship + customs + qabbanFee + vat) * 100) / 100
+  const perKg     = Math.round((landed / qty) * 100) / 100
   return {
     lotId: lot.id, fobPriceUsd: lot.fobPriceUsd, fobPriceSar: fobSar,
     exchangeRate: lastKnownUsdToSar, exchangeBufferPct: exchangeRateBuffer,
     effectiveRate: Math.round(effRate * 10000) / 10000,
-    shippingEstimateSar: ship, customsFeesSar: customs, vatSar: vat,
+    shippingEstimateSar: ship, customsFeesSar: customs,
+    qabbanFeeSar: qabbanFee, vatSar: vat,
     landedPriceSar: landed, landedPricePerKg: perKg,
   }
 }

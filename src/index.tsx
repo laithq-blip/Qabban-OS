@@ -57,6 +57,7 @@ import {
   shippingEstimateBaseSar,
   SAUDI_CUSTOMS_RATE,
   ZATCA_VAT_RATE,
+  QABBAN_PLATFORM_FEE,
   type GlobalVendor,
   type GlobalLot,
   type GlobalBuyer,
@@ -7176,7 +7177,85 @@ const EXCHANGE_CSS = `
   /* ── Milestone steps ── */
   .milestone-step{display:flex;align-items:center;gap:12px;padding:10px;border-radius:6px;margin-bottom:6px;background:rgba(255,255,255,.02);border:1px solid var(--border)}
   .ms-dot{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0}
-  @media(max-width:720px){.sidebar{display:none}.main{padding:16px}}
+  /* ── Catalog Grid ── */
+  .cat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;margin-top:4px}
+  .lot-grid-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;
+                 display:flex;flex-direction:column;transition:transform .15s,border-color .15s,box-shadow .15s;position:relative}
+  .lot-grid-card:hover{transform:translateY(-3px);box-shadow:0 10px 36px rgba(0,0,0,.45)}
+  .lot-grid-card.spot{border-top:3px solid rgba(74,222,128,.5)}
+  .lot-grid-card.forward{border-top:3px solid rgba(245,158,11,.5)}
+  .lgc-hero{padding:16px 16px 10px;flex:1}
+  .lgc-origin{font-size:17px;font-weight:700;line-height:1.2;margin-bottom:3px}
+  .lgc-meta{font-size:10px;color:var(--muted);font-family:var(--mono);margin-bottom:10px}
+  .lgc-badges{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px}
+  .lgc-score-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+  .lgc-score{font-size:32px;font-weight:700;line-height:1;color:var(--green)}
+  .lgc-score-label{font-size:8px;color:var(--muted);font-family:var(--mono);letter-spacing:.08em;text-transform:uppercase;margin-top:2px}
+  .lgc-flavor{display:flex;flex-wrap:wrap;gap:3px;margin-bottom:10px}
+  .lgc-flavor-tag{font-size:9px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);
+                  padding:2px 6px;border-radius:3px;color:var(--muted)}
+  .lgc-footer{padding:12px 14px;border-top:1px solid var(--border);background:rgba(0,0,0,.15);display:flex;flex-direction:column;gap:8px}
+  .lgc-price-row{display:flex;align-items:center;justify-content:space-between}
+  .lgc-price-main{font-size:20px;font-weight:700;color:var(--amber);font-family:var(--mono)}
+  .lgc-price-sub{font-size:9px;color:var(--muted);font-family:var(--mono)}
+  .lgc-actions{display:flex;gap:6px;flex-wrap:wrap}
+  /* ── Price Breakdown Modal ── */
+  .pb-overlay{position:fixed;inset:0;background:rgba(0,0,0,.75);display:none;align-items:center;justify-content:center;z-index:9999;padding:16px}
+  .pb-overlay.open{display:flex}
+  .pb-modal{background:#18181b;border:1px solid rgba(245,158,11,.35);border-radius:10px;width:440px;max-width:100%;max-height:90vh;overflow-y:auto}
+  .pb-header{padding:18px 20px 14px;border-bottom:1px solid rgba(255,255,255,.06);display:flex;align-items:center;justify-content:space-between}
+  .pb-title{font-family:var(--mono);font-size:13px;font-weight:700;color:var(--amber);display:flex;align-items:center;gap:8px}
+  .pb-close{background:none;border:none;color:var(--muted);font-size:16px;cursor:pointer;padding:2px 6px;border-radius:4px}
+  .pb-close:hover{color:var(--text)}
+  .pb-body{padding:18px 20px}
+  .pb-lot-header{font-size:14px;font-weight:700;margin-bottom:4px}
+  .pb-lot-sub{font-size:10px;color:var(--muted);font-family:var(--mono);margin-bottom:16px}
+  .pb-qty-row{display:flex;align-items:center;gap:8px;margin-bottom:16px;padding:10px 12px;background:rgba(245,158,11,.04);border:1px solid rgba(245,158,11,.15);border-radius:6px}
+  .pb-qty-input{width:90px;background:#1a1a1e;border:1px solid rgba(245,158,11,.35);border-radius:4px;padding:6px 8px;
+                color:var(--text);font-size:14px;font-family:var(--mono);outline:none;text-align:center}
+  .pb-line{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid rgba(255,255,255,.04);font-size:12px}
+  .pb-line:last-of-type{border-bottom:none}
+  .pb-line-label{color:var(--muted);display:flex;align-items:center;gap:6px}
+  .pb-line-label i{width:14px;text-align:center;font-size:10px}
+  .pb-line-val{font-family:var(--mono);font-weight:600}
+  .pb-total-row{display:flex;justify-content:space-between;align-items:center;padding:12px 0 0;margin-top:6px;border-top:2px solid rgba(245,158,11,.25)}
+  .pb-total-label{font-size:13px;font-weight:700}
+  .pb-total-val{font-family:var(--mono);font-size:20px;font-weight:700;color:var(--green)}
+  .pb-perkg{font-size:10px;color:var(--muted);font-family:var(--mono);text-align:right;margin-top:2px}
+  .pb-footer{padding:14px 20px;border-top:1px solid rgba(255,255,255,.06);display:flex;gap:8px;flex-wrap:wrap}
+  /* ── Forward Checkout Stepper ── */
+  .fwd-stepper{display:flex;gap:0;margin-bottom:20px;overflow:hidden;border:1px solid var(--border);border-radius:var(--radius)}
+  .fwd-step{flex:1;padding:12px 10px;text-align:center;font-size:10px;font-family:var(--mono);color:var(--muted);
+            background:rgba(255,255,255,.02);border-right:1px solid var(--border);position:relative;cursor:default}
+  .fwd-step:last-child{border-right:none}
+  .fwd-step.active{background:rgba(245,158,11,.08);color:var(--amber)}
+  .fwd-step.done{background:rgba(74,222,128,.06);color:var(--green)}
+  .fwd-step-num{display:flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;
+                margin:0 auto 5px;font-size:10px;font-weight:700;border:2px solid currentColor}
+  .fwd-step.done .fwd-step-num{background:rgba(74,222,128,.2)}
+  .fwd-step.active .fwd-step-num{background:rgba(245,158,11,.2)}
+  .fwd-step-line{position:absolute;top:50%;right:-1px;width:1px;height:60%;background:var(--border);transform:translateY(-50%)}
+  /* ── SVG Sparkline ── */
+  .sparkline-wrap{margin-top:10px;padding:10px 12px;background:rgba(0,0,0,.2);border:1px solid rgba(255,255,255,.05);border-radius:6px}
+  .sparkline-title{font-size:9px;font-family:var(--mono);color:var(--muted);margin-bottom:6px;letter-spacing:.08em;text-transform:uppercase;display:flex;align-items:center;justify-content:space-between}
+  .sparkline-svg{width:100%;height:44px;overflow:visible}
+  .sparkline-rule-a{fill:none;stroke:var(--cyan);stroke-width:1.5;stroke-dasharray:3 2}
+  .sparkline-rule-b{fill:none;stroke:var(--red);stroke-width:1.5;stroke-dasharray:3 2}
+  .sparkline-baseline{fill:none;stroke:rgba(255,255,255,.15);stroke-width:1;stroke-dasharray:4 3}
+  .sparkline-line{fill:none;stroke:var(--amber);stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+  .sparkline-area{opacity:.12}
+  .sparkline-dot{fill:var(--amber);stroke:var(--bg);stroke-width:1.5}
+  .sparkline-dot.sca{fill:var(--cyan)}
+  .sparkline-dot.high{fill:var(--red)}
+  /* ── SFDA upload in vendor form ── */
+  .sfda-drop{border:2px dashed rgba(96,165,250,.3);border-radius:6px;padding:16px;text-align:center;cursor:pointer;
+             background:rgba(96,165,250,.03);transition:border-color .15s}
+  .sfda-drop:hover{border-color:rgba(96,165,250,.6)}
+  .sfda-drop-icon{font-size:22px;color:var(--blue);margin-bottom:6px}
+  .sfda-drop-lbl{font-size:11px;color:var(--muted);font-family:var(--mono)}
+  .sfda-preview{display:none;margin-top:8px;align-items:center;gap:10px}
+  .sfda-thumb{width:56px;height:56px;object-fit:cover;border-radius:4px;border:1px solid rgba(96,165,250,.3)}
+  @media(max-width:720px){.sidebar{display:none}.main{padding:16px}.cat-grid{grid-template-columns:1fr}}
 `
 
 function exchangeLayout(pageTitle: string, activeNav: string, content: string) {
@@ -7342,7 +7421,7 @@ app.get('/exchange', (c) => {
   return c.html(exchangeLayout('Exchange Hub', 'hub', content))
 })
 
-// ── GET /exchange/catalog — Global Catalog (Spot + Forward) ──────────────────
+// ── GET /exchange/catalog — Global Catalog (multi-vendor grid + modal) ────────
 app.get('/exchange/catalog', (c) => {
   const typeFilter = c.req.query('type') as 'SPOT'|'FORWARD'|undefined
   const effRate    = lastKnownUsdToSar*(1+exchangeRateBuffer/100)
@@ -7355,144 +7434,358 @@ app.get('/exchange/catalog', (c) => {
     <a href="/exchange/catalog?type=FORWARD" class="btn ${typeFilter==='FORWARD'?'btn-amber':'btn-blue'}" style="font-size:11px">🌱 Forward (${globalLots.filter(l=>l.marketplaceType==='FORWARD').length})</a>
   </div>`
 
+  // Build lot cards — compact multi-vendor grid style
   const lotCards = filtered.map(lot => {
     const vendor  = globalVendors.find(v=>v.id===lot.vendorId)
     const landed  = calcLandedPrice(lot)
     const isSpot  = lot.marketplaceType === 'SPOT'
     const isFwd   = lot.marketplaceType === 'FORWARD'
 
-    // ── Climate Passport ──────────────────────────────────────────
-    const rhOk = lot.warehouseHumidity!=null && lot.warehouseHumidity>=50 && lot.warehouseHumidity<=60
+    // ── RH Sparkline from climateLog (Rule A/B history) ───────────
+    const rhValues = lot.climateLog.map(cl => cl.humidity)
+    const sparkW = 120, sparkH = 32
+    const sparkMin = 0, sparkMax = 100
+    const sparkPoints = rhValues.map((rh, i) => {
+      const x = rhValues.length > 1 ? Math.round(i * (sparkW-4) / (rhValues.length - 1)) + 2 : sparkW/2
+      const y = Math.round(sparkH - 4 - ((rh - sparkMin) / (sparkMax - sparkMin)) * (sparkH - 8))
+      return `${x},${y}`
+    }).join(' ')
+    const ruleColors = rhValues.map(rh =>
+      rh > 70 ? '#f87171' : rh < 20 ? '#f59e0b' : rh >= 50 && rh <= 60 ? '#22d3ee' : '#64748b'
+    )
+    // Zone bands
+    const y50 = Math.round(sparkH - 4 - ((50 - sparkMin) / (sparkMax - sparkMin)) * (sparkH - 8))
+    const y60 = Math.round(sparkH - 4 - ((60 - sparkMin) / (sparkMax - sparkMin)) * (sparkH - 8))
+    const sparkline = rhValues.length < 2 ? '' : `
+      <svg width="${sparkW}" height="${sparkH}" style="display:block;overflow:visible" title="RH History">
+        <rect x="0" y="${y60}" width="${sparkW}" height="${y50 - y60}" fill="rgba(34,211,238,.10)" rx="1"/>
+        <polyline points="${sparkPoints}" fill="none" stroke="${ruleColors[ruleColors.length-1]}" stroke-width="1.5" stroke-linejoin="round"/>
+        ${rhValues.map((rh, i) => {
+          const x = rhValues.length > 1 ? Math.round(i * (sparkW-4) / (rhValues.length - 1)) + 2 : sparkW/2
+          const y = Math.round(sparkH - 4 - ((rh - sparkMin) / (sparkMax - sparkMin)) * (sparkH - 8))
+          return `<circle cx="${x}" cy="${y}" r="2.5" fill="${ruleColors[i]}"/>`
+        }).join('')}
+        <text x="2" y="${sparkH}" font-size="7" fill="#64748b" font-family="monospace">Rule A>70% / B&lt;20%</text>
+      </svg>`
+
+    // ── Climate Passport mini-section ─────────────────────────────
     const passport = `
     <div style="margin-top:14px;padding:12px;background:${lot.scaGoldStorage?'rgba(34,211,238,.05)':'rgba(255,255,255,.02)'};
                 border:1px solid ${lot.scaGoldStorage?'rgba(34,211,238,.25)':'var(--border)'};border-radius:6px">
-      <div style="font-size:9px;font-family:var(--mono);color:${lot.scaGoldStorage?'var(--cyan)':'var(--muted)'};margin-bottom:8px;letter-spacing:.08em">
-        <i class="fa fa-passport"></i> DIGITAL CLIMATE PASSPORT — ${lot.scaGoldStorage?'✓ SCA GOLD STORAGE CERTIFIED':'STANDARD STORAGE'}
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:8px">
+        <div style="font-size:9px;font-family:var(--mono);color:${lot.scaGoldStorage?'var(--cyan)':'var(--muted)'};letter-spacing:.08em">
+          <i class="fa fa-passport"></i> DIGITAL CLIMATE PASSPORT — ${lot.scaGoldStorage?'✓ SCA GOLD CERTIFIED':'STANDARD STORAGE'}
+        </div>
+        <div style="display:flex;align-items:center;gap:6px">
+          ${sparkline}
+          <div style="font-size:9px;font-family:var(--mono);color:var(--muted);text-align:right">
+            <div>RH History</div>
+            <div style="color:${lot.scaGoldStorage?'var(--cyan)':'var(--muted)'}">
+              ${lot.warehouseHumidity!=null?`${lot.warehouseHumidity}% RH`:'—'}
+            </div>
+          </div>
+        </div>
       </div>
       <div class="climate-timeline">
-        ${lot.climateLog.map(cl=>`
+        ${lot.climateLog.slice(-3).map(cl=>`
         <div class="cl-row cl-${cl.phase.toLowerCase()}">
           <div style="color:var(--text);font-weight:600">${cl.location}</div>
           <div style="color:var(--muted);font-family:var(--mono);font-size:10px">
             ${cl.ts.split('T')[0]} · RH <strong style="color:${cl.humidity>=50&&cl.humidity<=60?'var(--cyan)':cl.humidity>70?'var(--red)':'var(--amber)'}">${cl.humidity}%</strong>
             · Temp <strong>${cl.temp}°C</strong>
+            ${cl.humidity>70?`<span class="badge b-red" style="font-size:8px">Rule A</span>`:''}
+            ${cl.humidity<20?`<span class="badge b-amber" style="font-size:8px">Rule B</span>`:''}
             ${cl.note?`· <em style="color:var(--muted)">${cl.note}</em>`:''}
           </div>
         </div>`).join('')}
       </div>
       ${lot.scaGoldStorage?`<div style="margin-top:6px;font-size:9px;font-family:var(--mono);color:var(--cyan)">✓ Certified ${lot.climateCertifiedAt?.split('T')[0]} · SCA threshold 50–60% RH</div>`:''}
+      <a href="/exchange/climate/${lot.id}" style="display:inline-block;margin-top:6px;font-size:9px;color:var(--blue);font-family:var(--mono)">
+        <i class="fa fa-arrow-right"></i> Full Climate Passport & timeline →
+      </a>
     </div>`
 
-    // ── Ship Tracker (if shipped/delivered) ───────────────────────
+    // ── Ship Tracker mini-panel ────────────────────────────────────
     const shipPanel = lot.shipTracker ? `
-    <div style="margin-top:12px;padding:12px;background:rgba(96,165,250,.04);border:1px solid rgba(96,165,250,.2);border-radius:6px">
-      <div style="font-size:9px;font-family:var(--mono);color:var(--blue);margin-bottom:8px;letter-spacing:.08em">
-        <i class="fa fa-ship"></i> FLEXPORT LIVE SHIP TRACKER — ${lot.shipTracker.status}
+    <div style="margin-top:10px;padding:10px 12px;background:rgba(96,165,250,.04);border:1px solid rgba(96,165,250,.2);border-radius:6px">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px">
+        <div style="font-size:9px;font-family:var(--mono);color:var(--blue)">
+          <i class="fa fa-ship"></i> ${lot.shipTracker.vessel} · ${lot.shipTracker.status} · ${lot.shipTracker.progressPct}%
+        </div>
+        <a href="/exchange/shiptrack/${lot.id}" style="font-size:9px;color:var(--blue);font-family:var(--mono)">
+          Live tracker →
+        </a>
       </div>
-      <div style="display:flex;gap:20px;flex-wrap:wrap;font-size:11px;font-family:var(--mono);margin-bottom:10px">
-        <span>Vessel: <strong>${lot.shipTracker.vessel}</strong></span>
-        <span>Voyage: <strong>${lot.shipTracker.voyageNumber}</strong></span>
-        <span>ETD: <strong>${lot.shipTracker.etd}</strong></span>
-        <span>ETA: <strong>${lot.shipTracker.eta}</strong></span>
-      </div>
-      <div class="tracker-bar"><div class="tracker-fill" style="width:${lot.shipTracker.progressPct}%"></div></div>
-      <div style="font-size:10px;color:var(--muted);font-family:var(--mono);margin-top:4px">
-        ${lot.shipTracker.currentLocation} · ${lot.shipTracker.progressPct}% complete
-      </div>
-      <div class="tracker-events" style="margin-top:10px">
-        ${lot.shipTracker.events.map(ev=>`
-        <div class="tracker-event">
-          <div style="font-weight:600">${ev.location}</div>
-          <div style="color:var(--muted);font-size:10px;font-family:var(--mono)">${ev.ts.replace('T',' ').slice(0,16)} — ${ev.description}</div>
-        </div>`).join('')}
-      </div>
+      <div class="tracker-bar" style="margin-top:6px"><div class="tracker-fill" style="width:${lot.shipTracker.progressPct}%"></div></div>
     </div>` : ''
 
-    // ── Forward-specific panels ───────────────────────────────────
+    // ── Forward milestones mini-panel ─────────────────────────────
     const fwdPanel = isFwd ? `
-    <div style="margin-top:12px;display:grid;grid-template-columns:1fr 1fr;gap:10px">
-      <div class="sas-box">
-        <div style="color:var(--purple);font-weight:700;margin-bottom:4px"><i class="fa fa-file-signature"></i> SAS Clause</div>
-        ${lot.sasClause
-          ? `Subject to Approval of Sample — final contract conditional on sample approval by buyer's Q.C. team.`
-          : `No SAS clause — lot confirmed on contract signing.`}
+    <div style="margin-top:10px;padding:10px 12px;background:rgba(245,158,11,.04);border:1px dashed rgba(245,158,11,.3);border-radius:6px">
+      <div style="font-size:9px;font-family:var(--mono);color:var(--amber);margin-bottom:6px"><i class="fa fa-calendar-check"></i> FORWARD 4-STEP MILESTONE FLOW</div>
+      <div style="display:flex;gap:0;font-size:9px;font-family:var(--mono)">
+        <div style="flex:1;text-align:center;padding:4px 2px;background:rgba(245,158,11,.12);border-radius:4px 0 0 4px;border:1px solid rgba(245,158,11,.3)">
+          <div style="color:var(--amber);font-weight:700">① Deposit</div>
+          <div style="color:var(--muted)">${lot.depositPct}%</div>
+        </div>
+        <div style="flex:1;text-align:center;padding:4px 2px;background:rgba(167,139,250,.08);border-top:1px solid rgba(167,139,250,.25);border-bottom:1px solid rgba(167,139,250,.25)">
+          <div style="color:var(--purple);font-weight:700">② Sample</div>
+          <div style="color:var(--muted)">${lot.sasClause?'SAS':'Waived'}</div>
+        </div>
+        <div style="flex:1;text-align:center;padding:4px 2px;background:rgba(96,165,250,.08);border-top:1px solid rgba(96,165,250,.2);border-bottom:1px solid rgba(96,165,250,.2)">
+          <div style="color:var(--blue);font-weight:700">③ Transit</div>
+          <div style="color:var(--muted)">${Math.round((100-lot.depositPct)*0.4)}%</div>
+        </div>
+        <div style="flex:1;text-align:center;padding:4px 2px;background:rgba(74,222,128,.08);border-radius:0 4px 4px 0;border:1px solid rgba(74,222,128,.25)">
+          <div style="color:var(--green);font-weight:700">④ Landing</div>
+          <div style="color:var(--muted)">${Math.round((100-lot.depositPct)*0.6)}%</div>
+        </div>
       </div>
-      <div style="background:rgba(245,158,11,.05);border:1px dashed rgba(245,158,11,.3);border-radius:var(--radius);padding:12px 14px;font-size:11px;font-family:var(--mono)">
-        <div style="color:var(--amber);font-weight:700;margin-bottom:6px"><i class="fa fa-calendar-check"></i> Milestone Payments</div>
-        <div>Deposit (${lot.depositPct}%) → on contract signing</div>
-        <div style="color:var(--muted)">Pre-ship (${Math.round((100-lot.depositPct)*0.4)}%) → on shipping confirmation</div>
-        <div style="color:var(--muted)">On delivery (${Math.round((100-lot.depositPct)*0.6)}%) → on arrival</div>
-        <div style="margin-top:6px;font-size:9px;color:var(--muted)">Harvest: ${lot.harvestDate ?? 'TBD'}</div>
-      </div>
+      <div style="font-size:9px;color:var(--muted);margin-top:4px">Harvest: ${lot.harvestDate??'TBD'} · SAS: ${lot.sasClause?'Required':'Waived'}</div>
     </div>` : ''
-
-    // ── Landed Price ──────────────────────────────────────────────
-    const landedPanel = `
-    <div style="margin-top:12px;padding:12px;background:rgba(245,158,11,.04);border:1px solid rgba(245,158,11,.15);border-radius:6px">
-      <div style="font-size:9px;font-family:var(--mono);color:var(--amber);margin-bottom:8px;letter-spacing:.08em"><i class="fa fa-calculator"></i> LANDED PRICE CALCULATOR</div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:6px;font-size:11px;font-family:var(--mono)">
-        <div><span style="color:var(--muted)">FOB USD/kg:</span><br><strong>$${landed.fobPriceUsd.toFixed(2)} → ${landed.fobPriceSar.toFixed(2)} SAR</strong></div>
-        <div><span style="color:var(--muted)">Shipping:</span><br><strong style="color:var(--amber)">${landed.shippingEstimateSar.toLocaleString()} SAR</strong></div>
-        <div><span style="color:var(--muted)">Customs (5%):</span><br><strong style="color:var(--amber)">${landed.customsFeesSar.toLocaleString()} SAR</strong></div>
-        <div><span style="color:var(--muted)">VAT 15%:</span><br><strong style="color:var(--red)">${landed.vatSar.toLocaleString()} SAR</strong></div>
-        <div><span style="color:var(--muted)">Per kg:</span><br><strong style="color:var(--green);font-size:14px">${landed.landedPricePerKg.toFixed(2)} SAR/kg</strong></div>
-        <div><span style="color:var(--muted)">Total lot:</span><br><strong style="color:var(--green)">${landed.landedPriceSar.toLocaleString()} SAR</strong></div>
-      </div>
-    </div>`
 
     return `
-    <div class="card" style="border-color:${isSpot?'rgba(74,222,128,.2)':isFwd?'rgba(245,158,11,.25)':'var(--border)'}">
-      <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px">
-        <div style="flex:1;min-width:240px">
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap">
-            <span style="font-family:var(--mono);font-size:10px;color:var(--muted)">${lot.id}</span>
-            <span class="${isSpot?'track-spot':'track-fwd'}">${isSpot?'⚡ SPOT':'🌱 FORWARD'}</span>
-            ${lot.scaGoldStorage?`<span class="badge b-cyan"><i class="fa fa-certificate"></i> SCA GOLD</span>`:''}
-            ${lot.sasClause?`<span class="badge b-purple">SAS</span>`:''}
-            <span class="badge ${lot.status==='AVAILABLE'?'b-green':'b-muted'}">${lot.status}</span>
-          </div>
-          <div style="font-size:18px;font-weight:700;margin-bottom:3px">${lot.origin}</div>
-          <div style="font-size:11px;color:var(--muted)">${lot.variety} · ${lot.process} · ${lot.harvestYear} · ${vendor?.companyName??''} (${vendor?.country??''})</div>
-          <div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px">
-            ${lot.flavorNotes.map(n=>`<span style="font-size:9px;background:rgba(255,255,255,.05);padding:2px 6px;border-radius:3px;color:var(--muted)">${n}</span>`).join('')}
-          </div>
+    <div class="catalog-card" style="border-color:${isSpot?'rgba(74,222,128,.2)':isFwd?'rgba(245,158,11,.25)':'var(--border)'}">
+      <!-- Card Header: badges + track -->
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;flex-wrap:wrap">
+        <span style="font-family:var(--mono);font-size:9px;color:var(--muted)">${lot.id}</span>
+        <span class="${isSpot?'track-spot':'track-fwd'}">${isSpot?'⚡ SPOT':'🌱 FORWARD'}</span>
+        ${lot.scaGoldStorage?`<span class="badge b-cyan" style="font-size:8px"><i class="fa fa-certificate"></i> SCA GOLD</span>`:''}
+        ${lot.sasClause?`<span class="badge b-purple" style="font-size:8px">SAS</span>`:''}
+        <span class="badge ${lot.status==='AVAILABLE'?'b-green':'b-muted'}" style="font-size:8px;margin-left:auto">${lot.status}</span>
+      </div>
+
+      <!-- Origin + SCA Score row -->
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:10px">
+        <div style="flex:1">
+          <div style="font-size:17px;font-weight:700;color:var(--text);line-height:1.2">${lot.origin}</div>
+          <div style="font-size:10px;color:var(--muted);margin-top:3px">${vendor?.companyName??'—'} · ${vendor?.country??''}</div>
         </div>
-        <div style="text-align:right;flex-shrink:0">
-          <div style="font-size:9px;color:var(--muted);font-family:var(--mono)">SCA Score</div>
-          <div style="font-size:26px;font-weight:700;color:var(--green)">${lot.gradeScore}</div>
-          <div style="font-size:10px;color:var(--muted)">${lot.greenWeightKg.toLocaleString()} kg</div>
-          <div style="font-size:10px;color:var(--muted)">~${lot.shipmentEstimateDays??'?'}d to KSA</div>
-          <div style="display:flex;flex-direction:column;gap:5px;margin-top:8px">
-            <a href="/buyer/contract?lotId=${lot.id}" class="btn ${isSpot?'btn-green':'btn-amber'}" style="font-size:10px">
-              <i class="fa fa-file-contract"></i> ${isSpot?'Order Spot':'Pre-order'}
-            </a>
-            <a href="/exchange/climate/${lot.id}" class="btn btn-blue" style="font-size:9px;padding:4px 10px">
-              <i class="fa fa-passport"></i> Climate Passport
-            </a>
-            ${lot.shipTracker?`<a href="/exchange/shiptrack/${lot.id}" class="btn btn-blue" style="font-size:9px;padding:4px 10px">
-              <i class="fa fa-ship"></i> Ship Tracker
-            </a>`:''}
-          </div>
+        <div style="text-align:center;flex-shrink:0;background:rgba(74,222,128,.06);border:1px solid rgba(74,222,128,.2);border-radius:6px;padding:6px 10px">
+          <div style="font-size:9px;color:var(--muted);font-family:var(--mono)">SCA</div>
+          <div style="font-size:24px;font-weight:800;color:var(--green);line-height:1">${lot.gradeScore}</div>
+          <div style="font-size:8px;color:var(--muted)">/ 100</div>
         </div>
       </div>
+
+      <!-- Process + Variety + Weight row -->
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px">
+        <div style="background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:5px;padding:7px;text-align:center">
+          <div style="font-size:8px;color:var(--muted);font-family:var(--mono)">PROCESS</div>
+          <div style="font-size:11px;font-weight:600;color:var(--text);margin-top:2px">${lot.process}</div>
+        </div>
+        <div style="background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:5px;padding:7px;text-align:center">
+          <div style="font-size:8px;color:var(--muted);font-family:var(--mono)">VARIETY</div>
+          <div style="font-size:11px;font-weight:600;color:var(--text);margin-top:2px">${lot.variety.length>10?lot.variety.slice(0,10)+'…':lot.variety}</div>
+        </div>
+        <div style="background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:5px;padding:7px;text-align:center">
+          <div style="font-size:8px;color:var(--muted);font-family:var(--mono)">WEIGHT</div>
+          <div style="font-size:11px;font-weight:600;color:var(--text);margin-top:2px">${lot.greenWeightKg.toLocaleString()}kg</div>
+        </div>
+      </div>
+
+      <!-- Flavor notes -->
+      <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:12px">
+        ${lot.flavorNotes.map(n=>`<span style="font-size:8px;background:rgba(255,255,255,.05);padding:2px 6px;border-radius:10px;color:var(--muted);border:1px solid var(--border)">${n}</span>`).join('')}
+      </div>
+
+      <!-- FOB price + Landed Price Button -->
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px">
+        <div style="font-family:var(--mono)">
+          <div style="font-size:9px;color:var(--muted)">FOB PRICE</div>
+          <div style="font-size:15px;font-weight:700;color:var(--amber)">$${lot.fobPriceUsd.toFixed(2)}<span style="font-size:10px;color:var(--muted)">/kg</span></div>
+        </div>
+        <button onclick="openPriceModal('${lot.id}')"
+                style="background:linear-gradient(135deg,rgba(245,158,11,.15),rgba(245,158,11,.05));border:1px solid rgba(245,158,11,.4);color:var(--amber);padding:8px 14px;border-radius:6px;cursor:pointer;font-size:10px;font-weight:700;font-family:var(--mono);letter-spacing:.05em;transition:all .2s">
+          <i class="fa fa-receipt"></i> LANDED PRICE IN SAR
+        </button>
+      </div>
+
+      <!-- Action buttons -->
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <a href="/buyer/contract?lotId=${lot.id}" class="btn ${isSpot?'btn-green':'btn-amber'}" style="flex:1;justify-content:center;font-size:10px;min-width:100px">
+          <i class="fa fa-file-contract"></i> ${isSpot?'Order Spot':'Pre-order Forward'}
+        </a>
+        <a href="/exchange/climate/${lot.id}" class="btn btn-blue" style="font-size:9px;padding:6px 10px">
+          <i class="fa fa-passport"></i> Passport
+        </a>
+        ${lot.shipTracker?`<a href="/exchange/shiptrack/${lot.id}" class="btn btn-blue" style="font-size:9px;padding:6px 10px"><i class="fa fa-ship"></i> Track</a>`:''}
+      </div>
+
       ${passport}
       ${shipPanel}
       ${fwdPanel}
-      ${landedPanel}
     </div>`
   }).join('')
 
+  // ── Price Breakdown Modal data (JSON embedded) ─────────────────────────────
+  const modalData = filtered.map(lot => {
+    const l = calcLandedPrice(lot)
+    return {
+      id: lot.id, origin: lot.origin, fobUsd: lot.fobPriceUsd,
+      qty: lot.greenWeightKg,
+      fobSar: l.fobPriceSar, fobTot: Math.round(l.fobPriceSar * lot.greenWeightKg * 100)/100,
+      ship: l.shippingEstimateSar,
+      customs: l.customsFeesSar, qabban: l.qabbanFeeSar, vat: l.vatSar,
+      total: l.landedPriceSar, perKg: l.landedPricePerKg,
+      rate: l.effectiveRate, process: lot.process, sca: lot.gradeScore,
+      isFwd: lot.marketplaceType === 'FORWARD',
+      depositPct: lot.depositPct
+    }
+  })
+
   const content = `
+  <style>
+    .catalog-grid { display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:18px;margin-top:0 }
+    .catalog-card { background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px;transition:box-shadow .2s,transform .15s;display:flex;flex-direction:column }
+    .catalog-card:hover { box-shadow:0 6px 28px rgba(0,0,0,.35);transform:translateY(-2px) }
+
+    /* Price Breakdown Modal */
+    #pb-overlay { display:none;position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:1000;align-items:center;justify-content:center }
+    #pb-overlay.open { display:flex }
+    #pb-modal { background:var(--card);border:1px solid rgba(245,158,11,.35);border-radius:12px;padding:28px 30px;width:100%;max-width:460px;max-height:90vh;overflow-y:auto;position:relative }
+    .pb-row { display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--border);font-size:12px }
+    .pb-row:last-child { border-bottom:none }
+    .pb-row-label { color:var(--muted);font-family:var(--mono) }
+    .pb-row-val { font-family:var(--mono);font-weight:600 }
+    .pb-total-row { display:flex;align-items:center;justify-content:space-between;padding:12px 0 0;font-size:15px;font-weight:700;border-top:2px solid rgba(245,158,11,.3);margin-top:4px }
+    .pb-milestone { display:flex;gap:0;margin-top:12px }
+    .pb-ms-step { flex:1;text-align:center;padding:6px 4px;font-size:9px;font-family:var(--mono) }
+  </style>
+
+  <!-- Price Breakdown Modal -->
+  <div id="pb-overlay" onclick="closePriceModal(event)">
+    <div id="pb-modal">
+      <button onclick="closePriceModal()" style="position:absolute;top:14px;right:16px;background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer">✕</button>
+      <div style="font-size:11px;color:var(--muted);font-family:var(--mono);margin-bottom:2px" id="pb-lot-id">—</div>
+      <div style="font-size:17px;font-weight:700;margin-bottom:4px" id="pb-origin">—</div>
+      <div style="font-size:10px;color:var(--muted);font-family:var(--mono);margin-bottom:18px" id="pb-meta">—</div>
+
+      <div id="pb-rate-note" style="background:rgba(245,158,11,.06);border:1px solid rgba(245,158,11,.2);border-radius:6px;padding:8px 12px;font-size:10px;font-family:var(--mono);color:var(--amber);margin-bottom:16px">
+        <i class="fa fa-coins"></i> Effective Rate: <strong id="pb-rate">—</strong> SAR/USD
+        (SAMA ${samaReferenceRate.toFixed(4)} + ${exchangeRateBuffer}% buffer)
+      </div>
+
+      <div id="pb-rows">
+        <div class="pb-row">
+          <span class="pb-row-label"><i class="fa fa-box" style="color:var(--blue);width:14px"></i> FOB Price (USD/kg → SAR/kg × qty)</span>
+          <span class="pb-row-val" id="pb-fob" style="color:var(--text)">—</span>
+        </div>
+        <div class="pb-row">
+          <span class="pb-row-label"><i class="fa fa-ship" style="color:var(--blue);width:14px"></i> Logistics (Sea Freight to KSA)</span>
+          <span class="pb-row-val" id="pb-ship" style="color:var(--amber)">—</span>
+        </div>
+        <div class="pb-row">
+          <span class="pb-row-label"><i class="fa fa-landmark" style="color:var(--amber);width:14px"></i> Saudi Customs (5% of CIF)</span>
+          <span class="pb-row-val" id="pb-customs" style="color:var(--amber)">—</span>
+        </div>
+        <div class="pb-row">
+          <span class="pb-row-label"><i class="fa fa-q" style="color:var(--cyan);width:14px"></i> Qabban Platform Fee (1.5% of CIF)</span>
+          <span class="pb-row-val" id="pb-qabban" style="color:var(--cyan)">—</span>
+        </div>
+        <div class="pb-row" style="background:rgba(248,113,113,.04);border-radius:4px;padding:9px 6px;margin:2px 0">
+          <span class="pb-row-label"><i class="fa fa-percent" style="color:var(--red);width:14px"></i> ZATCA VAT (15% — Phase 2 compliant)</span>
+          <span class="pb-row-val" id="pb-vat" style="color:var(--red)">—</span>
+        </div>
+      </div>
+
+      <div class="pb-total-row">
+        <span style="color:var(--muted)">Total Landed Price</span>
+        <span style="color:var(--green)" id="pb-total">—</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:11px;font-family:var(--mono);margin-top:6px">
+        <span style="color:var(--muted)">Per kg landed</span>
+        <span style="color:var(--green);font-weight:700" id="pb-perkg">—</span>
+      </div>
+
+      <!-- Forward milestone breakdown (shown only for FORWARD lots) -->
+      <div id="pb-fwd-section" style="display:none;margin-top:18px">
+        <div style="font-size:10px;font-family:var(--mono);color:var(--amber);margin-bottom:8px;font-weight:700">
+          <i class="fa fa-calendar-check"></i> 4-STEP MILESTONE PAYMENT SCHEDULE
+        </div>
+        <div class="pb-milestone">
+          <div class="pb-ms-step" style="background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.3);border-radius:4px 0 0 4px">
+            <div style="color:var(--amber);font-weight:700">① Deposit</div>
+            <div id="pb-ms1-pct" style="color:var(--muted)">30%</div>
+            <div id="pb-ms1-amt" style="color:var(--text);font-size:10px">—</div>
+          </div>
+          <div class="pb-ms-step" style="background:rgba(167,139,250,.08);border:1px solid rgba(167,139,250,.25);border-top:1px solid rgba(167,139,250,.25);border-bottom:1px solid rgba(167,139,250,.25)">
+            <div style="color:var(--purple);font-weight:700">② Sample</div>
+            <div style="color:var(--muted)">SAS Review</div>
+            <div style="color:var(--muted);font-size:10px">No payment</div>
+          </div>
+          <div class="pb-ms-step" style="background:rgba(96,165,250,.08);border:1px solid rgba(96,165,250,.2);border-top:1px solid rgba(96,165,250,.2);border-bottom:1px solid rgba(96,165,250,.2)">
+            <div style="color:var(--blue);font-weight:700">③ Transit</div>
+            <div id="pb-ms3-pct" style="color:var(--muted)">28%</div>
+            <div id="pb-ms3-amt" style="color:var(--text);font-size:10px">—</div>
+          </div>
+          <div class="pb-ms-step" style="background:rgba(74,222,128,.08);border:1px solid rgba(74,222,128,.25);border-radius:0 4px 4px 0">
+            <div style="color:var(--green);font-weight:700">④ Landing</div>
+            <div id="pb-ms4-pct" style="color:var(--muted)">42%</div>
+            <div id="pb-ms4-amt" style="color:var(--text);font-size:10px">—</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-top:18px;display:flex;gap:8px">
+        <a id="pb-order-link" href="#" class="btn btn-green" style="flex:1;justify-content:center;font-size:11px">
+          <i class="fa fa-file-contract"></i> Place Order
+        </a>
+        <button onclick="closePriceModal()" class="btn btn-blue" style="font-size:11px">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const _lots = ${JSON.stringify(modalData)};
+    function fmt(n){ return n.toLocaleString('en-SA',{minimumFractionDigits:2,maximumFractionDigits:2})+' SAR' }
+    function openPriceModal(id){
+      const d = _lots.find(l=>l.id===id); if(!d) return;
+      document.getElementById('pb-lot-id').textContent = d.id;
+      document.getElementById('pb-origin').textContent = d.origin;
+      document.getElementById('pb-meta').textContent = d.process + ' · SCA ' + d.sca + ' · ' + d.qty.toLocaleString() + ' kg';
+      document.getElementById('pb-rate').textContent = d.rate.toFixed(4);
+      document.getElementById('pb-fob').textContent = fmt(d.fobTot) + ' ('+d.qty.toLocaleString()+'kg × '+d.fobSar.toFixed(2)+')';
+      document.getElementById('pb-ship').textContent = fmt(d.ship);
+      document.getElementById('pb-customs').textContent = fmt(d.customs);
+      document.getElementById('pb-qabban').textContent = fmt(d.qabban);
+      document.getElementById('pb-vat').textContent = fmt(d.vat);
+      document.getElementById('pb-total').textContent = fmt(d.total);
+      document.getElementById('pb-perkg').textContent = d.perKg.toFixed(2) + ' SAR/kg';
+      document.getElementById('pb-order-link').href = '/buyer/contract?lotId='+d.id;
+      const fwdSec = document.getElementById('pb-fwd-section');
+      if(d.isFwd){
+        fwdSec.style.display='block';
+        const dep = d.depositPct, rem = 100-dep;
+        const transit = Math.round(rem*0.4), landing = Math.round(rem*0.6);
+        document.getElementById('pb-ms1-pct').textContent = dep+'%';
+        document.getElementById('pb-ms1-amt').textContent = fmt(Math.round(d.total*dep/100*100)/100);
+        document.getElementById('pb-ms3-pct').textContent = transit+'%';
+        document.getElementById('pb-ms3-amt').textContent = fmt(Math.round(d.total*transit/100*100)/100);
+        document.getElementById('pb-ms4-pct').textContent = landing+'%';
+        document.getElementById('pb-ms4-amt').textContent = fmt(Math.round(d.total*landing/100*100)/100);
+      } else { fwdSec.style.display='none'; }
+      document.getElementById('pb-overlay').classList.add('open');
+      document.body.style.overflow='hidden';
+    }
+    function closePriceModal(e){
+      if(e && e.target !== document.getElementById('pb-overlay') && e.type==='click') return;
+      document.getElementById('pb-overlay').classList.remove('open');
+      document.body.style.overflow='';
+    }
+    document.addEventListener('keydown',e=>{ if(e.key==='Escape') closePriceModal(); });
+  </script>
+
   <div class="pg-title"><i class="fa fa-list" style="color:var(--green)"></i>Global Coffee Catalog</div>
-  <div class="pg-sub">Real-time SAR pricing · Digital Climate Passports · Landed cost · Ship tracking</div>
+  <div class="pg-sub">Multi-vendor · Real-time SAR pricing · Digital Climate Passports · Landed cost</div>
   <div class="alert al-green" style="font-family:var(--mono);font-size:10px">
     <i class="fa fa-coins"></i>
     USD → SAR effective: <strong>${effRate.toFixed(4)}</strong> (SAMA ${samaReferenceRate.toFixed(4)} + ${exchangeRateBuffer}% buffer) ·
     EUR: <strong>${(lastKnownEurToSar*(1+exchangeRateBuffer/100)).toFixed(4)}</strong> ·
-    15% ZATCA VAT included in landed price · 60s Rate Lock on contract
+    15% ZATCA VAT · Click <strong>LANDED PRICE IN SAR</strong> on any card for full breakdown · 60s Rate Lock on contract
   </div>
   ${tabBar}
-  ${lotCards}`
+  <div class="catalog-grid">${lotCards}</div>`
 
   return c.html(exchangeLayout('Global Catalog', 'catalog', content))
 })
@@ -7539,11 +7832,14 @@ app.get('/vendor', (c) => {
   <div class="card">
     <div class="card-hdr"><i class="fa fa-seedling" style="color:var(--green)"></i>Listed Lots</div>
     <table class="tbl">
-      <thead><tr><th>ID</th><th>Vendor</th><th>Origin</th><th>Track</th><th>Weight</th><th>FOB USD</th><th>Harvest</th><th>Climate</th><th>Status</th></tr></thead>
+      <thead><tr><th>ID</th><th>Vendor</th><th>Origin</th><th>Track</th><th>Weight</th><th>FOB USD</th><th>Harvest</th><th>Climate</th><th>SFDA Label</th><th>Status</th></tr></thead>
       <tbody>
         ${globalLots.map(l=>{
           const v  = globalVendors.find(x=>x.id===l.vendorId)
           const cl = l.scaGoldStorage?'<span class="badge b-cyan">SCA Gold</span>':'<span class="badge b-muted">'+l.warehouseHumidity+'% RH</span>'
+          const sfda = l.sfdaLabelUrl
+            ? `<img src="${l.sfdaLabelUrl}" alt="Sack label" style="width:36px;height:24px;object-fit:cover;border-radius:3px;border:1px solid rgba(96,165,250,.3);cursor:pointer" onclick="window.open(this.src,'_blank')" title="SFDA Article 18 label photo"/>`
+            : `<span style="font-size:9px;color:var(--muted);font-family:var(--mono)">—</span>`
           return `<tr>
             <td style="font-family:var(--mono);color:var(--green)">${l.id}</td>
             <td style="font-size:11px">${v?.companyName??l.vendorId}</td>
@@ -7553,6 +7849,7 @@ app.get('/vendor', (c) => {
             <td style="font-family:var(--mono);color:var(--amber)">$${l.fobPriceUsd.toFixed(2)}</td>
             <td style="font-size:10px;color:var(--muted);font-family:var(--mono)">${l.harvestDate??l.harvestYear}</td>
             <td>${cl}</td>
+            <td>${sfda}</td>
             <td><span class="badge ${l.status==='AVAILABLE'?'b-green':'b-muted'}">${l.status}</span></td>
           </tr>`
         }).join('')}
@@ -7670,12 +7967,100 @@ app.get('/vendor/lots/new', (c) => {
         <div class="fg"><label class="fl">Warehouse Humidity (% RH) — IoT</label><input name="warehouseHumidity" type="number" min="0" max="100" step="0.1" class="fi" placeholder="50–60% earns SCA Gold badge"/></div>
         <div class="fg"><label class="fl">Warehouse Temp (°C) — IoT</label><input name="warehouseTemp" type="number" min="0" max="50" step="0.1" class="fi"/></div>
         <div class="fg"><label class="fl">Ship to KSA (est. days)</label><input name="shipmentDays" type="number" min="1" max="90" class="fi" placeholder="21"/></div>
-        <div class="fg" style="grid-column:1/-1"><label class="fl">Flavor Notes (comma-separated)</label><input name="flavorNotes" class="fi" placeholder="e.g. Blueberry, Jasmine, Dark Chocolate"/></div>
+        <div class="fg" style="grid-column:1/-1\"><label class="fl">Flavor Notes (comma-separated)</label><input name="flavorNotes" class="fi" placeholder="e.g. Blueberry, Jasmine, Dark Chocolate"/></div>
       </div>
-      <div style="font-size:10px;color:var(--muted);font-family:var(--mono);margin-bottom:12px">50–60% RH → SCA Gold Storage badge awarded automatically</div>
+      <div style="font-size:10px;color:var(--muted);font-family:var(--mono);margin-bottom:16px">50–60% RH → SCA Gold Storage badge awarded automatically</div>
+
+      <!-- ── SFDA Sack Label Photo Upload (Article 18 Traceability) ── -->
+      <div style="border:1px solid rgba(96,165,250,.3);border-radius:8px;padding:16px 18px;margin-bottom:18px;background:rgba(96,165,250,.04)">
+        <div style="font-size:11px;font-weight:700;color:var(--blue);margin-bottom:6px;letter-spacing:.05em">
+          <i class="fa fa-shield-halved"></i> SFDA AUDIT SHIELD — Sack Label Photo
+        </div>
+        <div style="font-size:10px;color:var(--muted);font-family:var(--mono);margin-bottom:12px;line-height:1.8">
+          Upload a photo of the sack label for <strong style="color:var(--text)">SFDA Article 18</strong> traceability compliance.
+          Accepted formats: JPG, PNG, WEBP (max ~4 MB). This image will be stored as <code style="color:var(--blue)">sfdaLabelUrl</code>
+          and displayed in the catalog and audit reports.
+        </div>
+
+        <!-- Drop-zone / file input -->
+        <div id="sfda-dropzone" onclick="document.getElementById('sfda-file-input').click()"
+             style="border:2px dashed rgba(96,165,250,.4);border-radius:8px;padding:24px;text-align:center;cursor:pointer;background:rgba(255,255,255,.02);transition:border-color .2s"
+             ondragover="event.preventDefault();this.style.borderColor='var(--blue)'"
+             ondragleave="this.style.borderColor='rgba(96,165,250,.4)'"
+             ondrop="handleSfdaDrop(event)">
+          <i class="fa fa-camera" style="font-size:22px;color:var(--blue);display:block;margin-bottom:8px"></i>
+          <div style="font-size:11px;color:var(--muted)">Drop sack label photo here, or <strong style="color:var(--blue)">click to browse</strong></div>
+          <div style="font-size:9px;color:var(--muted);margin-top:4px;font-family:var(--mono)">SFDA Article 18 compliance — Label_Image_URL</div>
+        </div>
+        <input id="sfda-file-input" type="file" accept="image/jpeg,image/png,image/webp" style="display:none" onchange="handleSfdaFile(this.files[0])"/>
+        <input id="sfda-data-input" name="sfdaLabelUrl" type="hidden"/>
+
+        <!-- Preview area -->
+        <div id="sfda-preview-wrap" style="display:none;margin-top:12px">
+          <div style="display:flex;align-items:flex-start;gap:12px">
+            <img id="sfda-preview-img" src="" alt="Label preview"
+                 style="width:120px;height:80px;object-fit:cover;border-radius:6px;border:1px solid rgba(96,165,250,.3)"/>
+            <div style="flex:1">
+              <div style="font-size:10px;color:var(--green);font-family:var(--mono);margin-bottom:4px">
+                <i class="fa fa-check-circle"></i> <strong>Sack label photo loaded</strong>
+              </div>
+              <div id="sfda-file-name" style="font-size:9px;color:var(--muted);font-family:var(--mono)"></div>
+              <div id="sfda-file-size" style="font-size:9px;color:var(--muted);font-family:var(--mono)"></div>
+              <div style="font-size:9px;color:var(--blue);font-family:var(--mono);margin-top:4px">
+                <i class="fa fa-shield-halved"></i> SFDA Article 18 traceability — Label_Image_URL stored
+              </div>
+              <button type="button" onclick="clearSfdaPhoto()" style="margin-top:6px;font-size:9px;color:var(--red);background:none;border:none;cursor:pointer;font-family:var(--mono);padding:0">
+                <i class="fa fa-trash"></i> Remove photo
+              </button>
+            </div>
+          </div>
+        </div>
+        <div id="sfda-err" style="display:none;margin-top:8px;font-size:10px;color:var(--red);font-family:var(--mono)"></div>
+      </div>
+
       <button type="submit" class="btn btn-green" style="width:100%;justify-content:center;padding:11px"><i class="fa fa-plus"></i>LIST LOT ON EXCHANGE</button>
     </form>
-  </div>`
+  </div>
+
+  <script>
+    function handleSfdaDrop(e){
+      e.preventDefault();
+      document.getElementById('sfda-dropzone').style.borderColor='rgba(96,165,250,.4)';
+      const file = e.dataTransfer.files[0];
+      if(file) handleSfdaFile(file);
+    }
+    function handleSfdaFile(file){
+      if(!file) return;
+      const err = document.getElementById('sfda-err');
+      err.style.display='none';
+      if(!['image/jpeg','image/png','image/webp'].includes(file.type)){
+        err.textContent='Error: only JPG, PNG, or WEBP images are accepted.';
+        err.style.display='block'; return;
+      }
+      if(file.size > 4.5*1024*1024){
+        err.textContent='Error: image is too large (max ~4 MB).';
+        err.style.display='block'; return;
+      }
+      const reader = new FileReader();
+      reader.onload = function(ev){
+        const data = ev.target.result;
+        document.getElementById('sfda-data-input').value = data;
+        document.getElementById('sfda-preview-img').src = data;
+        document.getElementById('sfda-file-name').textContent = 'File: ' + file.name;
+        document.getElementById('sfda-file-size').textContent = 'Size: ' + (file.size/1024).toFixed(1) + ' KB';
+        document.getElementById('sfda-preview-wrap').style.display='block';
+        document.getElementById('sfda-dropzone').style.display='none';
+      };
+      reader.readAsDataURL(file);
+    }
+    function clearSfdaPhoto(){
+      document.getElementById('sfda-data-input').value='';
+      document.getElementById('sfda-preview-img').src='';
+      document.getElementById('sfda-preview-wrap').style.display='none';
+      document.getElementById('sfda-dropzone').style.display='block';
+      document.getElementById('sfda-file-input').value='';
+    }
+  </script>`
   return c.html(exchangeLayout('List New Lot', 'vnew', content))
 })
 
@@ -7689,6 +8074,13 @@ app.post('/vendor/lots/new', async (c) => {
     const id  = `GLOT-${String(globalLots.length+1).padStart(3,'0')}`
     const mkt = (b.marketplaceType as string)==='FORWARD'?'FORWARD':'SPOT'
     const notes = String(b.flavorNotes||'').split(',').map(s=>s.trim()).filter(Boolean)
+    // SFDA sack-label photo
+    let sfdaLabel: string|undefined = undefined
+    const rawLabel = b.sfdaLabelUrl as string | undefined
+    if (rawLabel && typeof rawLabel === 'string' && rawLabel.startsWith('data:image/')) {
+      const ok = /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]{1,5500000}$/.test(rawLabel)
+      if (ok) sfdaLabel = rawLabel
+    }
     const newLot: GlobalLot = {
       id, vendorId: String(b.vendorId), origin: String(b.origin||'').trim(),
       variety: String(b.variety||'').trim(), process: (b.process as any)||'Other',
@@ -7706,6 +8098,7 @@ app.post('/vendor/lots/new', async (c) => {
         phase: 'ORIGIN', humidity: isNaN(rh)?55:rh, temp: isNaN(tp)?20:tp,
         note: 'Initial listing climate check',
       }],
+      sfdaLabelUrl: sfdaLabel,
       status: 'AVAILABLE', listedAt: new Date().toISOString(),
       shipmentEstimateDays: parseInt(b.shipmentDays as string)||21, customsHsCode: '0901.11',
     }
@@ -8392,7 +8785,41 @@ app.get('/exchange/climate/:lotId', (c) => {
     </div>
   </div>
 
-  <div style="display:flex;gap:10px;margin-top:6px;flex-wrap:wrap">
+  <!-- SFDA Sack Label Photo -->
+  ${lot.sfdaLabelUrl ? `
+  <div class="card" style="border-color:rgba(96,165,250,.3);margin-top:18px">
+    <div class="card-hdr"><i class="fa fa-shield-halved" style="color:var(--blue)"></i>SFDA Audit Shield — Sack Label Photo
+      <span class="badge b-blue" style="margin-left:8px;font-size:9px">Article 18 Compliant</span>
+    </div>
+    <div style="display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap">
+      <img src="${lot.sfdaLabelUrl}" alt="SFDA Sack Label" onclick="window.open(this.src,'_blank')"
+           style="width:160px;height:110px;object-fit:cover;border-radius:8px;border:1px solid rgba(96,165,250,.3);cursor:pointer"/>
+      <div style="flex:1;font-size:11px;font-family:var(--mono)">
+        <div style="color:var(--green);font-weight:700;margin-bottom:6px"><i class="fa fa-check-circle"></i> Sack label photo on record</div>
+        <div style="color:var(--muted);line-height:1.8">
+          <div>Lot ID: <strong style="color:var(--text)">${lot.id}</strong></div>
+          <div>Origin: <strong style="color:var(--text)">${lot.origin}</strong></div>
+          <div>HS Code: <strong style="color:var(--text)">${lot.customsHsCode??'0901.11'}</strong></div>
+          <div>Stored as: <strong style="color:var(--blue)">sfdaLabelUrl (Label_Image_URL)</strong></div>
+        </div>
+        <div style="margin-top:8px;font-size:10px;color:var(--blue)">
+          <i class="fa fa-info-circle"></i> SFDA Article 18 requires traceability of imported food products.
+          This photo confirms the physical sack label is on record for audit purposes.
+        </div>
+      </div>
+    </div>
+  </div>` : `
+  <div class="card" style="border-color:rgba(245,158,11,.2);margin-top:18px">
+    <div class="card-hdr"><i class="fa fa-shield-halved" style="color:var(--amber)"></i>SFDA Audit Shield — Sack Label Photo
+      <span class="badge b-amber" style="margin-left:8px;font-size:9px">No photo on record</span>
+    </div>
+    <div style="font-size:11px;font-family:var(--mono);color:var(--muted)">
+      No sack label photo has been uploaded for this lot.
+      Vendors can add an SFDA-compliant label photo via <a href="/vendor/lots/new" style="color:var(--blue)">List New Lot</a>.
+    </div>
+  </div>`}
+
+  <div style="display:flex;gap:10px;margin-top:18px;flex-wrap:wrap">
     <a href="/exchange/catalog" class="btn btn-blue">← Global Catalog</a>
     <a href="/buyer/contract?lotId=${lot.id}" class="btn ${lot.marketplaceType==='SPOT'?'btn-green':'btn-amber'}">
       <i class="fa fa-file-contract"></i>${lot.marketplaceType==='SPOT'?'Order Spot':'Pre-order Forward'}
@@ -8597,45 +9024,157 @@ app.get('/exchange/forward/:contractId', (c) => {
     </div>
   </div>` : ''}
 
-  <!-- Milestone Payments -->
+  <!-- 4-Step Milestone Stepper -->
   <div class="card" style="margin-bottom:18px">
-    <div class="card-hdr"><i class="fa fa-calendar-check" style="color:var(--amber)"></i>Milestone Payment Schedule</div>
-    ${fc.milestones.map((ms, i) => {
-      const amt = Math.round(milestoneTotal * ms.pct / 100 * 100) / 100
-      const isPaid = ms.status === 'PAID'
-      const dotBg = isPaid ? 'background:rgba(74,222,128,.3);color:var(--green)' : 'background:rgba(255,255,255,.05);color:var(--muted)'
-      return `
+    <div class="card-hdr"><i class="fa fa-route" style="color:var(--amber)"></i>4-Step Forward Contract Milestone Flow</div>
+
+    <!-- Visual stepper connector -->
+    <div style="display:flex;align-items:flex-start;gap:0;margin-bottom:20px;overflow-x:auto;padding-bottom:4px">
+      <!-- Step 1: Deposit -->
+      <div style="flex:1;min-width:100px;text-align:center;position:relative">
+        <div style="width:40px;height:40px;border-radius:50%;margin:0 auto 8px;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;
+            background:${fc.milestones[0]?.status==='PAID'?'rgba(74,222,128,.25)':'rgba(245,158,11,.2)'};
+            border:2px solid ${fc.milestones[0]?.status==='PAID'?'var(--green)':'var(--amber)'};
+            color:${fc.milestones[0]?.status==='PAID'?'var(--green)':'var(--amber)'}">
+          ${fc.milestones[0]?.status==='PAID'?'✓':'①'}
+        </div>
+        <div style="font-size:10px;font-weight:700;color:${fc.milestones[0]?.status==='PAID'?'var(--green)':'var(--amber)'}">DEPOSIT</div>
+        <div style="font-size:9px;color:var(--muted);font-family:var(--mono);margin-top:2px">${fc.milestones[0]?.pct??fc.depositPct}% on signing</div>
+        <div style="font-size:10px;font-family:var(--mono);margin-top:4px;color:var(--text)">${Math.round(milestoneTotal*(fc.milestones[0]?.pct??fc.depositPct)/100).toLocaleString()} SAR</div>
+        <div style="margin-top:4px"><span class="badge ${fc.milestones[0]?.status==='PAID'?'b-green':'b-amber'}" style="font-size:8px">${fc.milestones[0]?.status??'PENDING'}</span></div>
+        <!-- connector line right -->
+        <div style="position:absolute;top:20px;left:calc(50% + 20px);right:-50%;height:2px;background:${fc.milestones[0]?.status==='PAID'?'rgba(74,222,128,.4)':'rgba(255,255,255,.08)'}"></div>
+      </div>
+
+      <!-- Step 2: Sample Approval -->
+      <div style="flex:1;min-width:100px;text-align:center;position:relative">
+        <div style="width:40px;height:40px;border-radius:50%;margin:0 auto 8px;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;
+            background:${fc.sasStatus==='SAMPLE_APPROVED'?'rgba(74,222,128,.25)':fc.sasStatus==='SAMPLE_REJECTED'?'rgba(248,113,113,.2)':'rgba(167,139,250,.15)'};
+            border:2px solid ${fc.sasStatus==='SAMPLE_APPROVED'?'var(--green)':fc.sasStatus==='SAMPLE_REJECTED'?'var(--red)':'var(--purple)'};
+            color:${fc.sasStatus==='SAMPLE_APPROVED'?'var(--green)':fc.sasStatus==='SAMPLE_REJECTED'?'var(--red)':'var(--purple)'}">
+          ${fc.sasStatus==='SAMPLE_APPROVED'?'✓':fc.sasStatus==='SAMPLE_REJECTED'?'✗':fc.sasStatus==='WAIVED'?'—':'②'}
+        </div>
+        <div style="font-size:10px;font-weight:700;color:var(--purple)">SAMPLE</div>
+        <div style="font-size:9px;color:var(--muted);font-family:var(--mono);margin-top:2px">${fc.sasClause?'SAS clause':'No payment'}</div>
+        <div style="font-size:10px;font-family:var(--mono);margin-top:4px;color:var(--muted)">Q.C. review</div>
+        <div style="margin-top:4px"><span class="badge b-purple" style="font-size:8px">${fc.sasStatus.replace('_',' ')}</span></div>
+        <div style="position:absolute;top:20px;left:calc(50% + 20px);right:-50%;height:2px;background:${fc.sasStatus==='SAMPLE_APPROVED'?'rgba(74,222,128,.4)':'rgba(255,255,255,.08)'}"></div>
+      </div>
+
+      <!-- Step 3: Transit (Pre-shipment payment) -->
+      <div style="flex:1;min-width:100px;text-align:center;position:relative">
+        ${(()=>{
+          const ms = fc.milestones[1]
+          const isPaid = ms?.status === 'PAID'
+          const pct = ms?.pct ?? Math.round((100-fc.depositPct)*0.4)
+          return `
+        <div style="width:40px;height:40px;border-radius:50%;margin:0 auto 8px;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;
+            background:${isPaid?'rgba(74,222,128,.25)':'rgba(96,165,250,.15)'};
+            border:2px solid ${isPaid?'var(--green)':'var(--blue)'};
+            color:${isPaid?'var(--green)':'var(--blue)'}">
+          ${isPaid?'✓':'③'}
+        </div>
+        <div style="font-size:10px;font-weight:700;color:${isPaid?'var(--green)':'var(--blue)'}">TRANSIT</div>
+        <div style="font-size:9px;color:var(--muted);font-family:var(--mono);margin-top:2px">${pct}% pre-ship</div>
+        <div style="font-size:10px;font-family:var(--mono);margin-top:4px;color:var(--text)">${Math.round(milestoneTotal*pct/100).toLocaleString()} SAR</div>
+        <div style="margin-top:4px"><span class="badge ${isPaid?'b-green':'b-blue'}" style="font-size:8px">${ms?.status??'PENDING'}</span></div>`
+        })()}
+        <div style="position:absolute;top:20px;left:calc(50% + 20px);right:-50%;height:2px;background:${fc.milestones[1]?.status==='PAID'?'rgba(74,222,128,.4)':'rgba(255,255,255,.08)'}"></div>
+      </div>
+
+      <!-- Step 4: Landing (final payment) -->
+      <div style="flex:1;min-width:100px;text-align:center">
+        ${(()=>{
+          const ms = fc.milestones[2]
+          const isPaid = ms?.status === 'PAID'
+          const pct = ms?.pct ?? Math.round((100-fc.depositPct)*0.6)
+          return `
+        <div style="width:40px;height:40px;border-radius:50%;margin:0 auto 8px;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;
+            background:${isPaid?'rgba(74,222,128,.3)':'rgba(74,222,128,.1)'};
+            border:2px solid ${isPaid?'var(--green)':'rgba(74,222,128,.4)'};
+            color:${isPaid?'var(--green)':'rgba(74,222,128,.7)'}">
+          ${isPaid?'✓':'④'}
+        </div>
+        <div style="font-size:10px;font-weight:700;color:var(--green)">LANDING</div>
+        <div style="font-size:9px;color:var(--muted);font-family:var(--mono);margin-top:2px">${pct}% on arrival</div>
+        <div style="font-size:10px;font-family:var(--mono);margin-top:4px;color:var(--text)">${Math.round(milestoneTotal*pct/100).toLocaleString()} SAR</div>
+        <div style="margin-top:4px"><span class="badge ${isPaid?'b-green':'b-muted'}" style="font-size:8px">${ms?.status??'PENDING'}</span></div>`
+        })()}
+      </div>
+    </div>
+
+    <!-- Milestone detail rows -->
+    <div style="font-size:10px;font-family:var(--mono);color:var(--muted);margin-bottom:12px;padding:8px 10px;background:rgba(255,255,255,.02);border-radius:5px">
+      <strong style="color:var(--text)">Milestone Detail</strong>
+      ${fc.milestones.map((ms, i) => {
+        const amt = Math.round(milestoneTotal * ms.pct / 100 * 100) / 100
+        const isPaid = ms.status === 'PAID'
+        return `
       <div class="milestone-step" style="${isPaid?'border-color:rgba(74,222,128,.25);background:rgba(74,222,128,.03)':''}">
-        <div class="ms-dot" style="${dotBg}">${isPaid?'✓':(i+1)}</div>
+        <div class="ms-dot" style="${isPaid?'background:rgba(74,222,128,.3);color:var(--green)':'background:rgba(255,255,255,.05);color:var(--muted)'}">${isPaid?'✓':(i+1)}</div>
         <div style="flex:1">
-          <div style="font-size:12px;font-weight:600">${ms.label}</div>
-          <div style="font-size:10px;color:var(--muted);font-family:var(--mono)">Due: ${ms.dueEvent}</div>
+          <div style="font-size:12px;font-weight:600;color:var(--text)">${ms.label}</div>
+          <div style="font-size:10px;color:var(--muted)">Due: ${ms.dueEvent}</div>
         </div>
         <div style="text-align:right">
           <div style="font-family:var(--mono);font-size:13px;color:${isPaid?'var(--green)':'var(--text)'}">${amt.toLocaleString('en-SA',{minimumFractionDigits:2})} SAR</div>
-          <div><span class="badge ${isPaid?'b-green':'b-amber'}">${ms.status}</span></div>
+          <span class="badge ${isPaid?'b-green':'b-amber'}" style="font-size:8px">${ms.status}</span>
         </div>
       </div>`
-    }).join('')}
-    <div style="border-top:1px solid var(--border);padding-top:12px;margin-top:8px;display:flex;justify-content:space-between;font-family:var(--mono);font-size:13px">
+      }).join('')}
+    </div>
+
+    <div style="border-top:1px solid var(--border);padding-top:12px;display:flex;justify-content:space-between;font-family:var(--mono);font-size:13px">
       <span style="color:var(--muted)">Total Contract Value</span>
       <strong style="color:var(--green)">${milestoneTotal.toLocaleString('en-SA',{minimumFractionDigits:2})} SAR</strong>
     </div>
+    <div style="display:flex;justify-content:space-between;font-family:var(--mono);font-size:11px;margin-top:6px">
+      <span style="color:var(--muted)">Paid So Far</span>
+      <strong style="color:var(--green)">${paidTotal.toLocaleString('en-SA',{minimumFractionDigits:2})} SAR (${milestoneTotal>0?Math.round(paidTotal/milestoneTotal*100):0}%)</strong>
+    </div>
   </div>
 
-  <!-- Landed Price Breakdown -->
+  <!-- Landed Price Full Breakdown -->
   ${landed ? `
   <div class="card" style="margin-bottom:18px">
-    <div class="card-hdr"><i class="fa fa-calculator" style="color:var(--amber)"></i>Landed Price Breakdown</div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;font-size:11px;font-family:var(--mono)">
-      <div><span style="color:var(--muted)">FOB USD/kg:</span><br><strong>$${landed.fobPriceUsd.toFixed(2)}</strong></div>
-      <div><span style="color:var(--muted)">Eff. Rate:</span><br><strong>${landed.effectiveRate.toFixed(4)} SAR/USD</strong></div>
-      <div><span style="color:var(--muted)">FOB SAR/kg:</span><br><strong>${landed.fobPriceSar.toFixed(2)} SAR</strong></div>
-      <div><span style="color:var(--muted)">Shipping:</span><br><strong style="color:var(--amber)">${landed.shippingEstimateSar.toLocaleString()} SAR</strong></div>
-      <div><span style="color:var(--muted)">Customs 5%:</span><br><strong style="color:var(--amber)">${landed.customsFeesSar.toLocaleString()} SAR</strong></div>
-      <div><span style="color:var(--muted)">VAT 15%:</span><br><strong style="color:var(--red)">${landed.vatSar.toLocaleString()} SAR</strong></div>
-      <div><span style="color:var(--muted)">Per kg landed:</span><br><strong style="color:var(--green);font-size:14px">${landed.landedPricePerKg.toFixed(2)} SAR/kg</strong></div>
-      <div><span style="color:var(--muted)">Total (${fc.quantityKg}kg):</span><br><strong style="color:var(--green)">${landed.landedPriceSar.toLocaleString('en-SA',{minimumFractionDigits:2})} SAR</strong></div>
+    <div class="card-hdr"><i class="fa fa-receipt" style="color:var(--amber)"></i>Cost Transparency — Full Price Breakdown</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;font-size:11px;font-family:var(--mono);margin-bottom:16px">
+      <div style="padding:10px;background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:6px">
+        <div style="color:var(--muted);font-size:9px">FOB PRICE (USD/kg)</div>
+        <div style="color:var(--text);font-weight:700;margin-top:3px">$${landed.fobPriceUsd.toFixed(2)}</div>
+        <div style="color:var(--muted);font-size:9px">= ${landed.fobPriceSar.toFixed(2)} SAR/kg</div>
+      </div>
+      <div style="padding:10px;background:rgba(245,158,11,.04);border:1px solid rgba(245,158,11,.2);border-radius:6px">
+        <div style="color:var(--muted);font-size:9px">LOGISTICS (SEA FREIGHT)</div>
+        <div style="color:var(--amber);font-weight:700;margin-top:3px">${landed.shippingEstimateSar.toLocaleString()} SAR</div>
+        <div style="color:var(--muted);font-size:9px">Port-to-port to KSA</div>
+      </div>
+      <div style="padding:10px;background:rgba(245,158,11,.04);border:1px solid rgba(245,158,11,.2);border-radius:6px">
+        <div style="color:var(--muted);font-size:9px">SAUDI CUSTOMS (5%)</div>
+        <div style="color:var(--amber);font-weight:700;margin-top:3px">${landed.customsFeesSar.toLocaleString()} SAR</div>
+        <div style="color:var(--muted);font-size:9px">HS 0901.11</div>
+      </div>
+      <div style="padding:10px;background:rgba(34,211,238,.04);border:1px solid rgba(34,211,238,.2);border-radius:6px">
+        <div style="color:var(--muted);font-size:9px">QABBAN PLATFORM FEE (1.5%)</div>
+        <div style="color:var(--cyan);font-weight:700;margin-top:3px">${landed.qabbanFeeSar.toLocaleString()} SAR</div>
+        <div style="color:var(--muted);font-size:9px">Exchange service fee</div>
+      </div>
+      <div style="padding:10px;background:rgba(248,113,113,.04);border:1px solid rgba(248,113,113,.2);border-radius:6px">
+        <div style="color:var(--muted);font-size:9px">ZATCA VAT 15% (Phase 2)</div>
+        <div style="color:var(--red);font-weight:700;margin-top:3px">${landed.vatSar.toLocaleString()} SAR</div>
+        <div style="color:var(--muted);font-size:9px">Applied on CIF + fees</div>
+      </div>
+      <div style="padding:10px;background:rgba(74,222,128,.06);border:1px solid rgba(74,222,128,.3);border-radius:6px">
+        <div style="color:var(--muted);font-size:9px">TOTAL LANDED (${fc.quantityKg}kg)</div>
+        <div style="color:var(--green);font-weight:800;font-size:16px;margin-top:3px">${landed.landedPriceSar.toLocaleString('en-SA',{minimumFractionDigits:2})} SAR</div>
+        <div style="color:var(--green);font-size:9px">${landed.landedPricePerKg.toFixed(2)} SAR/kg</div>
+      </div>
+    </div>
+    <div style="font-size:10px;color:var(--muted);font-family:var(--mono);padding:8px;background:rgba(245,158,11,.04);border-radius:5px;border:1px solid rgba(245,158,11,.15)">
+      <i class="fa fa-coins" style="color:var(--amber)"></i>
+      Effective Rate: <strong style="color:var(--amber)">${landed.effectiveRate.toFixed(4)} SAR/USD</strong>
+      (SAMA ${samaReferenceRate.toFixed(4)} + ${exchangeRateBuffer}% buffer) ·
+      All amounts in SAR incl. 15% ZATCA Phase-2 VAT
     </div>
   </div>` : ''}
 
