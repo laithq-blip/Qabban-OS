@@ -107,6 +107,96 @@ export interface Branch {
 
 export type ClientTier = 'Silver' | 'Gold' | 'Platinum'
 
+// ─── Coffee Miles Loyalty Tiers (Exchange-side) ──────────────────────────────
+// Separate from the internal roastery ClientTier — this governs B2B buyer discounts
+// on the Global Exchange platform.
+//
+//  Bronze  : 0 – 500 kg lifetime      → 0%  base discount
+//  Silver  : 501 – 2000 kg lifetime   → 3%  base discount
+//  Gold    : 2001 kg+  lifetime       → 5%  base discount
+//
+// Volume Bonus (stacks on top):
+//  Orders > 10 bags (1 bag = 60 kg)  → extra 10% discount
+//
+//  Total Discount = Tier Base % + Bulk Quantity %
+//
+export type CoffeeMilesTier = 'Bronze' | 'Silver' | 'Gold'
+
+export interface CoffeeMilesThreshold {
+  tier: CoffeeMilesTier
+  minKg: number
+  maxKg: number | null   // null = unlimited
+  baseDiscountPct: number
+  color: string
+  icon: string
+}
+
+export const COFFEE_MILES_TIERS: CoffeeMilesThreshold[] = [
+  { tier: 'Bronze', minKg: 0,    maxKg: 500,  baseDiscountPct: 0,  color: '#cd7f32', icon: '🥉' },
+  { tier: 'Silver', minKg: 501,  maxKg: 2000, baseDiscountPct: 3,  color: '#94a3b8', icon: '🥈' },
+  { tier: 'Gold',   minKg: 2001, maxKg: null, baseDiscountPct: 5,  color: '#f59e0b', icon: '🥇' },
+]
+
+export const BULK_ORDER_THRESHOLD_BAGS = 10  // bags
+export const BAG_SIZE_KG               = 60  // kg per standard bag
+export const BULK_DISCOUNT_PCT         = 10  // extra 10% for bulk orders > 10 bags
+
+/** Return the Coffee Miles tier for a given lifetime kg purchased */
+export function getCoffeeMilesTier(lifetimeKg: number): CoffeeMilesTier {
+  if (lifetimeKg >= 2001) return 'Gold'
+  if (lifetimeKg >= 501)  return 'Silver'
+  return 'Bronze'
+}
+
+/** Return base discount % for a tier */
+export function getTierBaseDiscount(tier: CoffeeMilesTier): number {
+  return COFFEE_MILES_TIERS.find(t => t.tier === tier)?.baseDiscountPct ?? 0
+}
+
+/** KG to next tier; null if already at Gold */
+export function kgToNextTier(lifetimeKg: number): { nextTier: CoffeeMilesTier | null; kgNeeded: number; progressPct: number } {
+  if (lifetimeKg >= 2001) return { nextTier: null, kgNeeded: 0, progressPct: 100 }
+  if (lifetimeKg >= 501) {
+    const needed = 2001 - lifetimeKg
+    const progressPct = Math.round(((lifetimeKg - 501) / (2001 - 501)) * 100)
+    return { nextTier: 'Gold', kgNeeded: needed, progressPct }
+  }
+  const needed = 501 - lifetimeKg
+  const progressPct = Math.round((lifetimeKg / 501) * 100)
+  return { nextTier: 'Silver', kgNeeded: needed, progressPct }
+}
+
+/**
+ * calcHybridDiscount — Volume + Loyalty stacking logic
+ * Total Discount = Tier Base % + (bulk bonus if bags > 10)
+ * Returns discount fraction (0.0 – 1.0) and a breakdown string.
+ */
+export function calcHybridDiscount(
+  lifetimeKg: number,
+  orderKg: number,
+): {
+  tier: CoffeeMilesTier
+  tierBaseDiscountPct: number
+  bulkDiscountPct: number
+  totalDiscountPct: number
+  totalDiscountFraction: number
+  isBulk: boolean
+  bags: number
+  breakdown: string
+} {
+  const tier              = getCoffeeMilesTier(lifetimeKg)
+  const tierBase          = getTierBaseDiscount(tier)
+  const bags              = orderKg / BAG_SIZE_KG
+  const isBulk            = bags > BULK_ORDER_THRESHOLD_BAGS
+  const bulk              = isBulk ? BULK_DISCOUNT_PCT : 0
+  const total             = tierBase + bulk
+  const frac              = total / 100
+  const breakdown = isBulk
+    ? `${tier} (${tierBase}%) + Bulk >10 bags (${bulk}%) = ${total}% total discount`
+    : `${tier} (${tierBase}%) — ${(BULK_ORDER_THRESHOLD_BAGS - bags).toFixed(1)} more bags to unlock bulk bonus`
+  return { tier, tierBaseDiscountPct: tierBase, bulkDiscountPct: bulk, totalDiscountPct: total, totalDiscountFraction: frac, isBulk, bags, breakdown }
+}
+
 export interface CafeClient {
   id: string
   username: string
@@ -114,6 +204,9 @@ export interface CafeClient {
   name: string
   branch: string    // widened — supports runtime-added branches
   tier: ClientTier
+  // ── Coffee Miles loyalty (Exchange buyer side) ──
+  lifetimeKgPurchased: number   // cumulative kg across all dispatched orders
+  coffeeMilesTier: CoffeeMilesTier
 }
 
 export interface BeanRequest {
@@ -648,9 +741,9 @@ export const branches: Branch[] = [
 
 // ─── Mock cafe clients ──────────────────────────────────────────────────────
 export const cafeClients: CafeClient[] = [
-  { id: 'CAF-001', username: 'alnokhba',    password: 'cafe123', name: 'Al Nokhba Specialty', branch: 'Riyadh', tier: 'Gold'     },
-  { id: 'CAF-002', username: 'qahwa_bahr',  password: 'cafe123', name: 'Qahwa Al Bahr',        branch: 'Jeddah', tier: 'Silver'   },
-  { id: 'CAF-003', username: 'pearl_roast', password: 'cafe123', name: 'Pearl Roast Café',      branch: 'Dammam', tier: 'Platinum' },
+  { id: 'CAF-001', username: 'alnokhba',    password: 'cafe123', name: 'Al Nokhba Specialty', branch: 'Riyadh', tier: 'Gold',     lifetimeKgPurchased: 2400, coffeeMilesTier: 'Gold'   },
+  { id: 'CAF-002', username: 'qahwa_bahr',  password: 'cafe123', name: 'Qahwa Al Bahr',        branch: 'Jeddah', tier: 'Silver',   lifetimeKgPurchased: 850,  coffeeMilesTier: 'Silver' },
+  { id: 'CAF-003', username: 'pearl_roast', password: 'cafe123', name: 'Pearl Roast Café',      branch: 'Dammam', tier: 'Platinum', lifetimeKgPurchased: 120,  coffeeMilesTier: 'Bronze' },
 ]
 
 // ─── In-memory bean requests store ────────────────────────────────────────

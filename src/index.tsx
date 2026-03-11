@@ -58,6 +58,16 @@ import {
   SAUDI_CUSTOMS_RATE,
   ZATCA_VAT_RATE,
   QABBAN_PLATFORM_FEE,
+  // ── Coffee Miles Loyalty ─────────────────────────────────────────
+  COFFEE_MILES_TIERS,
+  BULK_ORDER_THRESHOLD_BAGS,
+  BAG_SIZE_KG,
+  BULK_DISCOUNT_PCT,
+  getCoffeeMilesTier,
+  getTierBaseDiscount,
+  kgToNextTier,
+  calcHybridDiscount,
+  type CoffeeMilesTier,
   type GlobalVendor,
   type GlobalLot,
   type GlobalBuyer,
@@ -1942,6 +1952,8 @@ function cafeLayout(pageTitle: string, activeNav: string, content: string, clien
           <label class="form-label" data-i18n="modal.qty.label">Quantity (kg)</label>
           <input class="form-input" type="number" name="quantity" id="modalQty" min="1" max="500" data-i18n-ph="modal.qty.label" placeholder="Enter kg" required
             oninput="updateOrderTotal()"/>
+          <!-- Hybrid Discount breakdown (Coffee Miles) -->
+          <div id="orderDiscountRow" style="display:none;margin-top:8px;padding:8px 12px;border-radius:var(--radius);background:rgba(245,158,11,0.05);border:1px dashed rgba(245,158,11,0.30)"></div>
           <!-- Order Total live display -->
           <div id="orderTotalRow" style="display:none;margin-top:10px;padding:10px 14px;border-radius:var(--radius);background:rgba(245,158,11,0.07);border:1px solid rgba(245,158,11,0.25)">
             <div style="display:flex;justify-content:space-between;align-items:center">
@@ -1997,15 +2009,50 @@ function cafeLayout(pageTitle: string, activeNav: string, content: string, clien
       var valEl  = document.getElementById('orderTotalValue');
       var fmEl   = document.getElementById('orderTotalFormula');
       var overEl = document.getElementById('orderTotalOverStock');
+      // ── Hybrid discount breakdown row ──
+      var discRow = document.getElementById('orderDiscountRow');
 
       if (!_modalWholesalePrice || isNaN(qty) || qty <= 0) {
         row.style.display = 'none';
+        if (discRow) discRow.style.display = 'none';
         return;
       }
-      var total = qty * _modalWholesalePrice;
+
+      // Compute hybrid discount (tier base + bulk stacking)
+      var hd = (typeof _calcHybridDiscount === 'function') ? _calcHybridDiscount(qty) : { base: 0, bulk: 0, total: 0, isBulk: false };
+      var discountFrac  = hd.total / 100;
+      var priceAfterDisc = _modalWholesalePrice * (1 - discountFrac);
+      var total = qty * priceAfterDisc;
+
       valEl.textContent = total.toLocaleString('en-SA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' SAR';
-      fmEl.textContent  = qty.toFixed(1) + ' kg × ' + _modalWholesalePrice.toFixed(2) + ' SAR/kg';
+
+      // Build formula string
+      var formulaParts = [];
+      formulaParts.push(qty.toFixed(1) + ' kg × ' + priceAfterDisc.toFixed(2) + ' SAR/kg');
+      if (hd.total > 0) formulaParts.push('(' + hd.total + '% discount applied)');
+      fmEl.textContent = formulaParts.join(' ');
+
       row.style.display = 'block';
+
+      // Show/update discount breakdown row
+      if (discRow && hd.total > 0) {
+        var cmCol = (typeof _cmColor !== 'undefined') ? _cmColor : '#f59e0b';
+        var discParts = [];
+        if (hd.base > 0) discParts.push(_cmTier + ' tier: ' + hd.base + '%');
+        if (hd.isBulk) discParts.push('Bulk >' + _BULK_THRESHOLD_BAGS + ' bags: +' + hd.bulk + '%');
+        var discLabel = discParts.length ? discParts.join(' + ') : 'No discount';
+        discRow.innerHTML =
+          '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0">' +
+          '<span style="font-size:9px;color:var(--text-muted);font-family:var(--font-mono);text-transform:uppercase;letter-spacing:.5px">Coffee Miles Discount</span>' +
+          '<span style="font-family:var(--font-mono);font-size:12px;font-weight:700;color:' + cmCol + '">−' + hd.total + '%</span>' +
+          '</div>' +
+          '<div style="font-size:9px;color:var(--text-muted);font-family:var(--font-mono)">' + discLabel + '</div>' +
+          (hd.isBulk ? '<div style="font-size:9px;color:var(--green);font-family:var(--font-mono);margin-top:2px">🎉 Bulk bonus unlocked!</div>' : '');
+        discRow.style.display = 'block';
+      } else if (discRow) {
+        discRow.style.display = 'none';
+      }
+
       if (qty > _modalAvailable) {
         overEl.style.display  = 'block';
         row.style.borderColor = 'rgba(239,68,68,0.35)';
@@ -5556,18 +5603,19 @@ app.get('/admin/finance', (c) => {
       </table>
     </div>
 
-    <!-- Download button -->
-    <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+    <!-- Download button — ZATCA Bulk Shrinkage Report prominent per spec -->
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:4px">
       <a href="/admin/finance/zatca-export"
-         download="qabban-zatca-shrinkage-${rpt.reportDate}.csv"
-         style="display:inline-flex;align-items:center;gap:8px;padding:11px 24px;background:rgba(245,158,11,0.15);border:1px solid rgba(245,158,11,0.50);border-radius:var(--radius);font-family:var(--font-mono);font-size:12px;font-weight:700;color:var(--amber);text-decoration:none;letter-spacing:.5px;transition:background .15s"
-         onmouseover="this.style.background='rgba(245,158,11,0.25)'"
-         onmouseout="this.style.background='rgba(245,158,11,0.15)'">
-        <i class="fa fa-file-arrow-down"></i>
-        &nbsp;DOWNLOAD MONTHLY SHRINKAGE REPORT
+         download="qabban-zatca-bulk-shrinkage-${rpt.reportDate}.csv"
+         style="display:inline-flex;align-items:center;gap:10px;padding:13px 28px;background:linear-gradient(135deg,rgba(245,158,11,0.20),rgba(245,158,11,0.08));border:2px solid rgba(245,158,11,0.60);border-radius:var(--radius);font-family:var(--font-mono);font-size:13px;font-weight:800;color:var(--amber);text-decoration:none;letter-spacing:.7px;box-shadow:0 0 18px rgba(245,158,11,0.12);transition:all .15s"
+         onmouseover="this.style.boxShadow='0 0 32px rgba(245,158,11,0.30)';this.style.borderColor='rgba(245,158,11,0.85)'"
+         onmouseout="this.style.boxShadow='0 0 18px rgba(245,158,11,0.12)';this.style.borderColor='rgba(245,158,11,0.60)'">
+        <i class="fa fa-file-arrow-down" style="font-size:16px"></i>
+        ZATCA BULK SHRINKAGE REPORT
       </a>
-      <div style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted)">
-        CSV · UTF-8 · ${rpt.totalLotsReported} lots · Gold-tier reference pricing · ${rpt.reportDate}
+      <div style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted);line-height:1.6">
+        CSV · UTF-8 · ${rpt.totalLotsReported} lots<br>
+        Rule A/B evaporation reconciliation · Gold-tier pricing · ${rpt.reportDate}
       </div>
     </div>
 
@@ -5581,6 +5629,98 @@ app.get('/admin/finance', (c) => {
     </div>
   </div>`
   })()}
+
+  <!-- ══ COFFEE MILES — LOYALTY ENGINE ══ -->
+  <div class="card" style="margin-bottom:28px;border-color:rgba(245,158,11,0.35)">
+    <div class="card-title" style="margin-bottom:4px">
+      <i class="fa fa-mug-hot" style="color:var(--amber)"></i>
+      <span>Coffee Miles — Loyalty Tier Engine</span>
+      <span style="font-family:var(--font-mono);font-size:9px;padding:2px 7px;border-radius:2px;background:rgba(245,158,11,0.10);color:var(--amber);border:1px solid rgba(245,158,11,0.25);margin-left:8px">HYBRID PRICING</span>
+    </div>
+    <div style="font-size:11px;color:var(--text-muted);margin-bottom:20px;font-family:var(--font-mono)">
+      Lifetime KG purchased → auto-assigns Bronze / Silver / Gold tier · Stacks with Bulk Discount (Orders &gt; ${BULK_ORDER_THRESHOLD_BAGS} bags = +${BULK_DISCOUNT_PCT}%)
+    </div>
+
+    <!-- Tier Reference Cards -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:16px;margin-bottom:24px">
+      ${COFFEE_MILES_TIERS.map(t => `
+      <div style="background:var(--bg-2);border:1px solid ${t.color}44;border-radius:var(--radius);padding:16px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+          <span style="font-size:20px">${t.icon}</span>
+          <span style="font-family:var(--font-mono);font-size:12px;font-weight:800;color:${t.color}">${t.tier.toUpperCase()}</span>
+        </div>
+        <div style="font-size:10px;color:var(--text-muted);font-family:var(--font-mono);margin-bottom:8px">
+          ${t.minKg.toLocaleString()} – ${t.maxKg ? t.maxKg.toLocaleString() : '∞'} kg lifetime
+        </div>
+        <div style="font-size:22px;font-weight:800;color:${t.color};font-family:var(--font-mono)">${t.baseDiscountPct}%</div>
+        <div style="font-size:10px;color:var(--text-muted)">base discount</div>
+        <div style="margin-top:8px;font-size:10px;color:var(--text-muted);font-family:var(--font-mono);padding:6px 8px;background:rgba(255,255,255,0.03);border-radius:4px">
+          + ${BULK_DISCOUNT_PCT}% bulk if &gt;${BULK_ORDER_THRESHOLD_BAGS} bags<br>
+          = <strong style="color:${t.color}">${t.baseDiscountPct + BULK_DISCOUNT_PCT}% max</strong> stacked
+        </div>
+      </div>`).join('')}
+    </div>
+
+    <!-- Buyer Loyalty Ledger -->
+    <div style="font-size:11px;font-weight:700;color:var(--text-pri);margin-bottom:12px;font-family:var(--font-mono);letter-spacing:.5px">
+      <i class="fa fa-users" style="color:var(--amber)"></i> BUYER LOYALTY LEDGER
+    </div>
+    <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:11px">
+        <thead>
+          <tr style="border-bottom:1px solid var(--bg-3)">
+            <th style="text-align:left;padding:8px 10px;font-family:var(--font-mono);font-size:9px;color:var(--text-muted);letter-spacing:.5px">BUYER</th>
+            <th style="text-align:right;padding:8px 10px;font-family:var(--font-mono);font-size:9px;color:var(--text-muted)">LIFETIME KG</th>
+            <th style="text-align:center;padding:8px 10px;font-family:var(--font-mono);font-size:9px;color:var(--text-muted)">TIER</th>
+            <th style="text-align:right;padding:8px 10px;font-family:var(--font-mono);font-size:9px;color:var(--text-muted)">BASE DISC.</th>
+            <th style="text-align:right;padding:8px 10px;font-family:var(--font-mono);font-size:9px;color:var(--text-muted)">MAX STACKED</th>
+            <th style="text-align:left;padding:8px 10px;font-family:var(--font-mono);font-size:9px;color:var(--text-muted)">PROGRESS</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${cafeClients.map(cl => {
+            const cm    = cl.coffeeMilesTier ?? getCoffeeMilesTier(cl.lifetimeKgPurchased ?? 0)
+            const base  = getTierBaseDiscount(cm)
+            const prog  = kgToNextTier(cl.lifetimeKgPurchased ?? 0)
+            const col   = cm === 'Gold' ? '#f59e0b' : cm === 'Silver' ? '#94a3b8' : '#cd7f32'
+            const icon  = cm === 'Gold' ? '🥇' : cm === 'Silver' ? '🥈' : '🥉'
+            const dispatchedKg = beanRequests.filter(r => r.cafeId === cl.id && r.status === 'DISPATCHED').reduce((s,r) => s+r.quantityKg, 0)
+            return `
+          <tr style="border-bottom:1px solid var(--bg-3)">
+            <td style="padding:10px;font-weight:600">${cl.name}<span style="font-family:var(--font-mono);font-size:9px;color:var(--text-muted);margin-left:6px">${cl.id}</span></td>
+            <td style="padding:10px;text-align:right;font-family:var(--font-mono);font-weight:700">${(cl.lifetimeKgPurchased ?? 0).toLocaleString()} kg</td>
+            <td style="padding:10px;text-align:center">
+              <span style="font-size:14px">${icon}</span>
+              <span style="font-family:var(--font-mono);font-size:10px;font-weight:700;color:${col};margin-left:4px">${cm}</span>
+            </td>
+            <td style="padding:10px;text-align:right;font-family:var(--font-mono);font-weight:700;color:${col}">${base}%</td>
+            <td style="padding:10px;text-align:right;font-family:var(--font-mono);font-weight:700;color:var(--green)">${base + BULK_DISCOUNT_PCT}%</td>
+            <td style="padding:10px;min-width:180px">
+              ${prog.nextTier ? `
+              <div style="font-size:9px;color:var(--text-muted);font-family:var(--font-mono);margin-bottom:4px">
+                ${prog.kgNeeded.toLocaleString()} kg to ${prog.nextTier}
+              </div>
+              <div style="height:6px;background:var(--bg-3);border-radius:3px;overflow:hidden">
+                <div style="height:100%;width:${prog.progressPct}%;background:${col};border-radius:3px;transition:width .3s"></div>
+              </div>
+              <div style="font-size:9px;color:var(--text-muted);font-family:var(--font-mono);margin-top:2px">${prog.progressPct}% complete</div>
+              ` : `<span style="font-size:10px;font-family:var(--font-mono);color:#f59e0b">🥇 MAX TIER</span>`}
+            </td>
+          </tr>`
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Stacking formula -->
+    <div style="margin-top:18px;padding:12px 16px;background:rgba(245,158,11,0.04);border:1px dashed rgba(245,158,11,0.25);border-radius:var(--radius);font-size:10px;color:var(--text-muted);font-family:var(--font-mono);line-height:1.8">
+      <strong style="color:var(--amber)">Hybrid Pricing Formula:</strong><br>
+      <strong>Total Discount %</strong> = Tier Base % + Bulk Quantity %<br>
+      <strong>Final Price</strong> = Unit Price × (1 − Total Discount / 100)<br>
+      <strong>Bulk Trigger</strong>: Order &gt; ${BULK_ORDER_THRESHOLD_BAGS} bags (${BAG_SIZE_KG} kg/bag = ${BULK_ORDER_THRESHOLD_BAGS * BAG_SIZE_KG} kg minimum) → +${BULK_DISCOUNT_PCT}% additional<br>
+      Example: <span style="color:var(--amber)">Gold + Bulk = 5% + 10% = 15% total discount applied at checkout</span>
+    </div>
+  </div>
 
   <!-- ══ GLOBAL EXCHANGE — CURRENCY SETTINGS ══ -->
   <div class="card" style="margin-bottom:28px">
@@ -6291,7 +6431,15 @@ app.post('/admin/requests/:id/confirm', (c) => {
 // ── POST /admin/requests/:id/dispatch ──────────────────────────
 app.post('/admin/requests/:id/dispatch', (c) => {
   const req = beanRequests.find(r => r.id === c.req.param('id'))
-  if (req) req.status = 'DISPATCHED'
+  if (req) {
+    req.status = 'DISPATCHED'
+    // ── Coffee Miles: accumulate lifetimeKgPurchased and auto-assign tier ──
+    const cafe = cafeClients.find(cl => cl.id === req.cafeId)
+    if (cafe) {
+      cafe.lifetimeKgPurchased = (cafe.lifetimeKgPurchased ?? 0) + req.quantityKg
+      cafe.coffeeMilesTier     = getCoffeeMilesTier(cafe.lifetimeKgPurchased)
+    }
+  }
   return c.redirect('/admin/requests', 303)
 })
 
@@ -6372,6 +6520,9 @@ app.get('/cafe', (c) => {
   const client      = resolveCafeClient(c.req.query('cid') ?? null)
   const bal         = calcLiveBalance(coffeeLots, beanRequests, branches)
 
+  // ── XE Currency — effective SAR rate for display ──
+  const effRate = lastKnownUsdToSar * (1 + exchangeRateBuffer / 100)
+
   // ── Per-origin live roasted balance (summed across all lots for that origin)
   // Includes ALL non-RECALLED lots (OPTIMAL, MONITOR, CRITICAL) with remaining stock.
   const originBalanceMap = new Map<string, number>()
@@ -6410,10 +6561,112 @@ app.get('/cafe', (c) => {
   const inStockCount  = CATALOG_ORIGINS.filter(c => (originBalanceMap.get(c.key) ?? 0) > 0).length
   const outOfStockCount = CATALOG_ORIGINS.length - inStockCount
 
+  // ── Marketplace Type from Global Exchange lots (SPOT / FORWARD) per origin ──
+  // Shows buyers whether supply comes from spot dispatch or forward harvest contracts.
+  const originMarketplaceMap = new Map<string, 'SPOT' | 'FORWARD' | null>()
+  for (const cat of CATALOG_ORIGINS) {
+    const gLot = globalLots.find(l => l.origin.toLowerCase().includes(cat.key.split(' ')[0].toLowerCase()) && l.status === 'AVAILABLE')
+    originMarketplaceMap.set(cat.key, gLot ? gLot.marketplaceType : null)
+  }
+
+  // ── Coffee Miles loyalty data for this client ──
+  const lifetimeKg   = client.lifetimeKgPurchased ?? 0
+  const cmTier       = client.coffeeMilesTier ?? getCoffeeMilesTier(lifetimeKg)
+  const cmBase       = getTierBaseDiscount(cmTier)
+  const cmProgress   = kgToNextTier(lifetimeKg)
+  const cmColor      = cmTier === 'Gold' ? '#f59e0b' : cmTier === 'Silver' ? '#94a3b8' : '#cd7f32'
+  const cmIcon       = cmTier === 'Gold' ? '🥇' : cmTier === 'Silver' ? '🥈' : '🥉'
+  const cmBgGrad     = cmTier === 'Gold'
+    ? 'linear-gradient(135deg,rgba(245,158,11,0.12),rgba(245,158,11,0.04))'
+    : cmTier === 'Silver'
+    ? 'linear-gradient(135deg,rgba(148,163,184,0.12),rgba(148,163,184,0.04))'
+    : 'linear-gradient(135deg,rgba(205,127,50,0.12),rgba(205,127,50,0.04))'
+  const cmBorderCol  = cmTier === 'Gold' ? 'rgba(245,158,11,0.40)' : cmTier === 'Silver' ? 'rgba(148,163,184,0.35)' : 'rgba(205,127,50,0.35)'
+
   const content = `
   <!-- NOTE: Recall alerts are injected dynamically by checkRecalls() polling every 4s.
        No static server-rendered recall alert here — banners only appear when admin
        has explicitly clicked INITIATE RECALL in the Inventory tab. -->
+
+  <!-- ── XE CURRENCY RATE BAR ── -->
+  <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding:8px 16px;background:rgba(74,222,128,0.05);border:1px solid rgba(74,222,128,0.18);border-radius:var(--radius);margin-bottom:16px;font-family:var(--font-mono);font-size:10px">
+    <span style="color:var(--text-muted)"><i class="fa fa-coins" style="color:#4ade80;margin-right:5px"></i>SAMA/XE RATE</span>
+    <span style="font-weight:700;color:#4ade80">1 USD = ${effRate.toFixed(4)} SAR</span>
+    <span style="color:var(--text-muted)">·</span>
+    <span style="color:var(--text-muted)">SAMA peg: ${lastKnownUsdToSar.toFixed(4)} + ${exchangeRateBuffer.toFixed(1)}% buffer</span>
+    <span style="color:var(--text-muted)">·</span>
+    <span style="color:var(--text-muted)">60-s rate lock · ${exchangeRateUpdatedAt ? `Updated ${exchangeRateUpdatedAt}` : 'Using cached rate'}</span>
+    <a href="/admin/finance" style="color:#4ade80;text-decoration:none;margin-left:auto">⚙ Rate Settings</a>
+  </div>
+
+  <!-- ── LOYALTY TRACKER CARD (above catalog per spec) ── -->
+  <div style="background:${cmBgGrad};border:1px solid ${cmBorderCol};border-radius:12px;padding:20px 24px;margin-bottom:24px">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:16px">
+      <!-- Left: tier badge + stats -->
+      <div style="flex:1;min-width:220px">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
+          <div style="width:52px;height:52px;border-radius:50%;background:${cmColor}22;border:2px solid ${cmColor};display:flex;align-items:center;justify-content:center;font-size:24px;flex-shrink:0">${cmIcon}</div>
+          <div>
+            <div style="font-family:var(--font-mono);font-size:9px;color:var(--text-muted);letter-spacing:.8px">COFFEE MILES — LOYALTY TIER</div>
+            <div style="font-size:22px;font-weight:800;color:${cmColor};line-height:1.1">${cmTier.toUpperCase()}</div>
+            <div style="font-size:10px;color:var(--text-muted);font-family:var(--font-mono);margin-top:2px">${lifetimeKg.toLocaleString()} kg lifetime · ${cmBase}% base discount</div>
+          </div>
+        </div>
+
+        <!-- Progress bar to next tier -->
+        ${cmProgress.nextTier ? `
+        <div style="margin-bottom:6px">
+          <div style="display:flex;justify-content:space-between;font-size:10px;font-family:var(--font-mono);color:var(--text-muted);margin-bottom:6px">
+            <span style="color:${cmColor};font-weight:700">${cmTier}</span>
+            <span>${cmProgress.kgNeeded.toLocaleString()} kg to <strong style="color:${cmProgress.nextTier==='Gold'?'#f59e0b':'#94a3b8'}">${cmProgress.nextTier}</strong></span>
+          </div>
+          <div style="height:8px;background:rgba(255,255,255,0.08);border-radius:4px;overflow:hidden;position:relative">
+            <div style="height:100%;width:${cmProgress.progressPct}%;background:linear-gradient(90deg,${cmColor},${cmColor}99);border-radius:4px;transition:width .6s ease;box-shadow:0 0 8px ${cmColor}66"></div>
+          </div>
+          <div style="font-size:9px;color:var(--text-muted);font-family:var(--font-mono);margin-top:4px;text-align:right">${cmProgress.progressPct}% of the way to ${cmProgress.nextTier}</div>
+        </div>` : `
+        <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:rgba(245,158,11,0.08);border-radius:6px">
+          <i class="fa fa-trophy" style="color:var(--amber)"></i>
+          <span style="font-size:10px;font-family:var(--font-mono);color:var(--amber)">Maximum tier reached — Gold status unlocked!</span>
+        </div>`}
+      </div>
+
+      <!-- Right: discount breakdown -->
+      <div style="display:grid;grid-template-columns:repeat(3,minmax(100px,1fr));gap:10px;flex-shrink:0">
+        <div style="text-align:center;padding:12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:8px">
+          <div style="font-size:9px;color:var(--text-muted);font-family:var(--font-mono);margin-bottom:4px">TIER BASE</div>
+          <div style="font-size:22px;font-weight:800;color:${cmColor}">${cmBase}%</div>
+          <div style="font-size:9px;color:var(--text-muted)">discount</div>
+        </div>
+        <div style="text-align:center;padding:12px;background:rgba(74,222,128,0.05);border:1px solid rgba(74,222,128,0.2);border-radius:8px">
+          <div style="font-size:9px;color:var(--text-muted);font-family:var(--font-mono);margin-bottom:4px">BULK BONUS</div>
+          <div style="font-size:22px;font-weight:800;color:var(--green)">+${BULK_DISCOUNT_PCT}%</div>
+          <div style="font-size:9px;color:var(--text-muted)">&gt;${BULK_ORDER_THRESHOLD_BAGS} bags</div>
+        </div>
+        <div style="text-align:center;padding:12px;background:rgba(74,222,128,0.08);border:2px solid rgba(74,222,128,0.3);border-radius:8px">
+          <div style="font-size:9px;color:var(--text-muted);font-family:var(--font-mono);margin-bottom:4px">MAX STACKED</div>
+          <div style="font-size:22px;font-weight:800;color:var(--green)">${cmBase + BULK_DISCOUNT_PCT}%</div>
+          <div style="font-size:9px;color:var(--green);font-family:var(--font-mono)">combined</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- All tiers mini-reference -->
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px;padding-top:14px;border-top:1px solid rgba(255,255,255,0.06)">
+      ${COFFEE_MILES_TIERS.map(t => {
+        const active = t.tier === cmTier
+        const tCol = t.tier==='Gold'?'#f59e0b':t.tier==='Silver'?'#94a3b8':'#cd7f32'
+        return `<div style="display:flex;align-items:center;gap:6px;padding:5px 10px;border-radius:5px;background:${active?tCol+'22':'rgba(255,255,255,0.03)'};border:1px solid ${active?tCol+'66':'rgba(255,255,255,0.07)'}">
+          <span style="font-size:13px">${t.icon}</span>
+          <span style="font-family:var(--font-mono);font-size:10px;font-weight:${active?'800':'400'};color:${active?tCol:'var(--text-muted)'}">${t.tier}</span>
+          <span style="font-family:var(--font-mono);font-size:9px;color:var(--text-muted)">${t.baseDiscountPct}%</span>
+        </div>`
+      }).join('')}
+      <div style="margin-left:auto;font-size:9px;color:var(--text-muted);font-family:var(--font-mono);align-self:center">
+        Tier applies at checkout automatically
+      </div>
+    </div>
+  </div>
 
   <div class="stat-grid" style="margin-bottom:28px">
     <div class="stat-card">
@@ -6446,19 +6699,23 @@ app.get('/cafe', (c) => {
       const bestLot     = bestLotMap.get(cat.key)
       const isRecalled  = coffeeLots.some(l => l.origin === cat.key && l.status === 'RECALLED')
       const wprice      = wholesalePriceMap.get(cat.key) ?? null
+      const mktType     = originMarketplaceMap.get(cat.key)
 
       return `
     <div class="lot-card${isInStock ? '' : ' oos'}" style="position:relative">
-      <!-- Header row: origin name + stock badge -->
+      <!-- Header row: origin name + stock badge + marketplace type -->
       <div class="lot-header">
         <div>
-          <div class="lot-id">${cat.variety} · ${cat.process}</div>
+          <div class="lot-id">${cat.variety} · ${cat.process}${mktType ? ` · <span style="color:${mktType==='SPOT'?'#4ade80':'#f59e0b'};font-weight:700">${mktType==='SPOT'?'⚡ Spot':'🌱 Forward'}</span>` : ''}</div>
           <div class="lot-origin">${cat.displayName}</div>
         </div>
-        ${isInStock
-          ? `<span class="badge badge-OPTIMAL">IN STOCK</span>`
-          : `<span class="badge badge-OOS">OUT OF STOCK</span>`
-        }
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
+          ${isInStock
+            ? `<span class="badge badge-OPTIMAL">IN STOCK</span>`
+            : `<span class="badge badge-OOS">OUT OF STOCK</span>`
+          }
+          ${mktType === 'FORWARD' ? `<span style="font-family:var(--font-mono);font-size:8px;padding:2px 6px;background:rgba(245,158,11,0.12);color:var(--amber);border:1px solid rgba(245,158,11,0.30);border-radius:2px">30% DEPOSIT</span>` : ''}
+        </div>
       </div>
 
       <!-- Flavor tags from master catalog -->
@@ -6504,7 +6761,7 @@ app.get('/cafe', (c) => {
         client.tier === 'Platinum' ? 'rgba(167,139,250,0.08)' : client.tier === 'Silver' ? 'rgba(148,163,184,0.08)' : 'rgba(245,158,11,0.08)'
       };border:1px solid ${
         client.tier === 'Platinum' ? 'rgba(167,139,250,0.30)' : client.tier === 'Silver' ? 'rgba(148,163,184,0.30)' : 'rgba(245,158,11,0.25)'
-      };border-radius:var(--radius);margin-bottom:12px" id="wp-badge-${cat.key.replace(/\s+/g,'-')}">
+      };border-radius:var(--radius);margin-bottom:4px" id="wp-badge-${cat.key.replace(/\s+/g,'-')}">
         <span style="font-family:var(--font-mono);font-size:9px;color:${
           client.tier === 'Platinum' ? '#a78bfa' : client.tier === 'Silver' ? '#94a3b8' : 'var(--amber)'
         };letter-spacing:.4px;font-weight:700">⬡ ${client.tier.toUpperCase()} PRICE</span>
@@ -6512,7 +6769,8 @@ app.get('/cafe', (c) => {
           client.tier === 'Platinum' ? '#a78bfa' : client.tier === 'Silver' ? '#94a3b8' : 'var(--amber)'
         }" id="wp-val-${cat.key.replace(/\s+/g,'-')}">${wprice.toFixed(2)} <span style="font-size:11px;font-weight:400;color:var(--text-muted)">SAR/kg</span></span>
         <span style="font-family:var(--font-mono);font-size:9px;color:var(--text-muted)">★ ${client.tier}</span>
-      </div>` : `
+      </div>
+      ${cmBase > 0 ? `<div style="font-size:9px;font-family:var(--font-mono);color:${cmColor};margin-bottom:8px;padding:3px 8px;background:${cmColor}11;border-radius:3px;display:inline-block">${cmIcon} ${cmTier} discount: ${cmBase}% base${BULK_DISCOUNT_PCT > 0 ? ` + up to ${BULK_DISCOUNT_PCT}% bulk = ${cmBase+BULK_DISCOUNT_PCT}% max stacked` : ''}</div>` : `<div style="font-size:9px;font-family:var(--font-mono);color:var(--text-muted);margin-bottom:8px;padding:3px 8px">🥉 Bronze tier — no base discount · earn ${501-lifetimeKg > 0 ? (501-lifetimeKg).toLocaleString()+' kg to Silver' : 'Silver tier'}</div>`}` : `
       <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:rgba(113,113,122,0.06);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:12px" id="wp-badge-${cat.key.replace(/\s+/g,'-')}">
         <span style="font-family:var(--font-mono);font-size:9px;color:var(--text-muted);letter-spacing:.4px">PRICE</span>
         <span style="flex:1;font-family:var(--font-mono);font-size:14px;color:var(--text-muted)" id="wp-val-${cat.key.replace(/\s+/g,'-')}">— SAR/kg</span>
@@ -6603,6 +6861,24 @@ app.get('/cafe', (c) => {
 
     // This client's tier (injected from server)
     var _clientTier = '${client.tier}';
+
+    // ── Coffee Miles Hybrid Pricing (injected from server) ──
+    var _lifetimeKg          = ${lifetimeKg};
+    var _cmTier              = '${cmTier}';
+    var _cmBaseDiscountPct   = ${cmBase};
+    var _BULK_THRESHOLD_BAGS = ${BULK_ORDER_THRESHOLD_BAGS};
+    var _BAG_SIZE_KG         = ${BAG_SIZE_KG};
+    var _BULK_DISCOUNT_PCT   = ${BULK_DISCOUNT_PCT};
+    var _cmColor             = '${cmColor}';
+
+    /** Return hybrid discount % for a given order qty */
+    function _calcHybridDiscount(orderKg) {
+      var bags   = orderKg / _BAG_SIZE_KG;
+      var isBulk = bags > _BULK_THRESHOLD_BAGS;
+      var bulk   = isBulk ? _BULK_DISCOUNT_PCT : 0;
+      var total  = _cmBaseDiscountPct + bulk;
+      return { base: _cmBaseDiscountPct, bulk: bulk, total: total, isBulk: isBulk, bags: bags };
+    }
 
     // Maps origin key → { lotId, wp (tier-specific), costPerKg }
     var _originWP = ${JSON.stringify(Object.fromEntries(CATALOG_ORIGINS.map(cat => {
