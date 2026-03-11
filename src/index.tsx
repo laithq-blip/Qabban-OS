@@ -34,6 +34,29 @@ import {
   type PortfolioFinancials,
   type ClientTier,
   type ZatcaShrinkageReport,
+  // ── Global Exchange ──────────────────────────────────────────────
+  globalVendors,
+  globalLots,
+  globalBuyers,
+  globalContracts,
+  zatcaInvoices,
+  calcLandedPrice,
+  generateZatcaInvoice,
+  exchangeRateBuffer,
+  setExchangeRateBuffer,
+  lastKnownUsdToSar,
+  lastKnownEurToSar,
+  exchangeRateUpdatedAt,
+  updateExchangeRates,
+  usdToSarBuffered,
+  shippingEstimateBaseSar,
+  SAUDI_CUSTOMS_RATE,
+  ZATCA_VAT_RATE,
+  type GlobalVendor,
+  type GlobalLot,
+  type GlobalBuyer,
+  type LandedPriceBreakdown,
+  type ZatcaInvoice,
 } from './data'
 
 const app = new Hono()
@@ -1771,11 +1794,12 @@ app.get('/', (c) => {
 
 function adminLayout(pageTitle: string, activeNav: string, content: string, pendingCount = 0) {
   const navLinks = [
-    { href: '/admin',           icon: 'fa-gauge',         label: 'Overview',      id: 'overview',   i18n: 'nav.overview'  },
-    { href: '/admin/inventory', icon: 'fa-boxes-stacked', label: 'Inventory',     id: 'inventory',  i18n: 'nav.inventory' },
-    { href: '/admin/branches',  icon: 'fa-building',      label: 'Branches',      id: 'branches',   i18n: 'nav.branches'  },
-    { href: '/admin/finance',   icon: 'fa-chart-line',    label: 'Finance',       id: 'finance',    i18n: 'fin.nav'       },
-    { href: '/admin/requests',  icon: 'fa-bell',          label: 'Bean Requests', id: 'requests',   i18n: 'nav.requests'  },
+    { href: '/admin',           icon: 'fa-gauge',         label: 'Overview',        id: 'overview',   i18n: 'nav.overview'  },
+    { href: '/admin/inventory', icon: 'fa-boxes-stacked', label: 'Inventory',       id: 'inventory',  i18n: 'nav.inventory' },
+    { href: '/admin/branches',  icon: 'fa-building',      label: 'Branches',        id: 'branches',   i18n: 'nav.branches'  },
+    { href: '/admin/finance',   icon: 'fa-chart-line',    label: 'Finance',         id: 'finance',    i18n: 'fin.nav'       },
+    { href: '/admin/requests',  icon: 'fa-bell',          label: 'Bean Requests',   id: 'requests',   i18n: 'nav.requests'  },
+    { href: '/exchange',        icon: 'fa-globe',         label: 'Global Exchange', id: 'exchange',   i18n: 'nav.exchange'  },
   ]
   const body = `
   <header class="topbar">
@@ -5548,6 +5572,77 @@ app.get('/admin/finance', (c) => {
   </div>`
   })()}
 
+  <!-- ══ GLOBAL EXCHANGE — CURRENCY SETTINGS ══ -->
+  <div class="card" style="margin-bottom:28px">
+    <div class="card-title" style="margin-bottom:4px">
+      <i class="fa fa-coins" style="color:#4ade80"></i>
+      <span>Global Exchange — Currency Settings</span>
+      <span style="font-family:var(--font-mono);font-size:9px;padding:2px 7px;border-radius:2px;background:rgba(74,222,128,0.10);color:#4ade80;border:1px solid rgba(74,222,128,0.25);margin-left:8px">XE CURRENCY API</span>
+    </div>
+    <div style="font-size:11px;color:var(--text-muted);margin-bottom:18px;font-family:var(--font-mono)">
+      Live USD/EUR → SAR rates with volatility buffer · Rates cached and refreshed every 30 min via XE Currency Data API
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px;margin-bottom:16px">
+
+      <!-- USD Rate -->
+      <div style="background:rgba(74,222,128,0.07);border:1px solid rgba(74,222,128,0.2);border-radius:var(--radius);padding:14px">
+        <div style="font-size:10px;color:#4ade80;font-family:var(--font-mono);margin-bottom:6px">1 USD →</div>
+        <div style="font-size:22px;font-weight:700;color:#f8fafc" id="exr-usd-display">${lastKnownUsdToSar.toFixed(4)}</div>
+        <div style="font-size:10px;color:var(--text-muted)">SAR (spot)</div>
+      </div>
+
+      <!-- EUR Rate -->
+      <div style="background:rgba(74,222,128,0.07);border:1px solid rgba(74,222,128,0.2);border-radius:var(--radius);padding:14px">
+        <div style="font-size:10px;color:#4ade80;font-family:var(--font-mono);margin-bottom:6px">1 EUR →</div>
+        <div style="font-size:22px;font-weight:700;color:#f8fafc" id="exr-eur-display">${lastKnownEurToSar.toFixed(4)}</div>
+        <div style="font-size:10px;color:var(--text-muted)">SAR (spot)</div>
+      </div>
+
+      <!-- Buffer Setting -->
+      <div style="background:rgba(74,222,128,0.07);border:1px solid rgba(74,222,128,0.2);border-radius:var(--radius);padding:14px">
+        <div style="font-size:10px;color:#4ade80;font-family:var(--font-mono);margin-bottom:6px">Exchange Rate Buffer</div>
+        <div style="display:flex;align-items:center;gap:6px">
+          <input type="number" id="exrBufferInput" min="0" max="10" step="0.1"
+            value="${exchangeRateBuffer}"
+            style="width:72px;background:rgba(255,255,255,0.06);border:1px solid rgba(74,222,128,0.35);border-radius:4px;padding:6px 8px;color:#f8fafc;font-size:15px;font-family:var(--font-mono)"/>
+          <span style="color:var(--text-muted);font-size:13px">%</span>
+          <span style="font-size:10px;color:var(--text-muted)" id="exr-cur-buf">${exchangeRateBuffer}% saved</span>
+        </div>
+        <div style="font-size:10px;color:var(--text-muted);margin-top:6px">
+          Effective rate: <span id="exr-effective" style="color:#4ade80">${(lastKnownUsdToSar*(1+exchangeRateBuffer/100)).toFixed(4)}</span> SAR/USD
+        </div>
+      </div>
+
+      <!-- Last Updated -->
+      <div style="background:rgba(74,222,128,0.07);border:1px solid rgba(74,222,128,0.2);border-radius:var(--radius);padding:14px">
+        <div style="font-size:10px;color:#4ade80;font-family:var(--font-mono);margin-bottom:6px">Last Rate Refresh</div>
+        <div style="font-size:12px;color:#f8fafc;font-family:var(--font-mono)" id="exr-last-updated">${exchangeRateUpdatedAt || 'Using fallback rates'}</div>
+        <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+          <button onclick="refreshExchangeRates()"
+            style="padding:5px 12px;background:rgba(74,222,128,0.15);border:1px solid rgba(74,222,128,0.4);border-radius:4px;color:#4ade80;font-size:11px;cursor:pointer;font-family:var(--font-mono)">
+            ↻ REFRESH RATES
+          </button>
+          <button onclick="saveExchangeBuffer()"
+            style="padding:5px 12px;background:rgba(74,222,128,0.15);border:1px solid rgba(74,222,128,0.4);border-radius:4px;color:#4ade80;font-size:11px;cursor:pointer;font-family:var(--font-mono)">
+            SAVE BUFFER
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div id="exrSavedMsg" style="display:none;align-items:center;gap:6px;padding:6px 12px;background:rgba(74,222,128,0.12);border:1px solid rgba(74,222,128,0.35);border-radius:4px;font-size:11px;color:#4ade80;font-family:var(--font-mono)">
+      <i class="fa fa-check"></i> Exchange rate buffer saved
+    </div>
+
+    <div style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted);margin-top:12px;padding:10px;background:rgba(74,222,128,0.04);border:1px dashed rgba(74,222,128,0.2);border-radius:4px">
+      <strong style="color:#4ade80">Buffer Logic:</strong>
+      Effective Rate = Spot Rate × (1 + Buffer %) &nbsp;·&nbsp;
+      Applied to all USD/EUR → SAR conversions in the Buyer Portal Landed Price calculator.
+      Recommend: 2% buffer for normal volatility · 5% for geopolitical events.
+    </div>
+  </div>
+
   <script>
   /* ── QFI REACTIVE ENGINE (TIER-BASED) ───────────────────────────────────────
      Recalculates wholesale prices per tier in real-time as the admin types.
@@ -5748,6 +5843,41 @@ app.get('/admin/finance', (c) => {
       }
     });
   }
+
+  /* ── Exchange Rate Buffer (Finance Settings) ── */
+  function saveExchangeBuffer() {
+    var v = parseFloat(document.getElementById('exrBufferInput').value);
+    if (isNaN(v) || v < 0 || v > 10) return;
+    fetch('/api/finance/set-exchange-buffer', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ buffer: v })
+    })
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if (d.ok) {
+        document.getElementById('exr-cur-buf').textContent = d.buffer + '% saved';
+        document.getElementById('exr-effective').textContent = (d.usdRate * (1 + d.buffer/100)).toFixed(4);
+        var msg = document.getElementById('exrSavedMsg');
+        msg.style.display = 'inline-flex';
+        setTimeout(function(){ msg.style.display = 'none'; }, 3000);
+      }
+    });
+  }
+
+  function refreshExchangeRates() {
+    fetch('/api/finance/exchange-rates/refresh', { method: 'POST' })
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if (d.ok) {
+        document.getElementById('exr-usd-display').textContent = d.usd.toFixed(4);
+        document.getElementById('exr-eur-display').textContent = d.eur.toFixed(4);
+        document.getElementById('exr-last-updated').textContent = d.updatedAt;
+        var buf = parseFloat(document.getElementById('exrBufferInput').value) || ${exchangeRateBuffer};
+        document.getElementById('exr-effective').textContent = (d.usd * (1 + buf/100)).toFixed(4);
+      }
+    });
+  }
   </script>`
 
   return c.html(adminLayout('Financial Intelligence', 'finance', content, pendingCount))
@@ -5831,6 +5961,62 @@ app.get('/api/finance/snapshot', (c) => {
       wpPlatinum: fin.costPerKg > 0 ? calcWholesalePrice(fin.costPerKg, tierMargins.Platinum) : null,
     })),
   })
+})
+
+// ── POST /api/finance/set-exchange-buffer ────────────────────────
+app.post('/api/finance/set-exchange-buffer', async (c) => {
+  try {
+    const { buffer } = await c.req.json()
+    const val = parseFloat(buffer)
+    if (isNaN(val) || val < 0 || val > 10) return c.json({ error: 'buffer must be 0–10' }, 400)
+    setExchangeRateBuffer(val)
+    return c.json({ ok: true, buffer: exchangeRateBuffer, usdRate: lastKnownUsdToSar, eurRate: lastKnownEurToSar })
+  } catch {
+    return c.json({ error: 'Invalid request' }, 400)
+  }
+})
+
+// ── POST /api/finance/exchange-rates/refresh ─────────────────────
+// Fetches live USD/EUR→SAR rates from the XE Currency Data API.
+// Falls back to cached rates if the API key is not configured.
+app.post('/api/finance/exchange-rates/refresh', async (c) => {
+  try {
+    // XE Currency Data API — set XE_API_ID + XE_API_KEY as Cloudflare secrets
+    const xeId  = (c.env as any)?.XE_API_ID  as string | undefined
+    const xeKey = (c.env as any)?.XE_API_KEY as string | undefined
+
+    if (xeId && xeKey) {
+      const credentials = btoa(`${xeId}:${xeKey}`)
+      const resp = await fetch(
+        'https://xecdapi.xe.com/v1/convert_from.json/?from=USD&to=SAR,EUR&amount=1',
+        { headers: { Authorization: `Basic ${credentials}` } }
+      )
+      if (resp.ok) {
+        const data = await resp.json() as any
+        const usd = data?.to?.find((t: any) => t.quotecurrency === 'SAR')?.mid ?? lastKnownUsdToSar
+        const eurMid = data?.to?.find((t: any) => t.quotecurrency === 'EUR')?.mid
+        // Convert EUR: 1 EUR = (1/eurMid) USD * usd SAR
+        const eur = eurMid ? Math.round((1 / eurMid) * usd * 10000) / 10000 : lastKnownEurToSar
+        const updatedAt = new Date().toISOString()
+        updateExchangeRates(usd, eur, updatedAt)
+        return c.json({ ok: true, usd, eur, updatedAt, source: 'xe' })
+      }
+    }
+
+    // Fallback: use current cached rates (no change)
+    const updatedAt = new Date().toISOString()
+    updateExchangeRates(lastKnownUsdToSar, lastKnownEurToSar, updatedAt)
+    return c.json({
+      ok: true,
+      usd: lastKnownUsdToSar,
+      eur: lastKnownEurToSar,
+      updatedAt,
+      source: 'fallback',
+      note: 'XE_API_ID / XE_API_KEY not configured — using cached rates',
+    })
+  } catch {
+    return c.json({ error: 'Rate refresh failed' }, 500)
+  }
 })
 
 // ── GET /admin/finance/zatca-export ─────────────────────────────────────────
@@ -6877,6 +7063,1013 @@ app.post('/api/sponge/simulate', async (c) => {
     result:      sc,
     examples,
   })
+})
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  QABBAN GLOBAL EXCHANGE ROUTES
+// ═════════════════════════════════════════════════════════════════════════════
+
+// ─── Shared Exchange Layout ───────────────────────────────────────────────────
+function exchangeLayout(pageTitle: string, activeNav: string, content: string) {
+  const navLinks = [
+    { href: '/exchange',         icon: 'fa-globe',          label: 'Exchange Hub',   id: 'hub'     },
+    { href: '/exchange/catalog', icon: 'fa-list',           label: 'Global Catalog', id: 'catalog' },
+    { href: '/vendor',           icon: 'fa-store',          label: 'Vendor Portal',  id: 'vendor'  },
+    { href: '/buyer',            icon: 'fa-handshake',      label: 'Buyer Portal',   id: 'buyer'   },
+    { href: '/admin',            icon: 'fa-arrow-left',     label: 'Back to Admin',  id: 'admin'   },
+  ]
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>${pageTitle} — Qabban Global Exchange</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css"/>
+  <style>
+    :root{--bg:#0f0f11;--card:#18181b;--border:rgba(255,255,255,0.08);--text:#f8fafc;--text-muted:#94a3b8;
+          --amber:#f59e0b;--green:#4ade80;--red:#f87171;--blue:#60a5fa;--purple:#a78bfa;
+          --radius:8px;--font-mono:'JetBrains Mono',ui-monospace,monospace}
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{background:var(--bg);color:var(--text);font-family:system-ui,sans-serif;min-height:100vh;display:flex}
+    .sidebar{width:220px;min-height:100vh;background:rgba(0,0,0,0.35);border-right:1px solid var(--border);
+             display:flex;flex-direction:column;padding:20px 0;flex-shrink:0}
+    .sidebar-brand{padding:0 20px 20px;border-bottom:1px solid var(--border);margin-bottom:16px}
+    .sidebar-brand .brand-title{font-size:11px;font-family:var(--font-mono);color:var(--green);letter-spacing:0.1em;font-weight:700}
+    .sidebar-brand .brand-sub{font-size:10px;color:var(--text-muted);margin-top:2px}
+    .nav-link{display:flex;align-items:center;gap:10px;padding:9px 20px;color:var(--text-muted);text-decoration:none;
+              font-size:13px;border-left:2px solid transparent;transition:all .15s}
+    .nav-link:hover,.nav-link.active{color:var(--green);border-left-color:var(--green);background:rgba(74,222,128,0.06)}
+    .nav-link i{width:16px;text-align:center;font-size:12px}
+    .main{flex:1;padding:28px;overflow-x:hidden;max-width:calc(100vw - 220px)}
+    .page-title{font-size:22px;font-weight:700;color:var(--text);margin-bottom:4px}
+    .page-sub{font-size:12px;color:var(--text-muted);margin-bottom:24px;font-family:var(--font-mono)}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:20px;margin-bottom:20px}
+    .card-title{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600;margin-bottom:16px}
+    .stat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:16px;margin-bottom:28px}
+    .stat-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px}
+    .stat-label{font-size:10px;color:var(--text-muted);font-family:var(--font-mono);text-transform:uppercase;margin-bottom:4px}
+    .stat-value{font-size:24px;font-weight:700}
+    .stat-unit{font-size:10px;color:var(--text-muted)}
+    .badge{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:20px;font-size:10px;font-family:var(--font-mono);font-weight:600}
+    .badge-gold{background:rgba(74,222,128,0.15);color:var(--green);border:1px solid rgba(74,222,128,0.35)}
+    .badge-pending{background:rgba(245,158,11,0.15);color:var(--amber);border:1px solid rgba(245,158,11,0.35)}
+    .badge-verified{background:rgba(96,165,250,0.15);color:var(--blue);border:1px solid rgba(96,165,250,0.35)}
+    .badge-available{background:rgba(74,222,128,0.12);color:var(--green);border:1px solid rgba(74,222,128,0.3)}
+    .badge-contracted{background:rgba(167,139,250,0.12);color:var(--purple);border:1px solid rgba(167,139,250,0.3)}
+    .table{width:100%;border-collapse:collapse;font-size:12px}
+    .table th{text-align:left;padding:8px 10px;font-size:10px;color:var(--text-muted);font-family:var(--font-mono);
+              text-transform:uppercase;border-bottom:1px solid var(--border)}
+    .table td{padding:10px;border-bottom:1px solid rgba(255,255,255,0.04);vertical-align:middle}
+    .table tr:hover td{background:rgba(255,255,255,0.02)}
+    .btn{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:5px;
+         font-size:12px;font-family:var(--font-mono);font-weight:600;cursor:pointer;border:none;text-decoration:none;transition:all .15s}
+    .btn-green{background:rgba(74,222,128,0.15);color:var(--green);border:1px solid rgba(74,222,128,0.4)}
+    .btn-green:hover{background:rgba(74,222,128,0.25)}
+    .btn-amber{background:rgba(245,158,11,0.15);color:var(--amber);border:1px solid rgba(245,158,11,0.4)}
+    .btn-amber:hover{background:rgba(245,158,11,0.25)}
+    .btn-blue{background:rgba(96,165,250,0.15);color:var(--blue);border:1px solid rgba(96,165,250,0.4)}
+    .btn-blue:hover{background:rgba(96,165,250,0.25)}
+    .form-group{margin-bottom:16px}
+    .form-label{font-size:11px;color:var(--text-muted);font-family:var(--font-mono);margin-bottom:5px;display:block}
+    .form-input{width:100%;background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:5px;
+                padding:9px 12px;color:var(--text);font-size:13px;outline:none}
+    .form-input:focus{border-color:rgba(74,222,128,0.5);background:rgba(74,222,128,0.04)}
+    .form-select{width:100%;background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:5px;
+                 padding:9px 12px;color:var(--text);font-size:13px;outline:none;cursor:pointer}
+    .alert{padding:12px 16px;border-radius:var(--radius);margin-bottom:16px;font-size:13px;display:flex;align-items:center;gap:10px}
+    .alert-green{background:rgba(74,222,128,0.08);border:1px solid rgba(74,222,128,0.25);color:var(--green)}
+    .alert-amber{background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.25);color:var(--amber)}
+    @media(max-width:700px){.sidebar{display:none}.main{max-width:100vw;padding:16px}}
+  </style>
+</head>
+<body>
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <div class="brand-title">⬡ GLOBAL EXCHANGE</div>
+      <div class="brand-sub">Qabban B2B Trade Platform</div>
+    </div>
+    ${navLinks.map(n => `
+    <a href="${n.href}" class="nav-link${activeNav === n.id ? ' active' : ''}">
+      <i class="fa ${n.icon}"></i>${n.label}
+    </a>`).join('')}
+  </aside>
+  <main class="main">${content}</main>
+</body>
+</html>`
+}
+
+// ── GET /exchange — Exchange Hub dashboard ────────────────────────────────────
+app.get('/exchange', (c) => {
+  const availLots      = globalLots.filter(l => l.status === 'AVAILABLE').length
+  const verifiedVendors = globalVendors.filter(v => v.status === 'VERIFIED').length
+  const activeBuyers   = globalBuyers.filter(b => b.status === 'ACTIVE').length
+  const activeContracts = globalContracts.filter(con => con.status === 'ACTIVE').length
+  const scaBadgedLots  = globalLots.filter(l => l.scaGoldStorage).length
+  const totalVolumeKg  = globalLots.filter(l => l.status === 'AVAILABLE').reduce((s, l) => s + l.greenWeightKg, 0)
+  const effRate        = lastKnownUsdToSar * (1 + exchangeRateBuffer / 100)
+
+  const content = `
+  <div class="page-title"><i class="fa fa-globe" style="color:var(--green);margin-right:8px"></i>Qabban Global Exchange</div>
+  <div class="page-sub">Multi-vendor B2B coffee trade · Real-time SAR pricing · ZATCA Phase-2 compliant</div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-label">Available Lots</div>
+      <div class="stat-value" style="color:var(--green)">${availLots}</div>
+      <div class="stat-unit">${totalVolumeKg.toLocaleString('en-SA')} kg total volume</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Verified Vendors</div>
+      <div class="stat-value" style="color:var(--blue)">${verifiedVendors}</div>
+      <div class="stat-unit">${globalVendors.length} registered total</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Active Buyers</div>
+      <div class="stat-value" style="color:var(--amber)">${activeBuyers}</div>
+      <div class="stat-unit">Saudi roasteries</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Active Contracts</div>
+      <div class="stat-value" style="color:var(--purple)">${activeContracts}</div>
+      <div class="stat-unit">${zatcaInvoices.length} invoices issued</div>
+    </div>
+    <div class="stat-card" style="border-color:rgba(74,222,128,0.3)">
+      <div class="stat-label">SCA Gold Storage</div>
+      <div class="stat-value" style="color:var(--green)">${scaBadgedLots}</div>
+      <div class="stat-unit">Lots with climate passport</div>
+    </div>
+    <div class="stat-card" style="border-color:rgba(74,222,128,0.3)">
+      <div class="stat-label">USD → SAR (effective)</div>
+      <div class="stat-value" style="color:var(--green);font-size:18px">${effRate.toFixed(4)}</div>
+      <div class="stat-unit">spot ${lastKnownUsdToSar.toFixed(4)} + ${exchangeRateBuffer}% buffer</div>
+    </div>
+  </div>
+
+  <!-- Featured Lots -->
+  <div class="card">
+    <div class="card-title">
+      <i class="fa fa-star" style="color:var(--amber)"></i>
+      Featured Global Lots
+      <a href="/exchange/catalog" class="btn btn-green" style="margin-left:auto;font-size:11px">View Full Catalog →</a>
+    </div>
+    <table class="table">
+      <thead><tr>
+        <th>Lot ID</th><th>Origin</th><th>Vendor</th><th>Process</th><th>Weight</th>
+        <th>FOB (USD)</th><th>Landed SAR/kg</th><th>Climate</th><th>Grade</th><th>Status</th>
+      </tr></thead>
+      <tbody>
+        ${globalLots.slice(0, 5).map(lot => {
+          const vendor  = globalVendors.find(v => v.id === lot.vendorId)
+          const landed  = calcLandedPrice(lot)
+          const scaBadge = lot.scaGoldStorage
+            ? `<span class="badge badge-gold"><i class="fa fa-certificate"></i> SCA Gold</span>`
+            : `<span style="font-size:10px;color:var(--text-muted)">RH ${lot.warehouseHumidity ?? '—'}%</span>`
+          const statusBadge = lot.status === 'AVAILABLE'
+            ? `<span class="badge badge-available">AVAILABLE</span>`
+            : `<span class="badge badge-contracted">${lot.status}</span>`
+          return `<tr>
+            <td style="font-family:var(--font-mono);color:var(--green)">${lot.id}</td>
+            <td>${lot.origin}</td>
+            <td style="font-size:11px;color:var(--text-muted)">${vendor?.companyName ?? lot.vendorId}</td>
+            <td><span style="font-size:10px;background:rgba(255,255,255,0.06);padding:2px 6px;border-radius:3px">${lot.process}</span></td>
+            <td style="font-family:var(--font-mono)">${lot.greenWeightKg.toLocaleString()} kg</td>
+            <td style="font-family:var(--font-mono);color:var(--amber)">$${lot.fobPriceUsd.toFixed(2)}/kg</td>
+            <td style="font-family:var(--font-mono);color:var(--green)">${landed.landedPricePerKg.toFixed(2)} SAR/kg</td>
+            <td>${scaBadge}</td>
+            <td>
+              <div style="display:flex;align-items:center;gap:4px">
+                <div style="height:4px;width:${lot.gradeScore - 60}px;max-width:40px;background:var(--green);border-radius:2px"></div>
+                <span style="font-family:var(--font-mono);font-size:11px;color:var(--green)">${lot.gradeScore}</span>
+              </div>
+            </td>
+            <td>${statusBadge}</td>
+          </tr>`
+        }).join('')}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Quick Links -->
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px">
+    <a href="/vendor" style="text-decoration:none">
+      <div class="card" style="border-color:rgba(96,165,250,0.3);cursor:pointer;transition:all .15s" onmouseover="this.style.borderColor='rgba(96,165,250,0.6)'" onmouseout="this.style.borderColor='rgba(96,165,250,0.3)'">
+        <div style="font-size:28px;margin-bottom:8px">🌱</div>
+        <div style="font-weight:600;margin-bottom:4px">Vendor Portal</div>
+        <div style="font-size:11px;color:var(--text-muted)">Register lots, upload processing data, manage FOB pricing</div>
+      </div>
+    </a>
+    <a href="/buyer" style="text-decoration:none">
+      <div class="card" style="border-color:rgba(245,158,11,0.3);cursor:pointer;transition:all .15s" onmouseover="this.style.borderColor='rgba(245,158,11,0.6)'" onmouseout="this.style.borderColor='rgba(245,158,11,0.3)'">
+        <div style="font-size:28px;margin-bottom:8px">🏭</div>
+        <div style="font-weight:600;margin-bottom:4px">Buyer Portal</div>
+        <div style="font-size:11px;color:var(--text-muted)">Browse catalog, calculate landed prices, contract lots</div>
+      </div>
+    </a>
+    <a href="/exchange/catalog" style="text-decoration:none">
+      <div class="card" style="border-color:rgba(74,222,128,0.3);cursor:pointer;transition:all .15s" onmouseover="this.style.borderColor='rgba(74,222,128,0.6)'" onmouseout="this.style.borderColor='rgba(74,222,128,0.3)'">
+        <div style="font-size:28px;margin-bottom:8px">📋</div>
+        <div style="font-weight:600;margin-bottom:4px">Global Catalog</div>
+        <div style="font-size:11px;color:var(--text-muted)">Full catalog with Climate Passports and landed pricing</div>
+      </div>
+    </a>
+  </div>`
+
+  return c.html(exchangeLayout('Exchange Hub', 'hub', content))
+})
+
+// ── GET /exchange/catalog — Global Catalog with Landed Prices ────────────────
+app.get('/exchange/catalog', (c) => {
+  const effRate = lastKnownUsdToSar * (1 + exchangeRateBuffer / 100)
+
+  const content = `
+  <div class="page-title"><i class="fa fa-list" style="color:var(--green);margin-right:8px"></i>Global Coffee Catalog</div>
+  <div class="page-sub">Real-time SAR pricing · Digital Climate Passports · Landed cost calculator</div>
+
+  <!-- Currency Banner -->
+  <div class="alert alert-green" style="margin-bottom:24px;font-family:var(--font-mono);font-size:11px">
+    <i class="fa fa-coins"></i>
+    USD → SAR effective rate: <strong>${effRate.toFixed(4)}</strong>
+    &nbsp;(spot ${lastKnownUsdToSar.toFixed(4)} + ${exchangeRateBuffer}% buffer)
+    &nbsp;·&nbsp; EUR → SAR: <strong>${(lastKnownEurToSar*(1+exchangeRateBuffer/100)).toFixed(4)}</strong>
+    &nbsp;·&nbsp; 15% ZATCA VAT included in Landed Price
+  </div>
+
+  ${globalLots.map(lot => {
+    const vendor  = globalVendors.find(v => v.id === lot.vendorId)
+    const landed  = calcLandedPrice(lot)
+    const scaVerified = lot.scaGoldStorage
+
+    // Climate Passport section
+    const passport = `
+    <div style="margin-top:14px;padding:12px;background:${scaVerified ? 'rgba(74,222,128,0.06)' : 'rgba(255,255,255,0.03)'};border:1px solid ${scaVerified ? 'rgba(74,222,128,0.3)' : 'var(--border)'};border-radius:6px">
+      <div style="font-size:10px;font-family:var(--font-mono);color:${scaVerified ? 'var(--green)' : 'var(--text-muted)'};margin-bottom:6px">
+        <i class="fa fa-shield${scaVerified ? '-check' : ''}"></i>
+        DIGITAL CLIMATE PASSPORT — ${scaVerified ? '✓ SCA GOLD STORAGE VERIFIED' : 'UNVERIFIED'}
+      </div>
+      <div style="display:flex;gap:20px;flex-wrap:wrap;font-size:11px;font-family:var(--font-mono)">
+        <span>RH: <strong style="color:${lot.warehouseHumidity && lot.warehouseHumidity >= 50 && lot.warehouseHumidity <= 60 ? 'var(--green)' : 'var(--amber)'}">${lot.warehouseHumidity ?? '—'}%</strong> ${lot.warehouseHumidity ? (lot.warehouseHumidity >= 50 && lot.warehouseHumidity <= 60 ? '✓ Optimal' : '⚠ Out of range') : ''}</span>
+        ${scaVerified ? `<span>Certified: <strong style="color:var(--green)">${lot.climateCertifiedAt?.split('T')[0] ?? '—'}</strong></span>` : ''}
+        <span>Threshold: <strong>50–60% RH</strong> (SCA Gold Storage standard)</span>
+        <span>IoT Source: <strong>Producer Warehouse Sensors</strong></span>
+      </div>
+    </div>`
+
+    // Landed Price Breakdown
+    const landedBreakdown = `
+    <div style="margin-top:12px;padding:12px;background:rgba(245,158,11,0.05);border:1px solid rgba(245,158,11,0.2);border-radius:6px">
+      <div style="font-size:10px;font-family:var(--font-mono);color:var(--amber);margin-bottom:8px"><i class="fa fa-calculator"></i> LANDED PRICE CALCULATOR — ${lot.greenWeightKg.toLocaleString()} kg lot</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px;font-size:11px;font-family:var(--font-mono)">
+        <div><span style="color:var(--text-muted)">FOB Price:</span><br><strong>$${landed.fobPriceUsd.toFixed(2)}/kg → ${landed.fobPriceSar.toFixed(2)} SAR/kg</strong></div>
+        <div><span style="color:var(--text-muted)">Shipping (est.):</span><br><strong style="color:var(--amber)">${landed.shippingEstimateSar.toLocaleString('en-SA')} SAR</strong></div>
+        <div><span style="color:var(--text-muted)">Customs (5% CIF):</span><br><strong style="color:var(--amber)">${landed.customsFeesSar.toLocaleString('en-SA')} SAR</strong></div>
+        <div><span style="color:var(--text-muted)">ZATCA VAT (15%):</span><br><strong style="color:var(--red)">${landed.vatSar.toLocaleString('en-SA')} SAR</strong></div>
+        <div><span style="color:var(--text-muted)">Landed Total:</span><br><strong style="color:var(--green);font-size:14px">${landed.landedPriceSar.toLocaleString('en-SA')} SAR</strong></div>
+        <div><span style="color:var(--text-muted)">Per Kg:</span><br><strong style="color:var(--green);font-size:16px">${landed.landedPricePerKg.toFixed(2)} SAR/kg</strong></div>
+      </div>
+    </div>`
+
+    return `
+    <div class="card" style="border-color:${scaVerified ? 'rgba(74,222,128,0.3)' : 'var(--border)'}">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:12px">
+        <div>
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
+            <span style="font-family:var(--font-mono);font-size:11px;color:var(--text-muted)">${lot.id}</span>
+            ${scaVerified ? `<span class="badge badge-gold"><i class="fa fa-certificate"></i> SCA GOLD STORAGE</span>` : ''}
+            <span class="badge ${lot.status === 'AVAILABLE' ? 'badge-available' : 'badge-contracted'}">${lot.status}</span>
+          </div>
+          <div style="font-size:18px;font-weight:700">${lot.origin}</div>
+          <div style="font-size:12px;color:var(--text-muted);margin-top:2px">
+            ${lot.variety} · ${lot.process} · ${lot.harvestYear} harvest · ${vendor?.companyName ?? ''} (${vendor?.country ?? ''})
+          </div>
+          <div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px">
+            ${lot.flavorNotes.map(n => `<span style="font-size:10px;background:rgba(255,255,255,0.06);padding:2px 6px;border-radius:3px;color:var(--text-muted)">${n}</span>`).join('')}
+          </div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:10px;color:var(--text-muted);font-family:var(--font-mono)">SCA Grade</div>
+          <div style="font-size:28px;font-weight:700;color:var(--green)">${lot.gradeScore}</div>
+          <div style="font-size:10px;color:var(--text-muted)">${lot.greenWeightKg.toLocaleString()} kg available</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:4px"><i class="fa fa-ship"></i> ~${lot.shipmentEstimateDays ?? '?'} days to KSA</div>
+          <a href="/buyer/contract?lotId=${lot.id}" class="btn btn-amber" style="margin-top:8px;font-size:11px">
+            <i class="fa fa-file-contract"></i> Contract Lot
+          </a>
+        </div>
+      </div>
+      ${passport}
+      ${landedBreakdown}
+    </div>`
+  }).join('')}`
+
+  return c.html(exchangeLayout('Global Catalog', 'catalog', content))
+})
+
+// ── GET /vendor — Vendor Portal ───────────────────────────────────────────────
+app.get('/vendor', (c) => {
+  const content = `
+  <div class="page-title"><i class="fa fa-store" style="color:var(--blue);margin-right:8px"></i>Vendor Portal</div>
+  <div class="page-sub">Register as a global coffee producer · List lots · Manage Climate Passport data</div>
+
+  <div style="display:flex;gap:12px;margin-bottom:24px;flex-wrap:wrap">
+    <a href="/vendor/register" class="btn btn-green"><i class="fa fa-plus"></i> Register as Vendor</a>
+    <a href="/vendor/lots/new" class="btn btn-blue"><i class="fa fa-seedling"></i> List a New Lot</a>
+  </div>
+
+  <!-- Registered Vendors -->
+  <div class="card">
+    <div class="card-title"><i class="fa fa-building" style="color:var(--blue)"></i> Registered Vendors</div>
+    <table class="table">
+      <thead><tr>
+        <th>Vendor ID</th><th>Company</th><th>Country / Region</th><th>Contact</th><th>Warehouse RH</th><th>Status</th><th>Registered</th>
+      </tr></thead>
+      <tbody>
+        ${globalVendors.map(v => {
+          const rhColor = v.warehouseHumidity && v.warehouseHumidity >= 50 && v.warehouseHumidity <= 60 ? 'var(--green)' : 'var(--amber)'
+          const statusBadge = v.status === 'VERIFIED'
+            ? `<span class="badge badge-verified"><i class="fa fa-check"></i> VERIFIED</span>`
+            : v.status === 'PENDING_REVIEW'
+            ? `<span class="badge badge-pending">PENDING</span>`
+            : `<span class="badge" style="background:rgba(248,113,113,0.1);color:var(--red);border:1px solid rgba(248,113,113,0.3)">SUSPENDED</span>`
+          return `<tr>
+            <td style="font-family:var(--font-mono);color:var(--blue)">${v.id}</td>
+            <td><strong>${v.companyName}</strong></td>
+            <td style="font-size:11px;color:var(--text-muted)">${v.country} · ${v.region}</td>
+            <td style="font-size:11px">
+              <div>${v.contactName}</div>
+              <div style="color:var(--text-muted)">${v.contactEmail}</div>
+            </td>
+            <td style="font-family:var(--font-mono)">
+              <strong style="color:${rhColor}">${v.warehouseHumidity ?? '—'}%</strong>
+              ${v.warehouseHumidity && v.warehouseHumidity >= 50 && v.warehouseHumidity <= 60 ? ' <span style="font-size:10px;color:var(--green)">SCA ✓</span>' : ''}
+            </td>
+            <td>${statusBadge}</td>
+            <td style="font-size:10px;color:var(--text-muted);font-family:var(--font-mono)">${v.registeredAt.split('T')[0]}</td>
+          </tr>`
+        }).join('')}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Vendor Lots -->
+  <div class="card">
+    <div class="card-title"><i class="fa fa-seedling" style="color:var(--green)"></i> Listed Lots</div>
+    <table class="table">
+      <thead><tr><th>Lot ID</th><th>Vendor</th><th>Origin</th><th>Weight</th><th>FOB USD/kg</th><th>Grade</th><th>Climate</th><th>Status</th></tr></thead>
+      <tbody>
+        ${globalLots.map(lot => {
+          const vendor = globalVendors.find(v => v.id === lot.vendorId)
+          const climBadge = lot.scaGoldStorage
+            ? `<span class="badge badge-gold"><i class="fa fa-certificate"></i> SCA Gold</span>`
+            : `<span style="font-size:10px;color:var(--text-muted)">RH ${lot.warehouseHumidity ?? '—'}%</span>`
+          return `<tr>
+            <td style="font-family:var(--font-mono);color:var(--green)">${lot.id}</td>
+            <td style="font-size:11px">${vendor?.companyName ?? lot.vendorId}</td>
+            <td>${lot.origin}</td>
+            <td style="font-family:var(--font-mono)">${lot.greenWeightKg.toLocaleString()} kg</td>
+            <td style="font-family:var(--font-mono);color:var(--amber)">$${lot.fobPriceUsd.toFixed(2)}</td>
+            <td style="font-family:var(--font-mono);color:var(--green)">${lot.gradeScore}</td>
+            <td>${climBadge}</td>
+            <td><span class="badge ${lot.status === 'AVAILABLE' ? 'badge-available' : 'badge-contracted'}">${lot.status}</span></td>
+          </tr>`
+        }).join('')}
+      </tbody>
+    </table>
+  </div>`
+
+  return c.html(exchangeLayout('Vendor Portal', 'vendor', content))
+})
+
+// ── GET /vendor/register — Vendor Registration Form ──────────────────────────
+app.get('/vendor/register', (c) => {
+  const msg = c.req.query('msg')
+  const content = `
+  <div class="page-title"><i class="fa fa-store" style="color:var(--blue);margin-right:8px"></i>Register as Vendor</div>
+  <div class="page-sub">Global coffee producers — join the Qabban B2B network</div>
+
+  ${msg === 'ok' ? `<div class="alert alert-green"><i class="fa fa-check"></i> Registration submitted! Your application is under review.</div>` : ''}
+
+  <div class="card" style="max-width:600px">
+    <form method="POST" action="/vendor/register">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div class="form-group" style="grid-column:1/-1">
+          <label class="form-label">Company / Farm Name *</label>
+          <input name="companyName" class="form-input" placeholder="e.g. Yirgacheffe Highland Estate" required/>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Contact Person *</label>
+          <input name="contactName" class="form-input" placeholder="Full name" required/>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Contact Email *</label>
+          <input name="contactEmail" type="email" class="form-input" placeholder="email@company.com" required/>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Country *</label>
+          <select name="country" class="form-select" required>
+            <option value="">Select country…</option>
+            ${['Ethiopia','Brazil','Colombia','Yemen','Kenya','Indonesia','Guatemala','Costa Rica','Rwanda','Peru'].map(c => `<option>${c}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Growing Region *</label>
+          <input name="region" class="form-input" placeholder="e.g. Yirgacheffe, Huila…" required/>
+        </div>
+        <div class="form-group" style="grid-column:1/-1">
+          <label class="form-label">Warehouse Humidity (% RH) — IoT Reading</label>
+          <input name="warehouseHumidity" type="number" min="0" max="100" step="0.1" class="form-input" placeholder="e.g. 57"/>
+          <div style="font-size:10px;color:var(--text-muted);margin-top:4px;font-family:var(--font-mono)">
+            50–60% RH = SCA Gold Storage badge · Refreshed automatically from IoT sensors
+          </div>
+        </div>
+      </div>
+      <button type="submit" class="btn btn-green" style="width:100%;justify-content:center;padding:11px">
+        <i class="fa fa-paper-plane"></i> SUBMIT REGISTRATION
+      </button>
+    </form>
+  </div>`
+
+  return c.html(exchangeLayout('Vendor Registration', 'vendor', content))
+})
+
+// ── POST /vendor/register ─────────────────────────────────────────────────────
+app.post('/vendor/register', async (c) => {
+  try {
+    const body = await c.req.parseBody()
+    const id = `VND-${String(globalVendors.length + 1).padStart(3, '0')}`
+    const rh  = parseFloat(body.warehouseHumidity as string)
+    const newVendor: GlobalVendor = {
+      id,
+      companyName:       String(body.companyName || '').trim(),
+      contactName:       String(body.contactName || '').trim(),
+      contactEmail:      String(body.contactEmail || '').trim(),
+      country:           String(body.country || '').trim(),
+      region:            String(body.region || '').trim(),
+      warehouseHumidity: isNaN(rh) ? undefined : rh,
+      status:            'PENDING_REVIEW',
+      registeredAt:      new Date().toISOString(),
+    }
+    globalVendors.push(newVendor)
+    return c.redirect('/vendor/register?msg=ok')
+  } catch {
+    return c.redirect('/vendor/register?msg=error')
+  }
+})
+
+// ── GET /vendor/lots/new — List a New Lot ────────────────────────────────────
+app.get('/vendor/lots/new', (c) => {
+  const msg = c.req.query('msg')
+  const verifiedVendors = globalVendors.filter(v => v.status === 'VERIFIED')
+
+  const content = `
+  <div class="page-title"><i class="fa fa-seedling" style="color:var(--green);margin-right:8px"></i>List a New Lot</div>
+  <div class="page-sub">Submit your green coffee lot to the Qabban Global Exchange catalog</div>
+
+  ${msg === 'ok' ? `<div class="alert alert-green"><i class="fa fa-check"></i> Lot listed successfully! It is now visible in the catalog.</div>` : ''}
+  ${verifiedVendors.length === 0 ? `<div class="alert alert-amber"><i class="fa fa-warning"></i> No verified vendors yet. Register a vendor first.</div>` : ''}
+
+  <div class="card" style="max-width:680px">
+    <form method="POST" action="/vendor/lots/new">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div class="form-group">
+          <label class="form-label">Vendor *</label>
+          <select name="vendorId" class="form-select" required>
+            <option value="">Select vendor…</option>
+            ${verifiedVendors.map(v => `<option value="${v.id}">${v.companyName} (${v.country})</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Origin *</label>
+          <input name="origin" class="form-input" placeholder="e.g. Ethiopia Yirgacheffe" required/>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Variety *</label>
+          <input name="variety" class="form-input" placeholder="e.g. Heirloom, Caturra…" required/>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Process Method *</label>
+          <select name="process" class="form-select" required>
+            ${['Natural','Washed','Honey','Wet-Hulled','Anaerobic','Other'].map(p => `<option>${p}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Green Weight (kg) *</label>
+          <input name="greenWeightKg" type="number" min="1" class="form-input" required/>
+        </div>
+        <div class="form-group">
+          <label class="form-label">FOB Price (USD/kg) *</label>
+          <input name="fobPriceUsd" type="number" min="0.01" step="0.01" class="form-input" required/>
+        </div>
+        <div class="form-group">
+          <label class="form-label">SCA Grade Score</label>
+          <input name="gradeScore" type="number" min="60" max="100" class="form-input" placeholder="80–100"/>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Harvest Year</label>
+          <input name="harvestYear" type="number" min="2020" max="2030" class="form-input" placeholder="2025"/>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Warehouse Humidity (% RH)</label>
+          <input name="warehouseHumidity" type="number" min="0" max="100" step="0.1" class="form-input" placeholder="IoT reading"/>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Ship to KSA (est. days)</label>
+          <input name="shipmentDays" type="number" min="1" max="90" class="form-input" placeholder="e.g. 21"/>
+        </div>
+        <div class="form-group" style="grid-column:1/-1">
+          <label class="form-label">Flavor Notes (comma-separated)</label>
+          <input name="flavorNotes" class="form-input" placeholder="e.g. Blueberry, Jasmine, Dark Chocolate"/>
+        </div>
+      </div>
+      <div style="font-size:10px;color:var(--text-muted);font-family:var(--font-mono);margin-bottom:12px">
+        50–60% RH warehouse humidity → SCA Gold Storage badge awarded automatically
+      </div>
+      <button type="submit" class="btn btn-green" style="width:100%;justify-content:center;padding:11px">
+        <i class="fa fa-plus"></i> LIST LOT ON EXCHANGE
+      </button>
+    </form>
+  </div>`
+
+  return c.html(exchangeLayout('List New Lot', 'vendor', content))
+})
+
+// ── POST /vendor/lots/new ─────────────────────────────────────────────────────
+app.post('/vendor/lots/new', async (c) => {
+  try {
+    const b   = await c.req.parseBody()
+    const rh  = parseFloat(b.warehouseHumidity as string)
+    const sca = !isNaN(rh) && rh >= 50 && rh <= 60
+    const id  = `GLOT-${String(globalLots.length + 1).padStart(3, '0')}`
+    const notes = String(b.flavorNotes || '').split(',').map(s => s.trim()).filter(Boolean)
+
+    const newLot: GlobalLot = {
+      id,
+      vendorId:            String(b.vendorId),
+      origin:              String(b.origin || '').trim(),
+      variety:             String(b.variety || '').trim(),
+      process:             (b.process as any) || 'Other',
+      greenWeightKg:       parseFloat(b.greenWeightKg as string) || 0,
+      fobPriceUsd:         parseFloat(b.fobPriceUsd as string) || 0,
+      gradeScore:          parseFloat(b.gradeScore as string) || 80,
+      flavorNotes:         notes.length ? notes : ['—'],
+      harvestYear:         parseInt(b.harvestYear as string) || new Date().getFullYear(),
+      warehouseHumidity:   isNaN(rh) ? undefined : rh,
+      scaGoldStorage:      sca,
+      climateCertifiedAt:  sca ? new Date().toISOString() : undefined,
+      status:              'AVAILABLE',
+      listedAt:            new Date().toISOString(),
+      shipmentEstimateDays: parseInt(b.shipmentDays as string) || 21,
+      customsHsCode:       '0901.11',
+    }
+    globalLots.push(newLot)
+    return c.redirect('/vendor/lots/new?msg=ok')
+  } catch {
+    return c.redirect('/vendor/lots/new?msg=error')
+  }
+})
+
+// ── GET /buyer — Buyer Portal ─────────────────────────────────────────────────
+app.get('/buyer', (c) => {
+  const content = `
+  <div class="page-title"><i class="fa fa-handshake" style="color:var(--amber);margin-right:8px"></i>Buyer Portal</div>
+  <div class="page-sub">Saudi roasteries — browse global lots · calculate landed prices · contract and invoice</div>
+
+  <div style="display:flex;gap:12px;margin-bottom:24px;flex-wrap:wrap">
+    <a href="/buyer/register" class="btn btn-amber"><i class="fa fa-plus"></i> Register as Buyer</a>
+    <a href="/exchange/catalog" class="btn btn-green"><i class="fa fa-list"></i> Browse Catalog</a>
+  </div>
+
+  <!-- Registered Buyers -->
+  <div class="card">
+    <div class="card-title"><i class="fa fa-building" style="color:var(--amber)"></i> Registered Saudi Roasteries</div>
+    <table class="table">
+      <thead><tr><th>Buyer ID</th><th>Roastery</th><th>City</th><th>Contact</th><th>VAT Number</th><th>Status</th><th>Registered</th></tr></thead>
+      <tbody>
+        ${globalBuyers.map(b => `<tr>
+          <td style="font-family:var(--font-mono);color:var(--amber)">${b.id}</td>
+          <td><strong>${b.roasteryName}</strong></td>
+          <td>${b.city}</td>
+          <td style="font-size:11px"><div>${b.contactName}</div><div style="color:var(--text-muted)">${b.contactEmail}</div></td>
+          <td style="font-family:var(--font-mono);font-size:11px">${b.vatNumber}</td>
+          <td><span class="badge badge-available">${b.status}</span></td>
+          <td style="font-size:10px;color:var(--text-muted);font-family:var(--font-mono)">${b.registeredAt.split('T')[0]}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Active Contracts -->
+  <div class="card">
+    <div class="card-title"><i class="fa fa-file-contract" style="color:var(--purple)"></i> Active Contracts</div>
+    ${globalContracts.length === 0
+      ? `<div style="font-size:12px;color:var(--text-muted);padding:12px 0">No contracts yet. <a href="/exchange/catalog" style="color:var(--green)">Browse catalog</a> to contract a lot.</div>`
+      : `<table class="table">
+          <thead><tr><th>Contract ID</th><th>Lot</th><th>Buyer</th><th>Qty (kg)</th><th>FOB USD</th><th>Contracted</th><th>Status</th><th>Invoice</th></tr></thead>
+          <tbody>
+            ${globalContracts.map(con => {
+              const lot   = globalLots.find(l => l.id === con.lotId)
+              const buyer = globalBuyers.find(b => b.id === con.buyerId)
+              const inv   = zatcaInvoices.find(i => i.lotId === con.lotId)
+              return `<tr>
+                <td style="font-family:var(--font-mono);color:var(--purple)">${con.id}</td>
+                <td style="font-size:11px">${lot?.origin ?? con.lotId}</td>
+                <td style="font-size:11px">${buyer?.roasteryName ?? con.buyerId}</td>
+                <td style="font-family:var(--font-mono)">${con.quantityKg.toLocaleString()}</td>
+                <td style="font-family:var(--font-mono);color:var(--amber)">$${con.agreedFobUsd.toFixed(2)}</td>
+                <td style="font-size:10px;font-family:var(--font-mono)">${con.contractedAt.split('T')[0]}</td>
+                <td><span class="badge badge-available">${con.status}</span></td>
+                <td>${inv ? `<a href="/buyer/invoice/${inv.uuid}" class="btn btn-blue" style="font-size:10px;padding:3px 8px"><i class="fa fa-receipt"></i> View</a>` : '—'}</td>
+              </tr>`
+            }).join('')}
+          </tbody>
+        </table>`
+    }
+  </div>`
+
+  return c.html(exchangeLayout('Buyer Portal', 'buyer', content))
+})
+
+// ── GET /buyer/register ───────────────────────────────────────────────────────
+app.get('/buyer/register', (c) => {
+  const msg = c.req.query('msg')
+  const content = `
+  <div class="page-title"><i class="fa fa-handshake" style="color:var(--amber);margin-right:8px"></i>Register as Buyer</div>
+  <div class="page-sub">Saudi roasteries — join the Qabban B2B trade network</div>
+
+  ${msg === 'ok' ? `<div class="alert alert-green"><i class="fa fa-check"></i> Registered successfully! You can now contract lots.</div>` : ''}
+
+  <div class="card" style="max-width:560px">
+    <form method="POST" action="/buyer/register">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div class="form-group" style="grid-column:1/-1">
+          <label class="form-label">Roastery Name *</label>
+          <input name="roasteryName" class="form-input" placeholder="e.g. Najd Specialty Roasters" required/>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Contact Person *</label>
+          <input name="contactName" class="form-input" required/>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Contact Email *</label>
+          <input name="contactEmail" type="email" class="form-input" required/>
+        </div>
+        <div class="form-group">
+          <label class="form-label">City *</label>
+          <select name="city" class="form-select" required>
+            <option>Riyadh</option><option>Jeddah</option><option>Dammam</option>
+            <option>Makkah</option><option>Madinah</option><option>Khobar</option><option>Other</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Saudi VAT Number *</label>
+          <input name="vatNumber" class="form-input" placeholder="15-digit VAT number" required/>
+        </div>
+      </div>
+      <button type="submit" class="btn btn-amber" style="width:100%;justify-content:center;padding:11px">
+        <i class="fa fa-paper-plane"></i> REGISTER
+      </button>
+    </form>
+  </div>`
+
+  return c.html(exchangeLayout('Buyer Registration', 'buyer', content))
+})
+
+// ── POST /buyer/register ──────────────────────────────────────────────────────
+app.post('/buyer/register', async (c) => {
+  try {
+    const b  = await c.req.parseBody()
+    const id = `BYR-${String(globalBuyers.length + 1).padStart(3, '0')}`
+    globalBuyers.push({
+      id,
+      roasteryName: String(b.roasteryName || '').trim(),
+      contactName:  String(b.contactName  || '').trim(),
+      contactEmail: String(b.contactEmail || '').trim(),
+      city:         String(b.city         || 'Riyadh'),
+      vatNumber:    String(b.vatNumber    || '').trim(),
+      status:       'ACTIVE',
+      registeredAt: new Date().toISOString(),
+    })
+    return c.redirect('/buyer/register?msg=ok')
+  } catch {
+    return c.redirect('/buyer/register?msg=error')
+  }
+})
+
+// ── GET /buyer/contract — Contract a Lot ─────────────────────────────────────
+app.get('/buyer/contract', (c) => {
+  const lotId = c.req.query('lotId')
+  const lot   = lotId ? globalLots.find(l => l.id === lotId) : null
+  const msg   = c.req.query('msg')
+
+  const content = `
+  <div class="page-title"><i class="fa fa-file-contract" style="color:var(--purple);margin-right:8px"></i>Contract a Lot</div>
+  <div class="page-sub">Agree on price · Calculate landed cost · Generate ZATCA Phase-2 invoice</div>
+
+  ${msg === 'ok'   ? `<div class="alert alert-green"><i class="fa fa-check"></i> Contract created! ZATCA invoice generated. <a href="/buyer" style="color:var(--green)">View in Buyer Portal →</a></div>` : ''}
+  ${msg === 'sold' ? `<div class="alert" style="background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.25);color:var(--red)"><i class="fa fa-warning"></i> This lot has already been contracted.</div>` : ''}
+
+  <div class="card" style="max-width:640px">
+    <form method="POST" action="/buyer/contract">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+
+        <div class="form-group">
+          <label class="form-label">Select Lot *</label>
+          <select name="lotId" class="form-select" required onchange="updateLotInfo(this.value)">
+            <option value="">Select lot…</option>
+            ${globalLots.filter(l => l.status === 'AVAILABLE').map(l => `<option value="${l.id}" ${lot?.id === l.id ? 'selected' : ''}>${l.id} — ${l.origin} (${l.greenWeightKg}kg @ $${l.fobPriceUsd}/kg)</option>`).join('')}
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Buyer *</label>
+          <select name="buyerId" class="form-select" required>
+            <option value="">Select buyer…</option>
+            ${globalBuyers.filter(b => b.status === 'ACTIVE').map(b => `<option value="${b.id}">${b.roasteryName} (${b.city})</option>`).join('')}
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Quantity (kg) *</label>
+          <input name="quantityKg" id="qtyInput" type="number" min="1" class="form-input" placeholder="Max available kg" required oninput="updateLandedCalc()"/>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Agreed FOB Price (USD/kg) *</label>
+          <input name="agreedFobUsd" id="fobInput" type="number" min="0.01" step="0.01" class="form-input" value="${lot?.fobPriceUsd ?? ''}" required oninput="updateLandedCalc()"/>
+        </div>
+      </div>
+
+      <!-- Live Landed Price Calculator -->
+      <div id="landedCalc" style="margin:16px 0;padding:14px;background:rgba(245,158,11,0.05);border:1px solid rgba(245,158,11,0.2);border-radius:6px;font-family:var(--font-mono);font-size:11px">
+        <div style="color:var(--amber);margin-bottom:8px"><i class="fa fa-calculator"></i> LIVE LANDED PRICE CALCULATOR</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px">
+          <div><span style="color:var(--text-muted)">FOB (SAR/kg):</span><br><strong id="lc-fob">—</strong></div>
+          <div><span style="color:var(--text-muted)">Shipping:</span><br><strong id="lc-ship">—</strong></div>
+          <div><span style="color:var(--text-muted)">Customs (5%):</span><br><strong id="lc-customs">—</strong></div>
+          <div><span style="color:var(--text-muted)">VAT (15%):</span><br><strong id="lc-vat" style="color:var(--red)">—</strong></div>
+          <div><span style="color:var(--text-muted)">Landed/kg:</span><br><strong id="lc-perkg" style="color:var(--green);font-size:15px">—</strong></div>
+          <div><span style="color:var(--text-muted)">Total:</span><br><strong id="lc-total" style="color:var(--green)">—</strong></div>
+        </div>
+      </div>
+
+      <div style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted);margin-bottom:14px;padding:10px;background:rgba(74,222,128,0.04);border:1px dashed rgba(74,222,128,0.2);border-radius:4px">
+        <strong style="color:var(--green)">ZATCA Phase-2:</strong>
+        Submitting this form generates a ZATCA-compliant e-invoice with UUID, UBL 2.1 XML, and QR code (TLV payload per ZATCA e-Invoice specifications).
+        Exchange rate: ${lastKnownUsdToSar.toFixed(4)} SAR/USD + ${exchangeRateBuffer}% buffer = <strong>${(lastKnownUsdToSar*(1+exchangeRateBuffer/100)).toFixed(4)} SAR/USD</strong>
+      </div>
+
+      <button type="submit" class="btn btn-green" style="width:100%;justify-content:center;padding:11px">
+        <i class="fa fa-file-invoice"></i> CREATE CONTRACT &amp; GENERATE ZATCA INVOICE
+      </button>
+    </form>
+  </div>
+
+  <script>
+  var LOTS = ${JSON.stringify(globalLots.map(l => ({ id: l.id, fob: l.fobPriceUsd, kg: l.greenWeightKg })))};
+  var EFF_RATE = ${lastKnownUsdToSar * (1 + exchangeRateBuffer / 100)};
+  var SHIP_BASE = ${shippingEstimateBaseSar};
+  var CUSTOMS_RATE = ${SAUDI_CUSTOMS_RATE};
+  var VAT_RATE = ${ZATCA_VAT_RATE};
+
+  function updateLotInfo(lotId) {
+    var lot = LOTS.find(function(l){ return l.id === lotId; });
+    if (!lot) return;
+    document.getElementById('fobInput').value = lot.fob;
+    document.getElementById('qtyInput').max = lot.kg;
+    updateLandedCalc();
+  }
+
+  function updateLandedCalc() {
+    var fob = parseFloat(document.getElementById('fobInput').value);
+    var qty = parseFloat(document.getElementById('qtyInput').value);
+    if (isNaN(fob) || isNaN(qty) || qty <= 0) return;
+
+    var fobSarKg  = Math.round(fob * EFF_RATE * 100) / 100;
+    var fobTotal  = fobSarKg * qty;
+    var ship      = SHIP_BASE;
+    var cifTotal  = fobTotal + ship;
+    var customs   = Math.round(cifTotal * CUSTOMS_RATE * 100) / 100;
+    var vatBase   = cifTotal + customs;
+    var vat       = Math.round(vatBase * VAT_RATE * 100) / 100;
+    var total     = Math.round((fobTotal + ship + customs + vat) * 100) / 100;
+    var perKg     = Math.round((total / qty) * 100) / 100;
+
+    var fmt = function(n){ return n.toLocaleString('en-SA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); };
+    document.getElementById('lc-fob').textContent     = fobSarKg.toFixed(2) + ' SAR/kg';
+    document.getElementById('lc-ship').textContent    = fmt(ship) + ' SAR';
+    document.getElementById('lc-customs').textContent = fmt(customs) + ' SAR';
+    document.getElementById('lc-vat').textContent     = fmt(vat) + ' SAR';
+    document.getElementById('lc-perkg').textContent   = perKg.toFixed(2) + ' SAR/kg';
+    document.getElementById('lc-total').textContent   = fmt(total) + ' SAR';
+  }
+
+  // Auto-fill if lot is pre-selected
+  (function(){
+    var sel = document.querySelector('select[name="lotId"]');
+    if (sel && sel.value) updateLotInfo(sel.value);
+  })();
+  </script>`
+
+  return c.html(exchangeLayout('Contract a Lot', 'buyer', content))
+})
+
+// ── POST /buyer/contract ──────────────────────────────────────────────────────
+app.post('/buyer/contract', async (c) => {
+  try {
+    const b     = await c.req.parseBody()
+    const lotId = String(b.lotId)
+    const buyId = String(b.buyerId)
+    const qty   = parseFloat(b.quantityKg as string)
+    const fob   = parseFloat(b.agreedFobUsd as string)
+
+    const lot   = globalLots.find(l => l.id === lotId)
+    const buyer = globalBuyers.find(b => b.id === buyId)
+
+    if (!lot || lot.status !== 'AVAILABLE') return c.redirect('/buyer/contract?msg=sold')
+    if (!buyer) return c.redirect('/buyer/contract?msg=error')
+
+    // Create contract
+    const conId = `CON-${String(globalContracts.length + 1).padStart(3, '0')}`
+    globalContracts.push({
+      id:           conId,
+      lotId,
+      buyerId:      buyId,
+      quantityKg:   qty,
+      agreedFobUsd: fob,
+      contractedAt: new Date().toISOString(),
+      status:       'ACTIVE',
+    })
+
+    // Mark lot contracted
+    lot.status = 'CONTRACTED'
+    lot.contractedByBuyerId = buyId
+
+    // Compute landed unit price per kg in SAR
+    const landed    = calcLandedPrice(lot, qty)
+    const unitPrice = landed.landedPricePerKg
+
+    // Generate ZATCA Phase-2 invoice
+    const invoice = generateZatcaInvoice({ buyer, lot, quantityKg: qty, unitPriceSar: unitPrice })
+
+    // Link invoice to contract
+    const con = globalContracts[globalContracts.length - 1]
+    con.invoiceId = invoice.uuid
+
+    return c.redirect('/buyer/contract?msg=ok')
+  } catch {
+    return c.redirect('/buyer/contract?msg=error')
+  }
+})
+
+// ── GET /buyer/invoice/:uuid — ZATCA Invoice Viewer ──────────────────────────
+app.get('/buyer/invoice/:uuid', (c) => {
+  const uuid    = c.req.param('uuid')
+  const invoice = zatcaInvoices.find(i => i.uuid === uuid)
+
+  if (!invoice) return c.html(exchangeLayout('Invoice Not Found', 'buyer', `
+    <div class="alert" style="background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.25);color:var(--red)">
+      <i class="fa fa-warning"></i> Invoice not found.
+    </div>
+    <a href="/buyer" class="btn btn-blue">← Back to Buyer Portal</a>`))
+
+  const qrSvg = `<div style="background:#fff;padding:16px;border-radius:8px;display:inline-block">
+    <div style="color:#000;font-size:10px;font-family:monospace;word-break:break-all;max-width:240px;line-height:1.4">${invoice.qrCodeData.slice(0, 80)}…</div>
+    <div style="font-size:9px;color:#666;margin-top:4px">ZATCA TLV QR Payload (Base64)</div>
+  </div>`
+
+  const content = `
+  <div class="page-title"><i class="fa fa-receipt" style="color:var(--green);margin-right:8px"></i>ZATCA Phase-2 E-Invoice</div>
+  <div class="page-sub">UUID: <span style="font-family:var(--font-mono);color:var(--green)">${invoice.uuid}</span></div>
+
+  <div style="display:grid;grid-template-columns:1fr auto;gap:20px;flex-wrap:wrap">
+    <div>
+      <!-- Invoice Header -->
+      <div class="card" style="border-color:rgba(74,222,128,0.35)">
+        <div class="card-title"><i class="fa fa-file-invoice" style="color:var(--green)"></i> Invoice Details</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px 24px;font-size:12px;font-family:var(--font-mono)">
+          <div><span style="color:var(--text-muted)">Invoice Number:</span><br><strong style="color:var(--green)">${invoice.invoiceNumber}</strong></div>
+          <div><span style="color:var(--text-muted)">Issue Date/Time:</span><br><strong>${invoice.issueDate} ${invoice.issueTime}</strong></div>
+          <div><span style="color:var(--text-muted)">Seller:</span><br><strong>${invoice.sellerName}</strong><br><span style="color:var(--text-muted)">VAT: ${invoice.sellerVat}</span></div>
+          <div><span style="color:var(--text-muted)">Buyer:</span><br><strong>${invoice.buyerName}</strong><br><span style="color:var(--text-muted)">VAT: ${invoice.buyerVat}</span></div>
+        </div>
+      </div>
+
+      <!-- Line Item -->
+      <div class="card">
+        <div class="card-title"><i class="fa fa-seedling" style="color:var(--amber)"></i> Line Item</div>
+        <div style="font-size:12px;font-family:var(--font-mono);margin-bottom:14px">
+          <strong>${invoice.origin}</strong> · Lot ${invoice.lotId}
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;font-size:11px;font-family:var(--font-mono)">
+          <div><span style="color:var(--text-muted)">Quantity:</span><br><strong>${invoice.quantityKg.toLocaleString()} kg</strong></div>
+          <div><span style="color:var(--text-muted)">Unit Price:</span><br><strong>${invoice.unitPriceSar.toFixed(2)} SAR/kg</strong></div>
+          <div><span style="color:var(--text-muted)">Subtotal:</span><br><strong>${invoice.subtotalSar.toLocaleString('en-SA', {minimumFractionDigits:2})} SAR</strong></div>
+          <div><span style="color:var(--text-muted)">VAT (${invoice.vatPct}%):</span><br><strong style="color:var(--red)">${invoice.vatAmountSar.toLocaleString('en-SA', {minimumFractionDigits:2})} SAR</strong></div>
+          <div><span style="color:var(--text-muted)">TOTAL:</span><br><strong style="color:var(--green);font-size:16px">${invoice.totalSar.toLocaleString('en-SA', {minimumFractionDigits:2})} SAR</strong></div>
+        </div>
+      </div>
+
+      <!-- XML Payload -->
+      <div class="card">
+        <div class="card-title"><i class="fa fa-code" style="color:var(--blue)"></i> UBL 2.1 XML Payload</div>
+        <pre style="font-size:9px;font-family:var(--font-mono);color:var(--text-muted);overflow-x:auto;max-height:240px;line-height:1.5;white-space:pre-wrap">${invoice.xmlPayload.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</pre>
+        <a href="/buyer/invoice/${invoice.uuid}/xml" class="btn btn-blue" style="margin-top:10px;font-size:11px">
+          <i class="fa fa-download"></i> DOWNLOAD XML
+        </a>
+      </div>
+    </div>
+
+    <!-- QR Code panel -->
+    <div style="min-width:200px">
+      <div class="card" style="border-color:rgba(74,222,128,0.35);text-align:center">
+        <div style="font-size:10px;font-family:var(--font-mono);color:var(--green);margin-bottom:12px">ZATCA QR CODE</div>
+        ${qrSvg}
+        <div style="font-size:9px;color:var(--text-muted);margin-top:8px;font-family:var(--font-mono)">
+          TLV fields: seller · VAT · date · total · VAT amount
+        </div>
+      </div>
+      <div class="card" style="text-align:center">
+        <div style="font-size:10px;font-family:var(--font-mono);color:var(--green);margin-bottom:6px">COMPLIANCE</div>
+        <div style="font-size:11px;font-family:var(--font-mono);line-height:1.8">
+          <div>✓ ZATCA Phase-2</div>
+          <div>✓ UUID v4</div>
+          <div>✓ UBL 2.1</div>
+          <div>✓ 15% VAT</div>
+          <div>✓ SAR currency</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <a href="/buyer" class="btn btn-blue" style="margin-top:8px">← Back to Buyer Portal</a>`
+
+  return c.html(exchangeLayout(`Invoice ${invoice.invoiceNumber}`, 'buyer', content))
+})
+
+// ── GET /buyer/invoice/:uuid/xml — Download UBL XML ──────────────────────────
+app.get('/buyer/invoice/:uuid/xml', (c) => {
+  const uuid    = c.req.param('uuid')
+  const invoice = zatcaInvoices.find(i => i.uuid === uuid)
+  if (!invoice) return c.text('Not found', 404)
+  return new Response(invoice.xmlPayload, {
+    headers: {
+      'Content-Type':        'application/xml; charset=utf-8',
+      'Content-Disposition': `attachment; filename="${invoice.invoiceNumber}.xml"`,
+      'Cache-Control':       'no-store',
+    },
+  })
+})
+
+// ── GET /api/exchange/lots — JSON catalog ─────────────────────────────────────
+app.get('/api/exchange/lots', (c) => {
+  const lots = globalLots.map(lot => ({
+    ...lot,
+    landed:   calcLandedPrice(lot),
+    vendor:   globalVendors.find(v => v.id === lot.vendorId),
+  }))
+  return c.json({ lots, exchangeRate: lastKnownUsdToSar, effectiveRate: lastKnownUsdToSar*(1+exchangeRateBuffer/100), exchangeBufferPct: exchangeRateBuffer })
+})
+
+// ── GET /api/exchange/vendors — JSON vendor list ──────────────────────────────
+app.get('/api/exchange/vendors', (c) => c.json({ vendors: globalVendors }))
+
+// ── GET /api/exchange/buyers — JSON buyer list ────────────────────────────────
+app.get('/api/exchange/buyers', (c) => c.json({ buyers: globalBuyers }))
+
+// ── GET /api/exchange/contracts — JSON contracts ──────────────────────────────
+app.get('/api/exchange/contracts', (c) => c.json({ contracts: globalContracts, invoices: zatcaInvoices }))
+
+// ── POST /api/exchange/iot-update — IoT humidity push ─────────────────────────
+// Vendors' IoT sensors can push live humidity readings here.
+// Body: { vendorId, warehouseHumidity }
+app.post('/api/exchange/iot-update', async (c) => {
+  try {
+    const { vendorId, warehouseHumidity } = await c.req.json()
+    const vendor = globalVendors.find(v => v.id === vendorId)
+    if (!vendor) return c.json({ error: 'Vendor not found' }, 404)
+    const rh = parseFloat(warehouseHumidity)
+    if (isNaN(rh) || rh < 0 || rh > 100) return c.json({ error: 'Invalid humidity' }, 400)
+    vendor.warehouseHumidity = rh
+
+    // Update SCA badge on all AVAILABLE lots for this vendor
+    const updatedLots: string[] = []
+    for (const lot of globalLots) {
+      if (lot.vendorId === vendorId && lot.status === 'AVAILABLE') {
+        lot.warehouseHumidity    = rh
+        lot.scaGoldStorage       = rh >= 50 && rh <= 60
+        lot.climateCertifiedAt   = new Date().toISOString()
+        updatedLots.push(lot.id)
+      }
+    }
+
+    return c.json({
+      ok:           true,
+      vendorId,
+      humidity:     rh,
+      scaGoldBadge: rh >= 50 && rh <= 60,
+      updatedLots,
+    })
+  } catch {
+    return c.json({ error: 'Invalid request' }, 400)
+  }
 })
 
 export default app
