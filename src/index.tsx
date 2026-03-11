@@ -7134,8 +7134,10 @@ function exchangeLayout(pageTitle: string, activeNav: string, content: string) {
     .form-input{width:100%;background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:5px;
                 padding:9px 12px;color:var(--text);font-size:13px;outline:none}
     .form-input:focus{border-color:rgba(74,222,128,0.5);background:rgba(74,222,128,0.04)}
-    .form-select{width:100%;background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:5px;
+    .form-select{width:100%;background:#1e1e22;border:1px solid var(--border);border-radius:5px;
                  padding:9px 12px;color:var(--text);font-size:13px;outline:none;cursor:pointer}
+    .form-select option{background:#1e1e22;color:#f8fafc}
+    .form-select option:checked,.form-select option:hover{background:#2a2a30;color:#4ade80}
     .alert{padding:12px 16px;border-radius:var(--radius);margin-bottom:16px;font-size:13px;display:flex;align-items:center;gap:10px}
     .alert-green{background:rgba(74,222,128,0.08);border:1px solid rgba(74,222,128,0.25);color:var(--green)}
     .alert-amber{background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.25);color:var(--amber)}
