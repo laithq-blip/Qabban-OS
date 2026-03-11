@@ -105,22 +105,23 @@ export interface Branch {
   totalGreenKg: number
 }
 
-export type ClientTier = 'Silver' | 'Gold' | 'Platinum'
+// ─── Unified Tier System ────────────────────────────────────────────────────
+// A single three-level hierarchy used across the entire platform:
+//   Bronze (0–500 kg lifetime)  → entry, 0 % LTV discount, 40 % roastery margin
+//   Silver (501–2000 kg)        → mid,   3 % LTV discount, 35 % roastery margin
+//   Gold   (2001 kg+)           → top,   5 % LTV discount, 28 % roastery margin
+// CoffeeMilesTier is the canonical type; ClientTier is an alias for backwards compat.
+export type CoffeeMilesTier = 'Bronze' | 'Silver' | 'Gold'
+export type ClientTier      = CoffeeMilesTier   // unified — no more Platinum
 
-// ─── Coffee Miles Loyalty Tiers (Exchange-side) ──────────────────────────────
-// Separate from the internal roastery ClientTier — this governs B2B buyer discounts
-// on the Global Exchange platform.
-//
+// ─── Coffee Miles Loyalty Tiers (unified — same as ClientTier above) ────────
 //  Bronze  : 0 – 500 kg lifetime      → 0%  base discount
 //  Silver  : 501 – 2000 kg lifetime   → 3%  base discount
 //  Gold    : 2001 kg+  lifetime       → 5%  base discount
 //
 // Volume Bonus (stacks on top):
 //  Orders > 10 bags (1 bag = 60 kg)  → extra 10% discount
-//
 //  Total Discount = Tier Base % + Bulk Quantity %
-//
-export type CoffeeMilesTier = 'Bronze' | 'Silver' | 'Gold'
 
 export interface CoffeeMilesThreshold {
   tier: CoffeeMilesTier
@@ -743,7 +744,7 @@ export const branches: Branch[] = [
 export const cafeClients: CafeClient[] = [
   { id: 'CAF-001', username: 'alnokhba',    password: 'cafe123', name: 'Al Nokhba Specialty', branch: 'Riyadh', tier: 'Gold',     lifetimeKgPurchased: 2400, coffeeMilesTier: 'Gold'   },
   { id: 'CAF-002', username: 'qahwa_bahr',  password: 'cafe123', name: 'Qahwa Al Bahr',        branch: 'Jeddah', tier: 'Silver',   lifetimeKgPurchased: 850,  coffeeMilesTier: 'Silver' },
-  { id: 'CAF-003', username: 'pearl_roast', password: 'cafe123', name: 'Pearl Roast Café',      branch: 'Dammam', tier: 'Platinum', lifetimeKgPurchased: 120,  coffeeMilesTier: 'Bronze' },
+  { id: 'CAF-003', username: 'pearl_roast', password: 'cafe123', name: 'Pearl Roast Café',      branch: 'Dammam', tier: 'Bronze',   lifetimeKgPurchased: 120,  coffeeMilesTier: 'Bronze' },
 ]
 
 // ─── In-memory bean requests store ────────────────────────────────────────
@@ -817,19 +818,19 @@ export const setDefaultTargetMargin = (pct: number) => {
 // ─── Tier-based Margin Settings ──────────────────────────────────────────────
 // Each client tier gets its own gross margin %, applied when calculating the
 // wholesale price shown to that tier's cafes.
-// Silver = entry-level (higher margin for roastery)
-// Gold   = mid-tier
-// Platinum = top-tier / VIP (lowest margin = best price for client)
+// Bronze = entry-level roastery (highest margin — least discount for client)
+// Silver = mid-tier
+// Gold   = top-tier / VIP (lowest margin = best price for client)
 export interface TierMargins {
-  Silver:   number   // e.g. 40
-  Gold:     number   // e.g. 35
-  Platinum: number   // e.g. 28
+  Bronze: number   // e.g. 40
+  Silver: number   // e.g. 35
+  Gold:   number   // e.g. 28
 }
 
 export let tierMargins: TierMargins = {
-  Silver:   40,
-  Gold:     35,
-  Platinum: 28,
+  Bronze: 40,
+  Silver: 35,
+  Gold:   28,
 }
 
 /** Update one or all tier margins (called from Finance settings) */

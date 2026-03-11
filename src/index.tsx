@@ -2061,8 +2061,8 @@ function cafeLayout(pageTitle: string, activeNav: string, content: string, clien
       } else {
         overEl.style.display  = 'none';
         var _tc = (typeof _tierColor !== 'undefined') ? _tierColor : 'var(--amber)';
-        row.style.borderColor = _tc === '#a78bfa' ? 'rgba(167,139,250,0.30)' : _tc === '#94a3b8' ? 'rgba(148,163,184,0.30)' : 'rgba(245,158,11,0.25)';
-        row.style.background  = _tc === '#a78bfa' ? 'rgba(167,139,250,0.07)' : _tc === '#94a3b8' ? 'rgba(148,163,184,0.07)' : 'rgba(245,158,11,0.07)';
+        row.style.borderColor = _tc === '#f59e0b' ? 'rgba(245,158,11,0.30)' : _tc === '#94a3b8' ? 'rgba(148,163,184,0.30)' : 'rgba(245,158,11,0.25)';
+        row.style.background  = _tc === '#f59e0b' ? 'rgba(167,139,250,0.07)' : _tc === '#94a3b8' ? 'rgba(148,163,184,0.07)' : 'rgba(245,158,11,0.07)';
         valEl.style.color     = _tc;
       }
     }
@@ -2216,28 +2216,28 @@ app.get('/admin', (c) => {
       </a>
     </div>
 
-    <!-- Per-tier value + profit rows -->
+    <!-- Per-tier value + profit rows — Bronze / Silver / Gold + Env P&L -->
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px;margin-bottom:16px">
 
-      <!-- Silver -->
+      <!-- Bronze tier -->
+      <div style="background:var(--bg-2);border:1px solid rgba(205,127,50,0.30);border-radius:var(--radius);padding:14px">
+        <div style="font-size:9px;color:#cd7f32;text-transform:uppercase;letter-spacing:.8px;margin-bottom:4px;font-family:var(--font-mono)">🥉 Bronze — Portfolio</div>
+        <div style="font-family:var(--font-mono);font-size:18px;color:#cd7f32;font-weight:700" id="ov-qfi-value-bronze">${Math.round(calcPortfolioFinancials(coffeeLots, bal, branches, undefined, tierMargins.Bronze).totalInventoryValue).toLocaleString('en-SA')}</div>
+        <div style="font-size:10px;color:var(--text-muted);margin-top:2px;font-family:var(--font-mono)">SAR &nbsp;·&nbsp; <span id="ov-qfi-profit-bronze"></span></div>
+      </div>
+
+      <!-- Silver tier -->
       <div style="background:var(--bg-2);border:1px solid rgba(148,163,184,0.30);border-radius:var(--radius);padding:14px">
-        <div style="font-size:9px;color:#94a3b8;text-transform:uppercase;letter-spacing:.8px;margin-bottom:4px;font-family:var(--font-mono)">★ Silver — Portfolio</div>
+        <div style="font-size:9px;color:#94a3b8;text-transform:uppercase;letter-spacing:.8px;margin-bottom:4px;font-family:var(--font-mono)">🥈 Silver — Portfolio</div>
         <div style="font-family:var(--font-mono);font-size:18px;color:#94a3b8;font-weight:700" id="ov-qfi-value-silver">${Math.round(calcPortfolioFinancials(coffeeLots, bal, branches, undefined, tierMargins.Silver).totalInventoryValue).toLocaleString('en-SA')}</div>
         <div style="font-size:10px;color:var(--text-muted);margin-top:2px;font-family:var(--font-mono)">SAR &nbsp;·&nbsp; <span id="ov-qfi-profit-silver"></span></div>
       </div>
 
-      <!-- Gold (reference) -->
-      <div style="background:var(--bg-2);border:1px solid rgba(245,158,11,0.35);border-radius:var(--radius);padding:14px">
-        <div style="font-size:9px;color:var(--amber);text-transform:uppercase;letter-spacing:.8px;margin-bottom:4px;font-family:var(--font-mono)">★ Gold — Portfolio</div>
-        <div style="font-family:var(--font-mono);font-size:18px;color:var(--amber);font-weight:700" id="ov-qfi-value">${portValueFmt}</div>
-        <div style="font-size:10px;color:var(--text-muted);margin-top:2px;font-family:var(--font-mono)">SAR &nbsp;·&nbsp; <span id="ov-qfi-profit" style="color:${portfolio.totalProjectedProfit >= 0 ? 'var(--green)' : 'var(--red)'}">${portfolio.totalProjectedProfit >= 0 ? '+' : ''}${portProfitFmt} profit</span></div>
-      </div>
-
-      <!-- Platinum -->
-      <div style="background:var(--bg-2);border:1px solid rgba(167,139,250,0.30);border-radius:var(--radius);padding:14px">
-        <div style="font-size:9px;color:#a78bfa;text-transform:uppercase;letter-spacing:.8px;margin-bottom:4px;font-family:var(--font-mono)">★ Platinum — Portfolio</div>
-        <div style="font-family:var(--font-mono);font-size:18px;color:#a78bfa;font-weight:700" id="ov-qfi-value-platinum">${Math.round(calcPortfolioFinancials(coffeeLots, bal, branches, undefined, tierMargins.Platinum).totalInventoryValue).toLocaleString('en-SA')}</div>
-        <div style="font-size:10px;color:var(--text-muted);margin-top:2px;font-family:var(--font-mono)">SAR &nbsp;·&nbsp; <span id="ov-qfi-profit-platinum"></span></div>
+      <!-- Gold tier (reference / primary) -->
+      <div style="background:var(--bg-2);border:1px solid rgba(245,158,11,0.40);border-radius:var(--radius);padding:14px">
+        <div style="font-size:9px;color:#f59e0b;text-transform:uppercase;letter-spacing:.8px;margin-bottom:4px;font-family:var(--font-mono)">🥇 Gold — Portfolio</div>
+        <div style="font-family:var(--font-mono);font-size:18px;color:#f59e0b;font-weight:700" id="ov-qfi-value-gold">${Math.round(calcPortfolioFinancials(coffeeLots, bal, branches, undefined, tierMargins.Gold).totalInventoryValue).toLocaleString('en-SA')}</div>
+        <div style="font-size:10px;color:var(--text-muted);margin-top:2px;font-family:var(--font-mono)">SAR &nbsp;·&nbsp; <span id="ov-qfi-profit-gold"></span></div>
       </div>
 
       <!-- Env P&L -->
@@ -2252,21 +2252,22 @@ app.get('/admin', (c) => {
   /* Refresh Overview Financial Impact card whenever tier margins change on Finance tab */
   (function ovQfiRefresh(){
     function applySnapshot(d){
-      /* Gold-tier (primary / backward-compat) */
-      var vEl  = document.getElementById('ov-qfi-value');
-      var pEl  = document.getElementById('ov-qfi-profit');
       var eEl  = document.getElementById('ov-qfi-env');
-      var tv   = d.totals && d.totals.Gold ? d.totals.Gold.inventoryValue   : d.totalInventoryValue;
-      var tp   = d.totals && d.totals.Gold ? d.totals.Gold.projectedProfit  : d.totalProjectedProfit;
       var te   = d.totals && d.totals.Gold ? d.totals.Gold.environmentalPnL : d.totalEnvironmentalPnL;
-      if(vEl) vEl.textContent = Math.round(tv).toLocaleString('en-SA');
-      if(pEl){
-        pEl.style.color = tp >= 0 ? 'var(--green)' : 'var(--red)';
-        pEl.textContent = (tp>=0?'+':'') + Math.round(tp).toLocaleString('en-SA') + ' profit';
-      }
       if(eEl){
         eEl.style.color = te>0?'var(--green)':te<0?'var(--red)':'var(--text-muted)';
         eEl.textContent = (te>=0?'+':'') + te.toFixed(2);
+      }
+      /* Bronze */
+      if(d.totals && d.totals.Bronze){
+        var bvEl = document.getElementById('ov-qfi-value-bronze');
+        var bpEl = document.getElementById('ov-qfi-profit-bronze');
+        if(bvEl) bvEl.textContent = Math.round(d.totals.Bronze.inventoryValue).toLocaleString('en-SA');
+        if(bpEl){
+          var bp = d.totals.Bronze.projectedProfit;
+          bpEl.style.color = bp>=0?'var(--green)':'var(--red)';
+          bpEl.textContent = (bp>=0?'+':'') + Math.round(bp).toLocaleString('en-SA') + ' profit';
+        }
       }
       /* Silver */
       if(d.totals && d.totals.Silver){
@@ -2279,13 +2280,13 @@ app.get('/admin', (c) => {
           spEl.textContent = (sp>=0?'+':'') + Math.round(sp).toLocaleString('en-SA') + ' profit';
         }
       }
-      /* Platinum */
-      if(d.totals && d.totals.Platinum){
-        var pvEl = document.getElementById('ov-qfi-value-platinum');
-        var ppEl = document.getElementById('ov-qfi-profit-platinum');
-        if(pvEl) pvEl.textContent = Math.round(d.totals.Platinum.inventoryValue).toLocaleString('en-SA');
+      /* Gold */
+      if(d.totals && d.totals.Gold){
+        var pvEl = document.getElementById('ov-qfi-value-gold');
+        var ppEl = document.getElementById('ov-qfi-profit-gold');
+        if(pvEl) pvEl.textContent = Math.round(d.totals.Gold.inventoryValue).toLocaleString('en-SA');
         if(ppEl){
-          var pp = d.totals.Platinum.projectedProfit;
+          var pp = d.totals.Gold.projectedProfit;
           ppEl.style.color = pp>=0?'var(--green)':'var(--red)';
           ppEl.textContent = (pp>=0?'+':'') + Math.round(pp).toLocaleString('en-SA') + ' profit';
         }
@@ -5269,9 +5270,9 @@ app.get('/admin/finance', (c) => {
   const pendingCount = beanRequests.filter(r => r.status === 'PENDING').length
   const bal          = calcLiveBalance(coffeeLots, beanRequests, branches)
   // Compute per-tier portfolios so the Finance summary cards start with the right values
+  const portBronze   = calcPortfolioFinancials(coffeeLots, bal, branches, undefined, tierMargins.Bronze)
   const portSilver   = calcPortfolioFinancials(coffeeLots, bal, branches, undefined, tierMargins.Silver)
   const portGold     = calcPortfolioFinancials(coffeeLots, bal, branches, undefined, tierMargins.Gold)
-  const portPlatinum = calcPortfolioFinancials(coffeeLots, bal, branches, undefined, tierMargins.Platinum)
   const portfolio    = portGold  // Gold is the reference tier for env / sponge display
 
   const envPnlFmt     = portfolio.totalEnvironmentalPnL.toLocaleString('en-SA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -5287,25 +5288,25 @@ app.get('/admin/finance', (c) => {
   <!-- ── Portfolio Summary Cards ── -->
   <div class="stat-grid" style="margin-bottom:28px">
 
+    <!-- Bronze tier totals -->
+    <div class="stat-card" style="border-color:rgba(205,127,50,0.35)">
+      <div class="stat-label" style="color:#cd7f32">🥉 Bronze — Portfolio Value</div>
+      <div class="stat-value" style="color:#cd7f32" id="qfi-total-value-bronze">${Math.round(portBronze.totalInventoryValue).toLocaleString('en-SA')}</div>
+      <div class="stat-unit">SAR &nbsp;·&nbsp; <span id="qfi-total-profit-bronze" style="color:${portBronze.totalProjectedProfit >= 0 ? 'var(--green)' : 'var(--red)'}">${portBronze.totalProjectedProfit >= 0 ? '+' : ''}${Math.round(portBronze.totalProjectedProfit).toLocaleString('en-SA')} profit</span></div>
+    </div>
+
     <!-- Silver tier totals -->
     <div class="stat-card" style="border-color:rgba(148,163,184,0.35)">
-      <div class="stat-label" style="color:#94a3b8">★ Silver — Portfolio Value</div>
+      <div class="stat-label" style="color:#94a3b8">🥈 Silver — Portfolio Value</div>
       <div class="stat-value" style="color:#94a3b8" id="qfi-total-value-silver">${Math.round(portSilver.totalInventoryValue).toLocaleString('en-SA')}</div>
       <div class="stat-unit">SAR &nbsp;·&nbsp; <span id="qfi-total-profit-silver" style="color:${portSilver.totalProjectedProfit >= 0 ? 'var(--green)' : 'var(--red)'}">${portSilver.totalProjectedProfit >= 0 ? '+' : ''}${Math.round(portSilver.totalProjectedProfit).toLocaleString('en-SA')} profit</span></div>
     </div>
 
     <!-- Gold tier totals (reference) -->
     <div class="stat-card" style="border-color:rgba(245,158,11,0.45)">
-      <div class="stat-label" style="color:var(--amber)">★ Gold — Portfolio Value</div>
-      <div class="stat-value" style="color:var(--amber)" id="qfi-total-value">${Math.round(portGold.totalInventoryValue).toLocaleString('en-SA')}</div>
-      <div class="stat-unit">SAR &nbsp;·&nbsp; <span id="qfi-total-profit" style="color:${portGold.totalProjectedProfit >= 0 ? 'var(--green)' : 'var(--red)'}">${portGold.totalProjectedProfit >= 0 ? '+' : ''}${Math.round(portGold.totalProjectedProfit).toLocaleString('en-SA')} profit</span></div>
-    </div>
-
-    <!-- Platinum tier totals -->
-    <div class="stat-card" style="border-color:rgba(167,139,250,0.35)">
-      <div class="stat-label" style="color:#a78bfa">★ Platinum — Portfolio Value</div>
-      <div class="stat-value" style="color:#a78bfa" id="qfi-total-value-platinum">${Math.round(portPlatinum.totalInventoryValue).toLocaleString('en-SA')}</div>
-      <div class="stat-unit">SAR &nbsp;·&nbsp; <span id="qfi-total-profit-platinum" style="color:${portPlatinum.totalProjectedProfit >= 0 ? 'var(--green)' : 'var(--red)'}">${portPlatinum.totalProjectedProfit >= 0 ? '+' : ''}${Math.round(portPlatinum.totalProjectedProfit).toLocaleString('en-SA')} profit</span></div>
+      <div class="stat-label" style="color:#f59e0b">🥇 Gold — Portfolio Value</div>
+      <div class="stat-value" style="color:#f59e0b" id="qfi-total-value-gold">${Math.round(portGold.totalInventoryValue).toLocaleString('en-SA')}</div>
+      <div class="stat-unit">SAR &nbsp;·&nbsp; <span id="qfi-total-profit-gold" style="color:${portGold.totalProjectedProfit >= 0 ? 'var(--green)' : 'var(--red)'}">${portGold.totalProjectedProfit >= 0 ? '+' : ''}${Math.round(portGold.totalProjectedProfit).toLocaleString('en-SA')} profit</span></div>
     </div>
 
     <!-- Environmental P&L + Lots -->
@@ -5320,7 +5321,7 @@ app.get('/admin/finance', (c) => {
   <div class="card" style="margin-bottom:28px">
     <div class="card-title" style="margin-bottom:4px">
       <i class="fa fa-layer-group" style="color:var(--amber)"></i>
-      <span>Client Tier Pricing</span>
+      <span>Client Tier Pricing — Bronze / Silver / Gold</span>
       <span style="font-family:var(--font-mono);font-size:9px;padding:2px 7px;border-radius:2px;background:rgba(245,158,11,0.10);color:var(--amber);border:1px solid rgba(245,158,11,0.25);margin-left:8px">⬡ QFI ENGINE</span>
     </div>
     <div style="font-size:11px;color:var(--text-muted);margin-bottom:18px;font-family:var(--font-mono)">
@@ -5330,11 +5331,29 @@ app.get('/admin/finance', (c) => {
 
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px;margin-bottom:16px">
 
+      <!-- Bronze -->
+      <div style="background:var(--bg-2);border:1px solid rgba(205,127,50,0.35);border-radius:var(--radius);padding:16px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+          <span style="font-family:var(--font-mono);font-size:11px;color:#cd7f32;font-weight:700;padding:2px 8px;border:1px solid rgba(205,127,50,0.4);border-radius:2px">🥉 BRONZE</span>
+          <span style="font-size:10px;color:var(--text-muted)">entry · 0–500 kg LTV</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <input id="marginBronze" type="number" min="1" max="99" step="0.1"
+            value="${tierMargins.Bronze}"
+            style="width:72px;background:var(--bg-1);border:1px solid rgba(205,127,50,0.4);border-radius:var(--radius);padding:7px 8px;color:var(--text-pri);font-family:var(--font-mono);font-size:15px;font-weight:700;text-align:center"/>
+          <span style="font-family:var(--font-mono);color:#cd7f32;font-size:13px">%</span>
+          <span style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted);margin-left:auto" id="cur-bronze">${tierMargins.Bronze}% saved</span>
+        </div>
+        <div style="font-size:10px;color:var(--text-muted);margin-top:8px;font-family:var(--font-mono)" id="sim-bronze-wp">
+          — preview prices below —
+        </div>
+      </div>
+
       <!-- Silver -->
       <div style="background:var(--bg-2);border:1px solid rgba(148,163,184,0.35);border-radius:var(--radius);padding:16px">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
-          <span style="font-family:var(--font-mono);font-size:11px;color:#94a3b8;font-weight:700;padding:2px 8px;border:1px solid rgba(148,163,184,0.4);border-radius:2px">★ SILVER</span>
-          <span style="font-size:10px;color:var(--text-muted)">entry tier</span>
+          <span style="font-family:var(--font-mono);font-size:11px;color:#94a3b8;font-weight:700;padding:2px 8px;border:1px solid rgba(148,163,184,0.4);border-radius:2px">🥈 SILVER</span>
+          <span style="font-size:10px;color:var(--text-muted)">mid · 501–2000 kg LTV</span>
         </div>
         <div style="display:flex;align-items:center;gap:8px">
           <input id="marginSilver" type="number" min="1" max="99" step="0.1"
@@ -5351,35 +5370,17 @@ app.get('/admin/finance', (c) => {
       <!-- Gold -->
       <div style="background:var(--bg-2);border:1px solid rgba(245,158,11,0.35);border-radius:var(--radius);padding:16px">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
-          <span style="font-family:var(--font-mono);font-size:11px;color:var(--amber);font-weight:700;padding:2px 8px;border:1px solid rgba(245,158,11,0.4);border-radius:2px">★ GOLD</span>
-          <span style="font-size:10px;color:var(--text-muted)">standard tier</span>
+          <span style="font-family:var(--font-mono);font-size:11px;color:#f59e0b;font-weight:700;padding:2px 8px;border:1px solid rgba(245,158,11,0.4);border-radius:2px">🥇 GOLD</span>
+          <span style="font-size:10px;color:var(--text-muted)">top · 2001 kg+ LTV</span>
         </div>
         <div style="display:flex;align-items:center;gap:8px">
           <input id="marginGold" type="number" min="1" max="99" step="0.1"
             value="${tierMargins.Gold}"
             style="width:72px;background:var(--bg-1);border:1px solid rgba(245,158,11,0.4);border-radius:var(--radius);padding:7px 8px;color:var(--text-pri);font-family:var(--font-mono);font-size:15px;font-weight:700;text-align:center"/>
-          <span style="font-family:var(--font-mono);color:var(--amber);font-size:13px">%</span>
+          <span style="font-family:var(--font-mono);color:#f59e0b;font-size:13px">%</span>
           <span style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted);margin-left:auto" id="cur-gold">${tierMargins.Gold}% saved</span>
         </div>
         <div style="font-size:10px;color:var(--text-muted);margin-top:8px;font-family:var(--font-mono)" id="sim-gold-wp">
-          — preview prices below —
-        </div>
-      </div>
-
-      <!-- Platinum -->
-      <div style="background:var(--bg-2);border:1px solid rgba(167,139,250,0.35);border-radius:var(--radius);padding:16px">
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
-          <span style="font-family:var(--font-mono);font-size:11px;color:#a78bfa;font-weight:700;padding:2px 8px;border:1px solid rgba(167,139,250,0.4);border-radius:2px">★ PLATINUM</span>
-          <span style="font-size:10px;color:var(--text-muted)">VIP tier</span>
-        </div>
-        <div style="display:flex;align-items:center;gap:8px">
-          <input id="marginPlatinum" type="number" min="1" max="99" step="0.1"
-            value="${tierMargins.Platinum}"
-            style="width:72px;background:var(--bg-1);border:1px solid rgba(167,139,250,0.4);border-radius:var(--radius);padding:7px 8px;color:var(--text-pri);font-family:var(--font-mono);font-size:15px;font-weight:700;text-align:center"/>
-          <span style="font-family:var(--font-mono);color:#a78bfa;font-size:13px">%</span>
-          <span style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted);margin-left:auto" id="cur-platinum">${tierMargins.Platinum}% saved</span>
-        </div>
-        <div style="font-size:10px;color:var(--text-muted);margin-top:8px;font-family:var(--font-mono)" id="sim-platinum-wp">
           — preview prices below —
         </div>
       </div>
@@ -5405,7 +5406,7 @@ app.get('/admin/finance', (c) => {
     </div>
     <div style="font-size:10px;color:var(--text-muted);font-family:var(--font-mono);margin-bottom:12px">
       Wholesale prices shown below are at <strong style="color:var(--amber)">Gold tier margin (${tierMargins.Gold}%)</strong> as reference.
-      Silver and Platinum prices are computed per tier.
+      Bronze, Silver and Gold prices are computed per tier.
     </div>
 
     <!-- PREVIEW MODE banner — shown when any margin input is being changed -->
@@ -5422,9 +5423,9 @@ app.get('/admin/finance', (c) => {
             <th>Origin</th>
             <th>Branch</th>
             <th>True Roasted Cost</th>
-            <th style="color:#94a3b8">★ Silver Price</th>
-            <th style="color:var(--amber)">★ Gold Price</th>
-            <th style="color:#a78bfa">★ Platinum Price</th>
+            <th style="color:#cd7f32">🥉 Bronze Price</th>
+            <th style="color:#94a3b8">🥈 Silver Price</th>
+            <th style="color:#f59e0b">🥇 Gold Price</th>
             <th>Live Stock</th>
             <th>Live Inv. Value <span style="font-size:9px;font-weight:400;color:var(--text-muted)">(Gold)</span></th>
             <th>Projected Profit <span style="font-size:9px;font-weight:400;color:var(--text-muted)">(Gold)</span></th>
@@ -5441,10 +5442,10 @@ app.get('/admin/finance', (c) => {
                                 fin.yieldCoeff < SPONGE_BASELINE_COEFFICIENT ? '#fb923c' : 'var(--text-sec)'
             const coeffIcon   = fin.yieldCoeff > SPONGE_BASELINE_COEFFICIENT ? '▲' :
                                 fin.yieldCoeff < SPONGE_BASELINE_COEFFICIENT ? '▼' : '—'
-            // Server-rendered prices per tier (use lot's own costPerKg with each tier margin)
-            const wpSilver   = hasCost ? calcWholesalePrice(fin.costPerKg, tierMargins.Silver)   : null
-            const wpGold     = hasCost ? calcWholesalePrice(fin.costPerKg, tierMargins.Gold)     : null
-            const wpPlatinum = hasCost ? calcWholesalePrice(fin.costPerKg, tierMargins.Platinum) : null
+            // Server-rendered prices per unified tier (Bronze / Silver / Gold)
+            const wpBronze = hasCost ? calcWholesalePrice(fin.costPerKg, tierMargins.Bronze) : null
+            const wpSilver = hasCost ? calcWholesalePrice(fin.costPerKg, tierMargins.Silver) : null
+            const wpGold   = hasCost ? calcWholesalePrice(fin.costPerKg, tierMargins.Gold)   : null
             return `
           <tr data-lot-id="${fin.lotId}">
             <td class="mono" style="color:var(--amber)">${fin.lotId}</td>
@@ -5454,16 +5455,16 @@ app.get('/admin/finance', (c) => {
               ? `<span style="color:var(--text-pri)">${fin.trueRoastedCost.toFixed(2)}</span> <span style="font-size:10px;color:var(--text-muted)">SAR/kg</span>`
               : `<span style="color:var(--text-muted);font-size:11px">No cost data</span>`
             }</td>
+            <td class="mono" id="qfi-wp-bronze-${fin.lotId}">${wpBronze !== null
+              ? `<span style="color:#cd7f32;font-weight:700">${wpBronze.toFixed(2)}</span> <span style="font-size:10px;color:var(--text-muted)">SAR/kg</span>`
+              : `<span style="color:var(--text-muted)">—</span>`
+            }</td>
             <td class="mono" id="qfi-wp-silver-${fin.lotId}">${wpSilver !== null
               ? `<span style="color:#94a3b8;font-weight:700">${wpSilver.toFixed(2)}</span> <span style="font-size:10px;color:var(--text-muted)">SAR/kg</span>`
               : `<span style="color:var(--text-muted)">—</span>`
             }</td>
             <td class="mono" id="qfi-wp-gold-${fin.lotId}">${wpGold !== null
-              ? `<span style="color:var(--amber);font-weight:700">${wpGold.toFixed(2)}</span> <span style="font-size:10px;color:var(--text-muted)">SAR/kg</span>`
-              : `<span style="color:var(--text-muted)">—</span>`
-            }</td>
-            <td class="mono" id="qfi-wp-platinum-${fin.lotId}">${wpPlatinum !== null
-              ? `<span style="color:#a78bfa;font-weight:700">${wpPlatinum.toFixed(2)}</span> <span style="font-size:10px;color:var(--text-muted)">SAR/kg</span>`
+              ? `<span style="color:#f59e0b;font-weight:700">${wpGold.toFixed(2)}</span> <span style="font-size:10px;color:var(--text-muted)">SAR/kg</span>`
               : `<span style="color:var(--text-muted)">—</span>`
             }</td>
             <td class="mono" style="color:var(--text-sec)">${fin.liveRoastedKg} kg</td>
@@ -5811,7 +5812,7 @@ app.get('/admin/finance', (c) => {
   })))};
 
   /* Current saved tier margins — kept in sync with server */
-  var _tierMargins = { Silver: ${tierMargins.Silver}, Gold: ${tierMargins.Gold}, Platinum: ${tierMargins.Platinum} };
+  var _tierMargins = { Bronze: ${tierMargins.Bronze}, Silver: ${tierMargins.Silver}, Gold: ${tierMargins.Gold} };
 
   /* Helper: compute WP for a cost + margin */
   function _wp(cost, marginPct) {
@@ -5820,28 +5821,34 @@ app.get('/admin/finance', (c) => {
   }
 
   /* ── Core recalculation — updates all 3 tier columns + summary cards ── */
-  function qfiCalc(silverM, goldM, platinumM, isPreview) {
-    var totValueSilver   = 0; var totProfitSilver   = 0;
-    var totValueGold     = 0; var totProfitGold     = 0;
-    var totValuePlatinum = 0; var totProfitPlatinum = 0;
-    var totEnvPnL        = 0;
+  function qfiCalc(bronzeM, silverM, goldM, isPreview) {
+    var totValueBronze = 0; var totProfitBronze = 0;
+    var totValueSilver = 0; var totProfitSilver = 0;
+    var totValueGold   = 0; var totProfitGold   = 0;
+    var totEnvPnL      = 0;
 
     LOT_DATA.forEach(function(lot) {
       if (!lot.costPerKg || lot.costPerKg <= 0) return;
 
+      var wpB = _wp(lot.costPerKg, bronzeM);
       var wpS = _wp(lot.costPerKg, silverM);
       var wpG = _wp(lot.costPerKg, goldM);
-      var wpP = _wp(lot.costPerKg, platinumM);
 
+      var ivB = wpB * lot.liveRoasted;  var ppB = (wpB - lot.trueRoastedCost) * lot.liveRoasted;
       var ivS = wpS * lot.liveRoasted;  var ppS = (wpS - lot.trueRoastedCost) * lot.liveRoasted;
       var ivG = wpG * lot.liveRoasted;  var ppG = (wpG - lot.trueRoastedCost) * lot.liveRoasted;
-      var ivP = wpP * lot.liveRoasted;  var ppP = (wpP - lot.trueRoastedCost) * lot.liveRoasted;
       var ep  = lot.spongeKgDelta * wpG;
 
-      totValueSilver   += ivS;  totProfitSilver   += ppS;
-      totValueGold     += ivG;  totProfitGold     += ppG;
-      totValuePlatinum += ivP;  totProfitPlatinum += ppP;
-      totEnvPnL        += ep;
+      totValueBronze += ivB;  totProfitBronze += ppB;
+      totValueSilver += ivS;  totProfitSilver += ppS;
+      totValueGold   += ivG;  totProfitGold   += ppG;
+      totEnvPnL      += ep;
+
+      /* Bronze column */
+      var wbEl = document.getElementById('qfi-wp-bronze-' + lot.id);
+      if (wbEl) wbEl.innerHTML =
+        '<span style="color:#cd7f32;font-weight:700">' + wpB.toFixed(2) + '</span>' +
+        ' <span style="font-size:10px;color:var(--text-muted)">SAR/kg</span>';
 
       /* Silver column */
       var wsEl = document.getElementById('qfi-wp-silver-' + lot.id);
@@ -5852,22 +5859,16 @@ app.get('/admin/finance', (c) => {
       /* Gold column */
       var wgEl = document.getElementById('qfi-wp-gold-' + lot.id);
       if (wgEl) wgEl.innerHTML =
-        '<span style="color:var(--amber);font-weight:700">' + wpG.toFixed(2) + '</span>' +
+        '<span style="color:#f59e0b;font-weight:700">' + wpG.toFixed(2) + '</span>' +
         ' <span style="font-size:10px;color:var(--text-muted)">SAR/kg</span>';
 
-      /* Platinum column */
-      var wpEl = document.getElementById('qfi-wp-platinum-' + lot.id);
-      if (wpEl) wpEl.innerHTML =
-        '<span style="color:#a78bfa;font-weight:700">' + wpP.toFixed(2) + '</span>' +
-        ' <span style="font-size:10px;color:var(--text-muted)">SAR/kg</span>';
-
-      /* Inventory Value (Gold) */
+      /* Inventory Value (Gold reference) */
       var ivEl = document.getElementById('qfi-iv-' + lot.id);
       if (ivEl) ivEl.innerHTML =
         '<span style="color:var(--amber)">' + Math.round(ivG).toLocaleString('en-SA') + '</span>' +
         ' <span style="font-size:10px;color:var(--text-muted)">SAR</span>';
 
-      /* Projected Profit (Gold) */
+      /* Projected Profit (Gold reference) */
       var ppEl = document.getElementById('qfi-pp-' + lot.id);
       if (ppEl) {
         ppEl.style.color = ppG >= 0 ? 'var(--green)' : 'var(--red)';
@@ -5883,6 +5884,14 @@ app.get('/admin/finance', (c) => {
     });
 
     /* Summary cards — per tier */
+    /* Bronze */
+    var tvBEl = document.getElementById('qfi-total-value-bronze');
+    var tpBEl = document.getElementById('qfi-total-profit-bronze');
+    if (tvBEl) tvBEl.textContent = Math.round(totValueBronze).toLocaleString('en-SA');
+    if (tpBEl) {
+      tpBEl.style.color = totProfitBronze >= 0 ? 'var(--green)' : 'var(--red)';
+      tpBEl.textContent = (totProfitBronze >= 0 ? '+' : '') + Math.round(totProfitBronze).toLocaleString('en-SA') + ' profit';
+    }
     /* Silver */
     var tvSEl = document.getElementById('qfi-total-value-silver');
     var tpSEl = document.getElementById('qfi-total-profit-silver');
@@ -5891,21 +5900,13 @@ app.get('/admin/finance', (c) => {
       tpSEl.style.color = totProfitSilver >= 0 ? 'var(--green)' : 'var(--red)';
       tpSEl.textContent = (totProfitSilver >= 0 ? '+' : '') + Math.round(totProfitSilver).toLocaleString('en-SA') + ' profit';
     }
-    /* Gold */
-    var tvEl = document.getElementById('qfi-total-value');
-    var tpEl = document.getElementById('qfi-total-profit');
-    if (tvEl) tvEl.textContent = Math.round(totValueGold).toLocaleString('en-SA');
-    if (tpEl) {
-      tpEl.style.color = totProfitGold >= 0 ? 'var(--green)' : 'var(--red)';
-      tpEl.textContent = (totProfitGold >= 0 ? '+' : '') + Math.round(totProfitGold).toLocaleString('en-SA') + ' profit';
-    }
-    /* Platinum */
-    var tvPEl = document.getElementById('qfi-total-value-platinum');
-    var tpPEl = document.getElementById('qfi-total-profit-platinum');
-    if (tvPEl) tvPEl.textContent = Math.round(totValuePlatinum).toLocaleString('en-SA');
+    /* Gold tier card */
+    var tvPEl = document.getElementById('qfi-total-value-gold');
+    var tpPEl = document.getElementById('qfi-total-profit-gold');
+    if (tvPEl) tvPEl.textContent = Math.round(totValueGold).toLocaleString('en-SA');
     if (tpPEl) {
-      tpPEl.style.color = totProfitPlatinum >= 0 ? 'var(--green)' : 'var(--red)';
-      tpPEl.textContent = (totProfitPlatinum >= 0 ? '+' : '') + Math.round(totProfitPlatinum).toLocaleString('en-SA') + ' profit';
+      tpPEl.style.color = totProfitGold >= 0 ? 'var(--green)' : 'var(--red)';
+      tpPEl.textContent = (totProfitGold >= 0 ? '+' : '') + Math.round(totProfitGold).toLocaleString('en-SA') + ' profit';
     }
     /* Environmental P&L (always Gold-tier reference) */
     var enEl = document.getElementById('qfi-env-pnl');
@@ -5915,15 +5916,15 @@ app.get('/admin/finance', (c) => {
     }
 
     /* Update tier card preview hints */
+    var bEl = document.getElementById('sim-bronze-wp');
     var sEl = document.getElementById('sim-silver-wp');
     var gEl = document.getElementById('sim-gold-wp');
-    var pEl = document.getElementById('sim-platinum-wp');
     if (sEl && LOT_DATA.length) {
       var sample = LOT_DATA.find(function(l){ return l.costPerKg > 0; });
       if (sample) {
+        if (bEl) bEl.textContent = 'e.g. ' + _wp(sample.costPerKg, bronzeM).toFixed(2) + ' SAR/kg (' + sample.id + ')';
         sEl.textContent = 'e.g. ' + _wp(sample.costPerKg, silverM).toFixed(2) + ' SAR/kg (' + sample.id + ')';
         gEl.textContent = 'e.g. ' + _wp(sample.costPerKg, goldM).toFixed(2)   + ' SAR/kg (' + sample.id + ')';
-        pEl.textContent = 'e.g. ' + _wp(sample.costPerKg, platinumM).toFixed(2) + ' SAR/kg (' + sample.id + ')';
       }
     }
 
@@ -5939,22 +5940,22 @@ app.get('/admin/finance', (c) => {
   }
   function _onTierInput() {
     qfiCalc(
-      _getInputMargin('marginSilver',   _tierMargins.Silver),
-      _getInputMargin('marginGold',     _tierMargins.Gold),
-      _getInputMargin('marginPlatinum', _tierMargins.Platinum),
+      _getInputMargin('marginBronze', _tierMargins.Bronze),
+      _getInputMargin('marginSilver', _tierMargins.Silver),
+      _getInputMargin('marginGold',   _tierMargins.Gold),
       true
     );
   }
-  document.getElementById('marginSilver').addEventListener('input',   _onTierInput);
-  document.getElementById('marginGold').addEventListener('input',     _onTierInput);
-  document.getElementById('marginPlatinum').addEventListener('input', _onTierInput);
+  document.getElementById('marginBronze').addEventListener('input', _onTierInput);
+  document.getElementById('marginSilver').addEventListener('input', _onTierInput);
+  document.getElementById('marginGold').addEventListener('input',   _onTierInput);
 
   /* ── Reset preview to saved values ── */
   function resetTierPreview() {
-    document.getElementById('marginSilver').value   = _tierMargins.Silver;
-    document.getElementById('marginGold').value     = _tierMargins.Gold;
-    document.getElementById('marginPlatinum').value = _tierMargins.Platinum;
-    qfiCalc(_tierMargins.Silver, _tierMargins.Gold, _tierMargins.Platinum, false);
+    document.getElementById('marginBronze').value = _tierMargins.Bronze;
+    document.getElementById('marginSilver').value = _tierMargins.Silver;
+    document.getElementById('marginGold').value   = _tierMargins.Gold;
+    qfiCalc(_tierMargins.Bronze, _tierMargins.Silver, _tierMargins.Gold, false);
   }
 
   /* ── BroadcastChannel ── */
@@ -5962,25 +5963,26 @@ app.get('/admin/finance', (c) => {
 
   /* ── SET ALL: persist tier margins to server + broadcast ── */
   function saveTierMargins() {
-    var s = _getInputMargin('marginSilver',   _tierMargins.Silver);
-    var g = _getInputMargin('marginGold',     _tierMargins.Gold);
-    var p = _getInputMargin('marginPlatinum', _tierMargins.Platinum);
+    var b = _getInputMargin('marginBronze', _tierMargins.Bronze);
+    var s = _getInputMargin('marginSilver', _tierMargins.Silver);
+    var g = _getInputMargin('marginGold',   _tierMargins.Gold);
 
     fetch('/api/finance/set-tier-margins', {
       method: 'POST',
+
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ Silver: s, Gold: g, Platinum: p })
+      body: JSON.stringify({ Bronze: b, Silver: s, Gold: g })
     })
     .then(function(r) { return r.json(); })
     .then(function(d) {
       if (d.ok) {
         _tierMargins = d.tierMargins;
-        document.getElementById('cur-silver').textContent   = d.tierMargins.Silver   + '% saved';
-        document.getElementById('cur-gold').textContent     = d.tierMargins.Gold     + '% saved';
-        document.getElementById('cur-platinum').textContent = d.tierMargins.Platinum + '% saved';
+        document.getElementById('cur-bronze').textContent = d.tierMargins.Bronze + '% saved';
+        document.getElementById('cur-silver').textContent = d.tierMargins.Silver + '% saved';
+        document.getElementById('cur-gold').textContent   = d.tierMargins.Gold   + '% saved';
 
         /* Re-run with confirmed server values */
-        qfiCalc(d.tierMargins.Silver, d.tierMargins.Gold, d.tierMargins.Platinum, false);
+        qfiCalc(d.tierMargins.Bronze, d.tierMargins.Silver, d.tierMargins.Gold, false);
 
         /* Broadcast to all open tabs (Overview + Cafe portals) */
         if (_qfiChannel) {
@@ -6038,7 +6040,7 @@ app.post('/api/finance/set-tier-margins', async (c) => {
   try {
     const body = await c.req.json()
     const updates: Record<string, number> = {}
-    for (const tier of ['Silver', 'Gold', 'Platinum'] as const) {
+    for (const tier of ['Bronze', 'Silver', 'Gold'] as const) {
       const val = parseFloat(body[tier])
       if (!isNaN(val) && val >= 1 && val <= 99) updates[tier] = val
     }
@@ -6072,9 +6074,9 @@ app.get('/api/finance/snapshot', (c) => {
 
   // Compute portfolio totals using each tier's margin forced across ALL lots.
   // This ensures lots that have their own targetMargin still reflect tier pricing.
+  const portBronze   = calcPortfolioFinancials(coffeeLots, bal, branches, undefined, tierMargins.Bronze)
   const portSilver   = calcPortfolioFinancials(coffeeLots, bal, branches, undefined, tierMargins.Silver)
-  const portGold     = calcPortfolioFinancials(coffeeLots, bal, branches, undefined, tierMargins.Gold)
-  const portPlatinum = calcPortfolioFinancials(coffeeLots, bal, branches, undefined, tierMargins.Platinum)
+  const portGold   = calcPortfolioFinancials(coffeeLots, bal, branches, undefined, tierMargins.Gold)
 
   // Gold is the reference / default for Overview totals
   return c.json({
@@ -6090,9 +6092,9 @@ app.get('/api/finance/snapshot', (c) => {
 
     // Per-tier portfolio totals (used by Finance page tier summary cards)
     totals: {
-      Silver:   { inventoryValue: portSilver.totalInventoryValue,   projectedProfit: portSilver.totalProjectedProfit,   environmentalPnL: portSilver.totalEnvironmentalPnL },
-      Gold:     { inventoryValue: portGold.totalInventoryValue,     projectedProfit: portGold.totalProjectedProfit,     environmentalPnL: portGold.totalEnvironmentalPnL },
-      Platinum: { inventoryValue: portPlatinum.totalInventoryValue, projectedProfit: portPlatinum.totalProjectedProfit, environmentalPnL: portPlatinum.totalEnvironmentalPnL },
+      Bronze: { inventoryValue: portBronze.totalInventoryValue, projectedProfit: portBronze.totalProjectedProfit, environmentalPnL: portBronze.totalEnvironmentalPnL },
+      Silver: { inventoryValue: portSilver.totalInventoryValue, projectedProfit: portSilver.totalProjectedProfit, environmentalPnL: portSilver.totalEnvironmentalPnL },
+      Gold:   { inventoryValue: portGold.totalInventoryValue,   projectedProfit: portGold.totalProjectedProfit,   environmentalPnL: portGold.totalEnvironmentalPnL },
     },
 
     // Per-lot data: costPerKg for client-side recalc + per-tier wholesale prices
@@ -6105,10 +6107,10 @@ app.get('/api/finance/snapshot', (c) => {
       liveInventoryValue:fin.liveInventoryValue,
       projectedProfit:   fin.projectedProfit,
       environmentalPnL:  fin.environmentalPnL,
-      // Per-tier wholesale prices for this lot
-      wpSilver:   fin.costPerKg > 0 ? calcWholesalePrice(fin.costPerKg, tierMargins.Silver)   : null,
-      wpGold:     fin.costPerKg > 0 ? calcWholesalePrice(fin.costPerKg, tierMargins.Gold)     : null,
-      wpPlatinum: fin.costPerKg > 0 ? calcWholesalePrice(fin.costPerKg, tierMargins.Platinum) : null,
+      // Per-tier wholesale prices for this lot (Bronze / Silver / Gold)
+      wpBronze: fin.costPerKg > 0 ? calcWholesalePrice(fin.costPerKg, tierMargins.Bronze) : null,
+      wpSilver: fin.costPerKg > 0 ? calcWholesalePrice(fin.costPerKg, tierMargins.Silver) : null,
+      wpGold:   fin.costPerKg > 0 ? calcWholesalePrice(fin.costPerKg, tierMargins.Gold)   : null,
     })),
   })
 })
@@ -6758,15 +6760,15 @@ app.get('/cafe', (c) => {
       <!-- ⬡ Wholesale Price badge — tier-specific, fixed to baseline 0.82 -->
       ${wprice !== null ? `
       <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:${
-        client.tier === 'Platinum' ? 'rgba(167,139,250,0.08)' : client.tier === 'Silver' ? 'rgba(148,163,184,0.08)' : 'rgba(245,158,11,0.08)'
+        client.tier === 'Gold' ? 'rgba(245,158,11,0.08)' : client.tier === 'Silver' ? 'rgba(148,163,184,0.08)' : 'rgba(205,127,50,0.08)'
       };border:1px solid ${
-        client.tier === 'Platinum' ? 'rgba(167,139,250,0.30)' : client.tier === 'Silver' ? 'rgba(148,163,184,0.30)' : 'rgba(245,158,11,0.25)'
+        client.tier === 'Gold' ? 'rgba(245,158,11,0.30)' : client.tier === 'Silver' ? 'rgba(148,163,184,0.30)' : 'rgba(205,127,50,0.25)'
       };border-radius:var(--radius);margin-bottom:4px" id="wp-badge-${cat.key.replace(/\s+/g,'-')}">
         <span style="font-family:var(--font-mono);font-size:9px;color:${
-          client.tier === 'Platinum' ? '#a78bfa' : client.tier === 'Silver' ? '#94a3b8' : 'var(--amber)'
+          client.tier === 'Gold' ? '#f59e0b' : client.tier === 'Silver' ? '#94a3b8' : '#cd7f32'
         };letter-spacing:.4px;font-weight:700">⬡ ${client.tier.toUpperCase()} PRICE</span>
         <span style="flex:1;font-family:var(--font-mono);font-size:16px;font-weight:700;color:${
-          client.tier === 'Platinum' ? '#a78bfa' : client.tier === 'Silver' ? '#94a3b8' : 'var(--amber)'
+          client.tier === 'Gold' ? '#f59e0b' : client.tier === 'Silver' ? '#94a3b8' : '#cd7f32'
         }" id="wp-val-${cat.key.replace(/\s+/g,'-')}">${wprice.toFixed(2)} <span style="font-size:11px;font-weight:400;color:var(--text-muted)">SAR/kg</span></span>
         <span style="font-family:var(--font-mono);font-size:9px;color:var(--text-muted)">★ ${client.tier}</span>
       </div>
@@ -6892,10 +6894,10 @@ app.get('/cafe', (c) => {
     })))};
 
     // Current tier margins from server (kept in sync)
-    var _tierMargins = { Silver: ${tierMargins.Silver}, Gold: ${tierMargins.Gold}, Platinum: ${tierMargins.Platinum} };
+    var _tierMargins = { Bronze: ${tierMargins.Bronze}, Silver: ${tierMargins.Silver}, Gold: ${tierMargins.Gold} };
 
     // Tier color for DOM updates
-    var _tierColor = _clientTier === 'Platinum' ? '#a78bfa' : _clientTier === 'Silver' ? '#94a3b8' : 'var(--amber)';
+    var _tierColor = _clientTier === 'Gold' ? '#f59e0b' : _clientTier === 'Silver' ? '#94a3b8' : '#cd7f32';
 
     /* Compute WP for this client's tier */
     function _calcTierWP(costPerKg) {
@@ -6965,7 +6967,7 @@ app.get('/cafe', (c) => {
         .then(function(d){
           if (d.tierMargins) _tierMargins = d.tierMargins;
           // Pick the right wp key for this tier
-          var wpKey = 'wp' + _clientTier;   // e.g. 'wpGold', 'wpSilver', 'wpPlatinum'
+          var wpKey = 'wp' + _clientTier;   // e.g. 'wpGold', 'wpSilver', 'wpBronze'
           var lotWpMap = {};
           (d.byLot || []).forEach(function(l){ if (l[wpKey] != null) lotWpMap[l.lotId] = l[wpKey]; });
 
@@ -7360,7 +7362,7 @@ app.post('/api/sponge/simulate', async (c) => {
 const EXCHANGE_CSS = `
   :root{--bg:#0f0f11;--card:#18181b;--card2:#1c1c20;--border:rgba(255,255,255,0.07);
         --text:#f1f5f9;--muted:#64748b;--amber:#f59e0b;--green:#4ade80;--red:#f87171;
-        --blue:#60a5fa;--purple:#a78bfa;--cyan:#22d3ee;
+        --blue:#60a5fa;--purple:#f59e0b;--cyan:#22d3ee;
         --radius:8px;--mono:'JetBrains Mono',ui-monospace,monospace}
   *{box-sizing:border-box;margin:0;padding:0}
   body{background:var(--bg);color:var(--text);font-family:system-ui,sans-serif;min-height:100vh;display:flex}
