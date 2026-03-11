@@ -9969,4 +9969,8 @@ app.get('/api/exchange/analytics', (c) => {
   })
 })
 
+// ── GET /manual — User Manual ──────────────────────────────────────
+// wrangler pages dev serves public/static/manual.html at /static/manual
+app.get('/manual', (c) => c.redirect('/static/manual', 301))
+
 export default app

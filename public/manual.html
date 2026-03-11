@@ -1,0 +1,1239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QABBAN OS — User Manual v2.0</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    :root {
+      --amber: #f59e0b;
+      --amber-glow: rgba(245,158,11,0.12);
+      --bronze: #cd7f32;
+      --silver: #94a3b8;
+      --gold: #f59e0b;
+      --green: #4ade80;
+      --red: #f87171;
+      --blue: #60a5fa;
+      --bg: #0d0d0f;
+      --card: #14141a;
+      --border: rgba(245,158,11,0.18);
+      --text: #e2e8f0;
+      --text-muted: #64748b;
+      --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      line-height: 1.6;
+      display: flex;
+      min-height: 100vh;
+    }
+    /* Sidebar */
+    #sidebar {
+      width: 280px;
+      min-width: 280px;
+      background: #0a0a0f;
+      border-right: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+      padding: 20px 0;
+      flex-shrink: 0;
+    }
+    #sidebar::-webkit-scrollbar { width: 4px; }
+    #sidebar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+    .sidebar-brand {
+      padding: 0 20px 20px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 16px;
+    }
+    .sidebar-logo {
+      font-size: 20px;
+      font-weight: 800;
+      color: var(--amber);
+      letter-spacing: 2px;
+      font-family: var(--font-mono);
+    }
+    .sidebar-sub {
+      font-size: 10px;
+      color: var(--text-muted);
+      margin-top: 4px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+    .sidebar-section {
+      padding: 6px 20px 2px;
+      font-size: 9px;
+      color: var(--amber);
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      font-weight: 700;
+      margin-top: 8px;
+    }
+    .sidebar-link {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 20px;
+      font-size: 12px;
+      color: var(--text-muted);
+      text-decoration: none;
+      cursor: pointer;
+      transition: all 0.15s;
+      border-left: 2px solid transparent;
+    }
+    .sidebar-link:hover, .sidebar-link.active {
+      color: var(--amber);
+      background: var(--amber-glow);
+      border-left-color: var(--amber);
+    }
+    .sidebar-link i { width: 14px; font-size: 11px; }
+    /* Main content */
+    #content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 0;
+    }
+    /* Hero header */
+    .hero {
+      background: linear-gradient(135deg, #0a0a0f 0%, #14141a 50%, #0d0d0f 100%);
+      border-bottom: 1px solid var(--border);
+      padding: 60px 60px 40px;
+      position: relative;
+      overflow: hidden;
+    }
+    .hero::before {
+      content: '';
+      position: absolute;
+      top: -80px; right: -80px;
+      width: 300px; height: 300px;
+      background: radial-gradient(circle, rgba(245,158,11,0.08) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .hero-badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: var(--amber-glow);
+      border: 1px solid rgba(245,158,11,0.3);
+      color: var(--amber);
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      margin-bottom: 20px;
+    }
+    .hero-title {
+      font-size: 42px;
+      font-weight: 900;
+      letter-spacing: 4px;
+      color: var(--amber);
+      font-family: var(--font-mono);
+      margin-bottom: 8px;
+    }
+    .hero-sub {
+      font-size: 16px;
+      color: var(--text-muted);
+      margin-bottom: 24px;
+    }
+    .hero-meta {
+      display: flex;
+      gap: 24px;
+      flex-wrap: wrap;
+    }
+    .hero-meta-item {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 12px; color: var(--text-muted);
+    }
+    .hero-meta-item i { color: var(--amber); }
+    /* Section containers */
+    .section {
+      padding: 48px 60px;
+      border-bottom: 1px solid rgba(245,158,11,0.07);
+    }
+    .section:last-child { border-bottom: none; }
+    .section-title {
+      font-size: 24px;
+      font-weight: 800;
+      color: var(--text);
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      letter-spacing: 1px;
+    }
+    .section-title .section-num {
+      background: var(--amber-glow);
+      border: 1px solid rgba(245,158,11,0.3);
+      color: var(--amber);
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-family: var(--font-mono);
+      font-weight: 700;
+    }
+    .section-desc {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-bottom: 28px;
+      padding-left: 4px;
+      border-left: 3px solid var(--amber);
+      padding-left: 12px;
+    }
+    .sub-title {
+      font-size: 16px;
+      font-weight: 700;
+      color: #cbd5e1;
+      margin: 24px 0 12px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .sub-title::before {
+      content: '▶';
+      color: var(--amber);
+      font-size: 9px;
+    }
+    /* Tables */
+    .manual-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      margin: 16px 0;
+    }
+    .manual-table th {
+      background: rgba(245,158,11,0.08);
+      color: var(--amber);
+      font-weight: 700;
+      padding: 10px 14px;
+      text-align: left;
+      border: 1px solid var(--border);
+      font-size: 11px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+    .manual-table td {
+      padding: 9px 14px;
+      border: 1px solid rgba(245,158,11,0.1);
+      color: var(--text);
+      vertical-align: top;
+    }
+    .manual-table tr:hover td { background: rgba(245,158,11,0.03); }
+    /* Cards grid */
+    .cards-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 16px;
+      margin: 20px 0;
+    }
+    .feature-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 20px;
+      transition: transform 0.15s, border-color 0.15s;
+    }
+    .feature-card:hover {
+      transform: translateY(-2px);
+      border-color: rgba(245,158,11,0.4);
+    }
+    .feature-card-icon {
+      font-size: 24px;
+      margin-bottom: 10px;
+    }
+    .feature-card-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--amber);
+      margin-bottom: 6px;
+    }
+    .feature-card-desc {
+      font-size: 12px;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+    /* Tier badges */
+    .tier-bronze { color: var(--bronze); }
+    .tier-silver { color: var(--silver); }
+    .tier-gold   { color: var(--gold); }
+    .tier-badge {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 3px 10px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .badge-bronze { background: rgba(205,127,50,0.15); border: 1px solid rgba(205,127,50,0.35); color: #cd7f32; }
+    .badge-silver { background: rgba(148,163,184,0.15); border: 1px solid rgba(148,163,184,0.35); color: #94a3b8; }
+    .badge-gold   { background: rgba(245,158,11,0.15); border: 1px solid rgba(245,158,11,0.35); color: #f59e0b; }
+    /* Code blocks */
+    .code-block {
+      background: #0a0a12;
+      border: 1px solid rgba(245,158,11,0.2);
+      border-radius: 8px;
+      padding: 16px 20px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: #a5f3fc;
+      margin: 16px 0;
+      overflow-x: auto;
+      line-height: 1.7;
+    }
+    .code-block .comment { color: #64748b; }
+    .code-block .string { color: #86efac; }
+    .code-block .keyword { color: var(--amber); }
+    /* Info boxes */
+    .info-box {
+      border-radius: 8px;
+      padding: 16px 20px;
+      margin: 16px 0;
+      font-size: 13px;
+    }
+    .info-amber {
+      background: rgba(245,158,11,0.08);
+      border: 1px solid rgba(245,158,11,0.25);
+      color: #fcd34d;
+    }
+    .info-green {
+      background: rgba(74,222,128,0.08);
+      border: 1px solid rgba(74,222,128,0.25);
+      color: #86efac;
+    }
+    .info-red {
+      background: rgba(248,113,113,0.08);
+      border: 1px solid rgba(248,113,113,0.25);
+      color: #fca5a5;
+    }
+    .info-blue {
+      background: rgba(96,165,250,0.08);
+      border: 1px solid rgba(96,165,250,0.25);
+      color: #93c5fd;
+    }
+    .info-box i { margin-right: 8px; }
+    /* Method badges */
+    .method-get { background: rgba(74,222,128,0.15); border: 1px solid rgba(74,222,128,0.3); color: #4ade80; padding: 2px 7px; border-radius: 4px; font-size: 10px; font-weight: 700; font-family: var(--font-mono); }
+    .method-post { background: rgba(96,165,250,0.15); border: 1px solid rgba(96,165,250,0.3); color: #60a5fa; padding: 2px 7px; border-radius: 4px; font-size: 10px; font-weight: 700; font-family: var(--font-mono); }
+    .method-put { background: rgba(251,191,36,0.15); border: 1px solid rgba(251,191,36,0.3); color: #fbbf24; padding: 2px 7px; border-radius: 4px; font-size: 10px; font-weight: 700; font-family: var(--font-mono); }
+    .endpoint-path { font-family: var(--font-mono); color: #e2e8f0; font-size: 12px; }
+    /* Status badges */
+    .status-pending { background: rgba(251,191,36,0.15); color: #fbbf24; border: 1px solid rgba(251,191,36,0.3); padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+    .status-confirmed { background: rgba(96,165,250,0.15); color: #60a5fa; border: 1px solid rgba(96,165,250,0.3); padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+    .status-dispatched { background: rgba(74,222,128,0.15); color: #4ade80; border: 1px solid rgba(74,222,128,0.3); padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+    .status-cancelled { background: rgba(100,116,139,0.15); color: #94a3b8; border: 1px solid rgba(100,116,139,0.3); padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+    .status-recalled { background: rgba(248,113,113,0.15); color: #f87171; border: 1px solid rgba(248,113,113,0.3); padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; animation: pulse 1.5s infinite; }
+    @keyframes pulse { 0%,100% { opacity:1 } 50% { opacity: 0.6 } }
+    /* Progress bar demo */
+    .progress-demo {
+      background: rgba(245,158,11,0.1);
+      border-radius: 4px;
+      height: 8px;
+      margin: 6px 0;
+    }
+    .progress-fill {
+      height: 100%;
+      border-radius: 4px;
+      background: linear-gradient(90deg, var(--amber), #fcd34d);
+    }
+    /* Checklist */
+    .checklist { list-style: none; padding: 0; margin: 12px 0; }
+    .checklist li {
+      display: flex; align-items: flex-start; gap: 10px;
+      padding: 6px 0;
+      font-size: 13px;
+      color: var(--text);
+      border-bottom: 1px solid rgba(245,158,11,0.06);
+    }
+    .checklist li:last-child { border-bottom: none; }
+    .checklist li i { color: var(--amber); margin-top: 2px; min-width: 14px; }
+    /* Divider */
+    .divider { height: 1px; background: var(--border); margin: 32px 0; opacity: 0.5; }
+    /* Responsive */
+    @media (max-width: 768px) {
+      #sidebar { display: none; }
+      .hero, .section { padding: 32px 24px; }
+      .hero-title { font-size: 28px; }
+    }
+    /* Scrollbar */
+    #content::-webkit-scrollbar { width: 6px; }
+    #content::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+    /* Print button */
+    .print-btn {
+      position: fixed; bottom: 24px; right: 24px;
+      background: var(--amber); color: #0d0d0f;
+      border: none; border-radius: 50px;
+      padding: 12px 20px;
+      font-weight: 700; font-size: 12px;
+      cursor: pointer; z-index: 100;
+      display: flex; align-items: center; gap: 8px;
+      box-shadow: 0 4px 20px rgba(245,158,11,0.4);
+      transition: transform 0.15s;
+    }
+    .print-btn:hover { transform: scale(1.05); }
+    @media print { .print-btn, #sidebar { display: none; } #content { overflow: visible; } body { display: block; } }
+  </style>
+</head>
+<body>
+
+<!-- Sidebar -->
+<nav id="sidebar">
+  <div class="sidebar-brand">
+    <div class="sidebar-logo">QABBAN OS</div>
+    <div class="sidebar-sub">User Manual v2.0 · March 2026</div>
+  </div>
+  <div class="sidebar-section">Getting Started</div>
+  <a class="sidebar-link active" href="#overview"><i class="fa fa-circle-info"></i> System Overview</a>
+  <a class="sidebar-link" href="#login"><i class="fa fa-lock"></i> Login & Auth</a>
+  <div class="sidebar-section">Admin Portal</div>
+  <a class="sidebar-link" href="#admin-overview"><i class="fa fa-gauge"></i> Overview Tab</a>
+  <a class="sidebar-link" href="#inventory"><i class="fa fa-boxes-stacking"></i> Inventory Tab</a>
+  <a class="sidebar-link" href="#branches"><i class="fa fa-building"></i> Branches Tab</a>
+  <a class="sidebar-link" href="#finance"><i class="fa fa-chart-line"></i> Finance Tab</a>
+  <a class="sidebar-link" href="#requests"><i class="fa fa-inbox"></i> Bean Requests Tab</a>
+  <div class="sidebar-section">Cafe Portal</div>
+  <a class="sidebar-link" href="#cafe"><i class="fa fa-mug-hot"></i> Cafe Portal</a>
+  <a class="sidebar-link" href="#cafe-orders"><i class="fa fa-list-check"></i> My Orders</a>
+  <div class="sidebar-section">Global Exchange</div>
+  <a class="sidebar-link" href="#exchange-hub"><i class="fa fa-globe"></i> Exchange Hub</a>
+  <a class="sidebar-link" href="#catalog"><i class="fa fa-list"></i> Global Catalog</a>
+  <a class="sidebar-link" href="#climate"><i class="fa fa-thermometer-half"></i> Climate Passport</a>
+  <a class="sidebar-link" href="#shiptrack"><i class="fa fa-ship"></i> Ship Tracker</a>
+  <a class="sidebar-link" href="#forward"><i class="fa fa-seedling"></i> Forward Contracts</a>
+  <a class="sidebar-link" href="#analytics"><i class="fa fa-chart-bar"></i> Analytics</a>
+  <a class="sidebar-link" href="#vendor"><i class="fa fa-store"></i> Vendor Portal</a>
+  <a class="sidebar-link" href="#buyer-portal"><i class="fa fa-handshake"></i> Buyer Portal</a>
+  <div class="sidebar-section">Engine Features</div>
+  <a class="sidebar-link" href="#loyalty"><i class="fa fa-medal"></i> Coffee Miles Loyalty</a>
+  <a class="sidebar-link" href="#tier-watcher"><i class="fa fa-bell"></i> Tier Watcher Nudge</a>
+  <a class="sidebar-link" href="#currency"><i class="fa fa-coins"></i> XE Currency Engine</a>
+  <a class="sidebar-link" href="#sponge"><i class="fa fa-flask"></i> Sponge Effect Engine</a>
+  <a class="sidebar-link" href="#zatca"><i class="fa fa-file-invoice"></i> ZATCA Compliance</a>
+  <a class="sidebar-link" href="#sfda"><i class="fa fa-shield-halved"></i> SFDA Recall Shield</a>
+  <a class="sidebar-link" href="#i18n"><i class="fa fa-language"></i> Bilingual Engine</a>
+  <div class="sidebar-section">Reference</div>
+  <a class="sidebar-link" href="#api"><i class="fa fa-plug"></i> API Reference</a>
+  <a class="sidebar-link" href="#constants"><i class="fa fa-sliders"></i> Constants & Config</a>
+  <a class="sidebar-link" href="#demo"><i class="fa fa-user-circle"></i> Demo Credentials</a>
+</nav>
+
+<!-- Main Content -->
+<main id="content">
+
+  <!-- Hero -->
+  <div class="hero" id="top">
+    <div class="hero-badge"><i class="fa fa-coffee"></i> QABBAN OS — OFFICIAL DOCUMENTATION</div>
+    <div class="hero-title">USER MANUAL</div>
+    <div class="hero-sub">Qabban Global Exchange & Loyalty Engine v6 · Complete Feature Reference</div>
+    <div class="hero-meta">
+      <div class="hero-meta-item"><i class="fa fa-calendar"></i> March 2026</div>
+      <div class="hero-meta-item"><i class="fa fa-code-branch"></i> Version 2.0</div>
+      <div class="hero-meta-item"><i class="fa fa-globe"></i> Bilingual EN / AR</div>
+      <div class="hero-meta-item"><i class="fa fa-server"></i> Cloudflare Pages · Hono · TypeScript</div>
+      <div class="hero-meta-item"><i class="fa fa-file-lines"></i> ~12,000 lines of code</div>
+    </div>
+  </div>
+
+  <!-- 1. System Overview -->
+  <div class="section" id="overview">
+    <div class="section-title">
+      <span class="section-num">01</span>
+      <i class="fa fa-circle-info" style="color:var(--amber)"></i>
+      System Overview
+    </div>
+    <div class="section-desc">QABBAN OS is a fully integrated, cloud-native roastery operating system for Saudi specialty coffee producers and buyers.</div>
+
+    <div class="cards-grid">
+      <div class="feature-card">
+        <div class="feature-card-icon">🏭</div>
+        <div class="feature-card-title">Roaster Admin Portal</div>
+        <div class="feature-card-desc">Full inventory management, branch humidity monitoring, financial intelligence, and order fulfilment workflow.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-card-icon">☕</div>
+        <div class="feature-card-title">Cafe (Buyer) Portal</div>
+        <div class="feature-card-desc">Coffee catalog with tier-based pricing, bean requests, loyalty tracker, and order history for Saudi roasteries.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-card-icon">🌍</div>
+        <div class="feature-card-title">Global Exchange</div>
+        <div class="feature-card-desc">International green-bean sourcing marketplace with Spot & Forward contracts, climate passports and ship tracking.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-card-icon">🏅</div>
+        <div class="feature-card-title">Coffee Miles Loyalty</div>
+        <div class="feature-card-desc">Bronze / Silver / Gold tier system with automatic tier assignment, hybrid stacked discounts and milestone nudges.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-card-icon">📊</div>
+        <div class="feature-card-title">QFI Financial Engine</div>
+        <div class="feature-card-desc">Reactive portfolio financials with per-tier wholesale pricing, live margin configuration and environmental P&L.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-card-icon">🧾</div>
+        <div class="feature-card-title">ZATCA Phase-2</div>
+        <div class="feature-card-desc">UBL XML e-invoicing, bulk shrinkage report, and 15% VAT compliance for Saudi tax authority requirements.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-card-icon">🧪</div>
+        <div class="feature-card-title">Sponge Effect Engine</div>
+        <div class="feature-card-desc">Dynamic yield coefficient that adjusts the 0.82 roasting baseline based on real warehouse humidity.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-card-icon">💱</div>
+        <div class="feature-card-title">XE Currency Engine</div>
+        <div class="feature-card-desc">Live USD/EUR→SAR conversion via XE Currency API with SAMA peg, configurable buffer and 60s execution lock.</div>
+      </div>
+    </div>
+
+    <table class="manual-table">
+      <thead><tr><th>Portal / Module</th><th>URL Path</th><th>Primary Users</th></tr></thead>
+      <tbody>
+        <tr><td>Roaster Admin</td><td class="endpoint-path">/admin</td><td>Roastery manager/operator</td></tr>
+        <tr><td>Cafe Buyer Portal</td><td class="endpoint-path">/cafe?cid=CAF-XXX</td><td>Cafe owners / buyers</td></tr>
+        <tr><td>Global Exchange Hub</td><td class="endpoint-path">/exchange</td><td>Buyers & vendors</td></tr>
+        <tr><td>Vendor Portal</td><td class="endpoint-path">/vendor</td><td>Green bean producers</td></tr>
+        <tr><td>Buyer Portal</td><td class="endpoint-path">/buyer</td><td>Saudi roastery purchasers</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 2. Login -->
+  <div class="section" id="login">
+    <div class="section-title"><span class="section-num">02</span><i class="fa fa-lock" style="color:var(--amber)"></i> Login & Authentication</div>
+    <div class="section-desc">Route: <code style="color:var(--amber)">/</code> — The landing page features the QABBAN OS logo with amber ambient glow. Two role-based access tabs.</div>
+
+    <div class="sub-title">Access Tabs</div>
+    <table class="manual-table">
+      <thead><tr><th>Tab</th><th>Username</th><th>Password</th><th>Redirects To</th></tr></thead>
+      <tbody>
+        <tr><td><i class="fa fa-shield-alt" style="color:var(--amber)"></i> Roaster Admin</td><td class="endpoint-path">admin</td><td class="endpoint-path">qabban2026</td><td class="endpoint-path">/admin</td></tr>
+        <tr><td><i class="fa fa-mug-hot" style="color:var(--amber)"></i> Cafe — Al Nokhba</td><td class="endpoint-path">alnokhba</td><td class="endpoint-path">cafe123</td><td class="endpoint-path">/cafe?cid=CAF-001</td></tr>
+        <tr><td><i class="fa fa-mug-hot" style="color:var(--amber)"></i> Cafe — Qahwa Al Bahr</td><td class="endpoint-path">qahwa_bahr</td><td class="endpoint-path">cafe123</td><td class="endpoint-path">/cafe?cid=CAF-002</td></tr>
+        <tr><td><i class="fa fa-mug-hot" style="color:var(--amber)"></i> Cafe — Pearl Roast</td><td class="endpoint-path">pearl_roast</td><td class="endpoint-path">cafe123</td><td class="endpoint-path">/cafe?cid=CAF-003</td></tr>
+      </tbody>
+    </table>
+
+    <div class="info-box info-amber"><i class="fa fa-language"></i> <strong>Language Toggle</strong> — EN/AR pill in the top-right corner. Switches all labels instantly with RTL layout. Persisted via localStorage.</div>
+  </div>
+
+  <!-- 3. Admin Overview -->
+  <div class="section" id="admin-overview">
+    <div class="section-title"><span class="section-num">03</span><i class="fa fa-gauge" style="color:var(--amber)"></i> Admin Portal — Overview Tab</div>
+    <div class="section-desc">Route: <code style="color:var(--amber)">/admin</code> — Command center with KPI cards, financial impact grid, live balance, sponge status, and recent activity.</div>
+
+    <div class="sub-title">Top Navigation Tabs</div>
+    <table class="manual-table">
+      <thead><tr><th>Tab</th><th>Icon</th><th>Path</th></tr></thead>
+      <tbody>
+        <tr><td>Overview</td><td><i class="fa fa-gauge"></i></td><td class="endpoint-path">/admin</td></tr>
+        <tr><td>Inventory</td><td><i class="fa fa-boxes-stacking"></i></td><td class="endpoint-path">/admin/inventory</td></tr>
+        <tr><td>Branches</td><td><i class="fa fa-building"></i></td><td class="endpoint-path">/admin/branches</td></tr>
+        <tr><td>Finance</td><td><i class="fa fa-chart-line"></i></td><td class="endpoint-path">/admin/finance</td></tr>
+        <tr><td>Bean Requests</td><td><i class="fa fa-inbox"></i></td><td class="endpoint-path">/admin/requests</td></tr>
+      </tbody>
+    </table>
+
+    <div class="sub-title">Financial Impact Grid — QFI Overview</div>
+    <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px">Four-tile live portfolio cards. Auto-refreshes every 10s via BroadcastChannel <code style="color:var(--amber)">qabban_margin</code> or polling <code style="color:var(--amber)">/api/finance/snapshot</code>.</p>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:16px 0">
+      <div style="background:var(--card);border:1px solid rgba(205,127,50,0.35);border-radius:8px;padding:16px;text-align:center">
+        <div style="font-size:20px;margin-bottom:6px">🥉</div>
+        <div style="color:#cd7f32;font-weight:700;font-size:12px">Bronze Portfolio</div>
+        <div style="color:var(--text-muted);font-size:10px;margin-top:4px">0–500 kg LTV</div>
+        <div style="color:var(--text-muted);font-size:10px">ID: ov-qfi-value-bronze</div>
+      </div>
+      <div style="background:var(--card);border:1px solid rgba(148,163,184,0.35);border-radius:8px;padding:16px;text-align:center">
+        <div style="font-size:20px;margin-bottom:6px">🥈</div>
+        <div style="color:#94a3b8;font-weight:700;font-size:12px">Silver Portfolio</div>
+        <div style="color:var(--text-muted);font-size:10px;margin-top:4px">501–2,000 kg LTV</div>
+        <div style="color:var(--text-muted);font-size:10px">ID: ov-qfi-value-silver</div>
+      </div>
+      <div style="background:var(--card);border:1px solid rgba(245,158,11,0.45);border-radius:8px;padding:16px;text-align:center">
+        <div style="font-size:20px;margin-bottom:6px">🥇</div>
+        <div style="color:#f59e0b;font-weight:700;font-size:12px">Gold Portfolio</div>
+        <div style="color:var(--text-muted);font-size:10px;margin-top:4px">≥2,001 kg LTV</div>
+        <div style="color:var(--text-muted);font-size:10px">ID: ov-qfi-value-gold</div>
+      </div>
+      <div style="background:var(--card);border:1px solid rgba(74,222,128,0.2);border-radius:8px;padding:16px;text-align:center">
+        <div style="font-size:20px;margin-bottom:6px">🌿</div>
+        <div style="color:#4ade80;font-weight:700;font-size:12px">Environmental P&L</div>
+        <div style="color:var(--text-muted);font-size:10px;margin-top:4px">Sponge adjusted</div>
+        <div style="color:var(--text-muted);font-size:10px">ID: ov-qfi-env</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4. Inventory -->
+  <div class="section" id="inventory">
+    <div class="section-title"><span class="section-num">04</span><i class="fa fa-boxes-stacking" style="color:var(--amber)"></i> Admin Portal — Inventory Tab</div>
+    <div class="section-desc">Route: <code style="color:var(--amber)">/admin/inventory</code> — Core stock management. Lot lifecycle: OPTIMAL → MONITOR → CRITICAL → RECALLED.</div>
+
+    <div class="sub-title">Add Single Lot Fields</div>
+    <table class="manual-table">
+      <thead><tr><th>Field</th><th>Type</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td>Origin</td><td>Text</td><td>e.g. "Ethiopia Yirgacheffe"</td></tr>
+        <tr><td>Variety & Process</td><td>Text</td><td>e.g. "Heirloom / Natural"</td></tr>
+        <tr><td>Green Weight (kg)</td><td>Number</td><td>Purchased green weight — never mutated</td></tr>
+        <tr><td>Roasted Weight (kg)</td><td>Auto</td><td>Calculated: green × 0.82 (Sponge coefficient)</td></tr>
+        <tr><td>Branch</td><td>Select</td><td>From active branch list</td></tr>
+        <tr><td>Grade Score</td><td>0–100</td><td>Quality score with visual progress bar</td></tr>
+        <tr><td>Cost per Kg (SAR)</td><td>Number</td><td>Used for True Roasted Cost in QFI</td></tr>
+        <tr><td>Target Margin %</td><td>Number</td><td>Drives Wholesale Price calculation</td></tr>
+        <tr><td>Label Image</td><td>File (base64)</td><td>SFDA Article 18 traceability sack photo</td></tr>
+        <tr><td>Marketplace Type</td><td>Toggle</td><td><span class="method-get">SPOT</span> 48h dispatch or <span class="method-post">FORWARD</span> pre-harvest</td></tr>
+        <tr><td>SAS Clause</td><td>Checkbox</td><td>Subject to Approval of Sample</td></tr>
+        <tr><td>Deposit %</td><td>Number</td><td>Default 30% for FORWARD lots</td></tr>
+      </tbody>
+    </table>
+
+    <div class="sub-title">Bulk CSV Import</div>
+    <ul class="checklist">
+      <li><i class="fa fa-download"></i> Download template: <code style="color:var(--amber)">qabban-os-lot-import-template.csv</code></li>
+      <li><i class="fa fa-upload"></i> Drag & drop upload zone — accepts UTF-8 CSV only (Excel .xlsx rejected with conversion instructions)</li>
+      <li><i class="fa fa-table-columns"></i> Auto column mapping by header name with manual override</li>
+      <li><i class="fa fa-eye"></i> Preview table with row validation (green = valid / red = error)</li>
+      <li><i class="fa fa-calculator"></i> Roasted weight auto-computed and highlighted in amber</li>
+      <li><i class="fa fa-spinner"></i> Animated progress bar during import + summary pills (imported / skipped / errors)</li>
+    </ul>
+
+    <div class="sub-title">Lot Status Reference</div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin:12px 0">
+      <span style="background:rgba(74,222,128,0.15);border:1px solid rgba(74,222,128,0.3);color:#4ade80;padding:4px 12px;border-radius:4px;font-size:12px;font-weight:700">OPTIMAL</span>
+      <span style="background:rgba(251,191,36,0.15);border:1px solid rgba(251,191,36,0.3);color:#fbbf24;padding:4px 12px;border-radius:4px;font-size:12px;font-weight:700">MONITOR</span>
+      <span style="background:rgba(248,113,113,0.15);border:1px solid rgba(248,113,113,0.3);color:#f87171;padding:4px 12px;border-radius:4px;font-size:12px;font-weight:700">CRITICAL</span>
+      <span class="status-recalled">RECALLED</span>
+    </div>
+  </div>
+
+  <!-- 5. Branches -->
+  <div class="section" id="branches">
+    <div class="section-title"><span class="section-num">05</span><i class="fa fa-building" style="color:var(--amber)"></i> Admin Portal — Branches Tab</div>
+    <div class="section-desc">Route: <code style="color:var(--amber)">/admin/branches</code> — Live humidity & temperature monitoring per branch. Climate Preset system (Inland / Coastal).</div>
+
+    <div class="sub-title">Risk Classification</div>
+    <table class="manual-table">
+      <thead><tr><th>Risk Level</th><th>Inland (Arid) RH%</th><th>Coastal RH%</th><th>Action</th></tr></thead>
+      <tbody>
+        <tr><td><span style="color:#4ade80">🟢 LOW</span></td><td>&lt; 50%</td><td>&lt; 45%</td><td>Standard ventilation</td></tr>
+        <tr><td><span style="color:#fcd34d">🟡 MODERATE</span></td><td>50–61%</td><td>45–55%</td><td>Increase checks</td></tr>
+        <tr><td><span style="color:#fb923c">🟠 HIGH</span></td><td>62–74%</td><td>56–65%</td><td>Active dehumidification</td></tr>
+        <tr><td><span style="color:#f87171">🔴 CRITICAL</span></td><td>≥ 75%</td><td>≥ 66%</td><td>Urgent — risk of mould onset</td></tr>
+      </tbody>
+    </table>
+
+    <div class="sub-title">Branch Card Components</div>
+    <ul class="checklist">
+      <li><i class="fa fa-thermometer-half"></i> Live humidity % + temperature °C from sensors</li>
+      <li><i class="fa fa-triangle-exclamation"></i> Risk badge with color (LOW / MODERATE / HIGH / CRITICAL)</li>
+      <li><i class="fa fa-boxes-stacking"></i> Lot count stored at this branch</li>
+      <li><i class="fa fa-mug-hot"></i> Local cafes served from this branch</li>
+      <li><i class="fa fa-flask"></i> Sponge coefficient for this branch (e.g. 0.825) + rule label</li>
+      <li><i class="fa fa-info-circle"></i> Climate-specific storage advice</li>
+      <li><i class="fa fa-plus"></i> UPDATE SENSOR button → POST /admin/branches/:id/update</li>
+    </ul>
+  </div>
+
+  <!-- 6. Finance -->
+  <div class="section" id="finance">
+    <div class="section-title"><span class="section-num">06</span><i class="fa fa-chart-line" style="color:var(--amber)"></i> Admin Portal — Finance Tab</div>
+    <div class="section-desc">Route: <code style="color:var(--amber)">/admin/finance</code> — QFI Reactive Engine · Tier Margins · ZATCA Phase-2 · Exchange Rates · Loyalty Ledger · Tier Watcher.</div>
+
+    <div class="sub-title">Finance Sub-Sections</div>
+    <ul class="checklist">
+      <li><i class="fa fa-grid-2"></i> QFI Portfolio Cards — Bronze / Silver / Gold inventory values + Env P&L (live-reactive)</li>
+      <li><i class="fa fa-table"></i> QFI Per-Lot Wholesale Price Table — True Roasted Cost + Bronze/Silver/Gold prices per lot</li>
+      <li><i class="fa fa-medal"></i> Coffee Miles Loyalty Tier Engine — tier definitions, discount rules, buyer ledger</li>
+      <li><i class="fa fa-users"></i> Buyer Loyalty Ledger — all cafes with lifetime kg, tier badge, progress bars, nudge badges</li>
+      <li><i class="fa fa-bell"></i> Tier Watcher Dashboard — buyers within 50 kg of upgrade + WhatsApp nudge buttons</li>
+      <li><i class="fa fa-sliders"></i> Client Tier Pricing — margin input (Bronze 40% / Silver 35% / Gold 28%) + SET ALL broadcast</li>
+      <li><i class="fa fa-file-csv"></i> ZATCA Bulk Shrinkage Report — CSV export for audit</li>
+      <li><i class="fa fa-coins"></i> Global Exchange Currency Settings — XE live rates + buffer + refresh</li>
+      <li><i class="fa fa-scale-balanced"></i> Live Balance Banner — purchased green kg vs dispatched equivalent</li>
+    </ul>
+
+    <div class="sub-title">QFI Wholesale Price Formula</div>
+    <div class="code-block">
+<span class="comment">// True Roasted Cost</span>
+trueRoastedCost = costPerKg / 0.82
+
+<span class="comment">// Wholesale Price per Tier</span>
+wpBronze = trueRoastedCost × (1 + <span class="string">40%</span> / 100)
+wpSilver = trueRoastedCost × (1 + <span class="string">35%</span> / 100)
+wpGold   = trueRoastedCost × (1 + <span class="string">28%</span> / 100)
+    </div>
+
+    <div class="sub-title">Margin Input Panel (SET ALL)</div>
+    <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px">Clicking <strong style="color:var(--amber)">SET ALL</strong> broadcasts via BroadcastChannel to all open cafe portals, updating wholesale prices in real-time across all browser tabs.</p>
+  </div>
+
+  <!-- 7. Bean Requests -->
+  <div class="section" id="requests">
+    <div class="section-title"><span class="section-num">07</span><i class="fa fa-inbox" style="color:var(--amber)"></i> Admin Portal — Bean Requests Tab</div>
+    <div class="section-desc">Route: <code style="color:var(--amber)">/admin/requests</code> — Incoming bean requests, dispatch queue, and roasting interest pre-orders.</div>
+
+    <div class="sub-title">Request Status Workflow</div>
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:16px 0">
+      <span class="status-pending">PENDING</span>
+      <i class="fa fa-arrow-right" style="color:var(--text-muted)"></i>
+      <span class="status-confirmed">CONFIRMED</span>
+      <i class="fa fa-arrow-right" style="color:var(--text-muted)"></i>
+      <span class="status-dispatched">DISPATCHED</span>
+      <span style="color:var(--text-muted);margin-left:16px">or</span>
+      <i class="fa fa-arrow-right" style="color:var(--text-muted);margin-left:8px"></i>
+      <span class="status-cancelled">CANCELLED</span>
+    </div>
+
+    <div class="info-box info-green">
+      <i class="fa fa-star"></i>
+      <strong>DISPATCH auto-updates Coffee Miles Tier:</strong> When a request is dispatched, <code>lifetimeKgPurchased += dispatchedKg</code> and <code>coffeeMilesTier</code> is recalculated automatically. No manual intervention required.
+    </div>
+
+    <div class="sub-title">Roasting Interests (Pre-Orders)</div>
+    <p style="font-size:13px;color:var(--text-muted)">When a cafe requests beans for an OUT OF STOCK origin, a Roasting Interest record is created. Admin sees these in a separate table with MARK SEEN and SCHEDULE actions to plan the next roast batch.</p>
+  </div>
+
+  <!-- 8. Cafe Portal -->
+  <div class="section" id="cafe">
+    <div class="section-title"><span class="section-num">08</span><i class="fa fa-mug-hot" style="color:var(--amber)"></i> Cafe (Buyer) Portal</div>
+    <div class="section-desc">Route: <code style="color:var(--amber)">/cafe?cid=CAF-001</code> — Buyer-facing interface with loyalty tracker, catalog, rate bar, and order modal.</div>
+
+    <div class="sub-title">Portal Components (Top to Bottom)</div>
+    <ul class="checklist">
+      <li><i class="fa fa-dollar-sign"></i> <strong>XE Currency Rate Bar</strong> — USD→SAR and EUR→SAR live rates with LOCK RATE (60s) button</li>
+      <li><i class="fa fa-medal"></i> <strong>Loyalty Tracker Card</strong> — tier badge, lifetime kg, progress bar, discount breakdown, mini tier reference</li>
+      <li><i class="fa fa-bell"></i> <strong>Milestone Nudge Banner</strong> — amber pulsing banner when within 50 kg of next tier (dismissable)</li>
+      <li><i class="fa fa-shield-halved"></i> <strong>SFDA Recall Banner</strong> — urgent red banner if recalled lot was dispatched to this cafe</li>
+      <li><i class="fa fa-grid"></i> <strong>Coffee Catalog</strong> — lot cards with tier pricing, marketplace badges, grade scores, and action buttons</li>
+    </ul>
+
+    <div class="sub-title">Lot Card Badges</div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin:12px 0">
+      <span style="background:rgba(74,222,128,0.15);border:1px solid rgba(74,222,128,0.3);color:#4ade80;padding:4px 12px;border-radius:4px;font-size:12px"><i class="fa fa-bolt"></i> SPOT — 48h local dispatch</span>
+      <span style="background:rgba(251,191,36,0.15);border:1px solid rgba(251,191,36,0.3);color:#fbbf24;padding:4px 12px;border-radius:4px;font-size:12px"><i class="fa fa-seedling"></i> FORWARD — harvest pre-order</span>
+      <span style="background:rgba(248,113,113,0.12);border:1px solid rgba(248,113,113,0.3);color:#f87171;padding:4px 12px;border-radius:4px;font-size:12px"><i class="fa fa-ban"></i> RECALLED — BLOCKED</span>
+    </div>
+
+    <div class="sub-title">Request Beans Modal — Hybrid Discount Display</div>
+    <div class="code-block">
+<span class="comment">// calcHybridDiscount(lifetimeKg, orderKg)</span>
+bags = orderKg / 60
+isBulk = bags > 10
+
+tierBase = 0%   <span class="comment">// Bronze</span>
+         = 3%   <span class="comment">// Silver</span>
+         = 5%   <span class="comment">// Gold</span>
+
+bulkBonus = isBulk ? <span class="string">+10%</span> : 0%
+
+<span class="keyword">totalDiscount</span> = tierBase + bulkBonus
+finalPrice = unitPrice × (1 − totalDiscount / 100)
+
+<span class="comment">// Example: Gold buyer, 750 kg order (12.5 bags)</span>
+<span class="comment">// 5% + 10% = 15% total discount</span>
+    </div>
+  </div>
+
+  <!-- 9. Cafe Orders -->
+  <div class="section" id="cafe-orders">
+    <div class="section-title"><span class="section-num">09</span><i class="fa fa-list-check" style="color:var(--amber)"></i> Cafe Orders Page</div>
+    <div class="section-desc">Route: <code style="color:var(--amber)">/cafe/orders?cid=CAF-XXX</code> — Full order history with stats, status tracking, and roasting interests.</div>
+    <p style="font-size:13px;color:var(--text-muted)">Shows stats: Total Orders / Confirmed / Total Dispatched kg / Pending. Order history table with status badges and all request details. Pre-orders (Roasting Interests) listed in a separate section below.</p>
+  </div>
+
+  <!-- 10. Exchange Hub -->
+  <div class="section" id="exchange-hub">
+    <div class="section-title"><span class="section-num">10</span><i class="fa fa-globe" style="color:var(--amber)"></i> Global Exchange Hub</div>
+    <div class="section-desc">Route: <code style="color:var(--amber)">/exchange</code> — International green-bean sourcing marketplace hub with live rates and lot previews.</div>
+
+    <div class="sub-title">Exchange Navigation</div>
+    <table class="manual-table">
+      <thead><tr><th>Item</th><th>Path</th><th>Section</th></tr></thead>
+      <tbody>
+        <tr><td><i class="fa fa-gauge"></i> Exchange Hub</td><td class="endpoint-path">/exchange</td><td>—</td></tr>
+        <tr><td><i class="fa fa-list"></i> Global Catalog</td><td class="endpoint-path">/exchange/catalog</td><td>MARKETPLACE</td></tr>
+        <tr><td><i class="fa fa-bolt"></i> Spot Lots</td><td class="endpoint-path">/exchange/catalog?type=SPOT</td><td>—</td></tr>
+        <tr><td><i class="fa fa-seedling"></i> Forward Lots</td><td class="endpoint-path">/exchange/catalog?type=FORWARD</td><td>—</td></tr>
+        <tr><td><i class="fa fa-store"></i> Vendor Portal</td><td class="endpoint-path">/vendor</td><td>PORTALS</td></tr>
+        <tr><td><i class="fa fa-handshake"></i> Buyer Portal</td><td class="endpoint-path">/buyer</td><td>BUYERS</td></tr>
+        <tr><td><i class="fa fa-chart-bar"></i> Analytics</td><td class="endpoint-path">/exchange/analytics</td><td>INTELLIGENCE</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 11. Catalog -->
+  <div class="section" id="catalog">
+    <div class="section-title"><span class="section-num">11</span><i class="fa fa-list" style="color:var(--amber)"></i> Exchange — Global Catalog</div>
+    <div class="section-desc">Route: <code style="color:var(--amber)">/exchange/catalog</code> — All exchange lots with SPOT/FORWARD filter. Each card links to Climate Passport and Ship Tracker.</div>
+
+    <div class="sub-title">Exchange Lot Card Fields</div>
+    <table class="manual-table">
+      <thead><tr><th>Field</th><th>SPOT</th><th>FORWARD</th></tr></thead>
+      <tbody>
+        <tr><td>Marketplace Type Badge</td><td>🟢 SPOT — immediate</td><td>🌱 FORWARD — pre-harvest</td></tr>
+        <tr><td>Price (USD/kg)</td><td>✓ Full price</td><td>✓ Contracted price</td></tr>
+        <tr><td>SAR Equivalent</td><td>✓ Live conversion</td><td>✓ Live conversion</td></tr>
+        <tr><td>Dispatch Timeline</td><td>48h local dispatch</td><td>Harvest date shown</td></tr>
+        <tr><td>Deposit %</td><td>100% (full payment)</td><td>30% deposit to reserve</td></tr>
+        <tr><td>SAS Clause</td><td>Optional</td><td>Common</td></tr>
+        <tr><td>IoT Sensors</td><td>✓ Warehouse RH% / °C</td><td>✓ Origin warehouse</td></tr>
+        <tr><td>Climate Passport</td><td>✓ If certified</td><td>✓ If certified</td></tr>
+        <tr><td>Ship Tracker</td><td>✓ If in transit</td><td>— (not yet shipped)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 12-14 Climate, Ship, Forward -->
+  <div class="section" id="climate">
+    <div class="section-title"><span class="section-num">12</span><i class="fa fa-thermometer-half" style="color:var(--amber)"></i> Exchange — Climate Passport</div>
+    <div class="section-desc">Route: <code style="color:var(--amber)">/exchange/climate/:lotId</code> — Chronological IoT log of humidity/temp readings at every transit checkpoint.</div>
+    <ul class="checklist">
+      <li><i class="fa fa-certificate"></i> Climate Certified badge with certification date</li>
+      <li><i class="fa fa-table"></i> Log table: timestamp / location / phase / humidity / temp / note</li>
+      <li><i class="fa fa-flask"></i> Sponge coefficient calculated at each checkpoint</li>
+      <li><i class="fa fa-shield-alt"></i> SFDA customs clearance note included</li>
+    </ul>
+  </div>
+  <div class="section" id="shiptrack">
+    <div class="section-title"><span class="section-num">13</span><i class="fa fa-ship" style="color:var(--amber)"></i> Exchange — Ship Tracker</div>
+    <div class="section-desc">Route: <code style="color:var(--amber)">/exchange/shiptrack/:lotId</code> — Visual timeline tracking from origin port to Saudi destination warehouse.</div>
+    <p style="font-size:13px;color:var(--text-muted)">Phases: LOADING → TRANSIT → ARRIVAL → CUSTOMS (SFDA) → STORAGE. Each phase shows location, timestamp, humidity/temp, and completion status.</p>
+  </div>
+  <div class="section" id="forward">
+    <div class="section-title"><span class="section-num">14</span><i class="fa fa-seedling" style="color:var(--amber)"></i> Exchange — Forward Contract Detail</div>
+    <div class="section-desc">Route: <code style="color:var(--amber)">/exchange/forward/:contractId</code> — Full forward contract view with SAS status, milestone payments, and ZATCA invoice.</div>
+
+    <div class="sub-title">SAS Status Options</div>
+    <table class="manual-table">
+      <thead><tr><th>Status</th><th>Color</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td>PENDING_SAMPLE</td><td style="color:#fbbf24">Amber</td><td>Sample not yet received by buyer</td></tr>
+        <tr><td>SAMPLE_APPROVED</td><td style="color:#4ade80">Green</td><td>Buyer approved the sample</td></tr>
+        <tr><td>SAMPLE_REJECTED</td><td style="color:#f87171">Red</td><td>Buyer rejected (contract renegotiable)</td></tr>
+        <tr><td>WAIVED</td><td style="color:#94a3b8">Grey</td><td>Buyer waived the SAS clause</td></tr>
+      </tbody>
+    </table>
+
+    <div class="sub-title">Default Payment Milestone Schedule</div>
+    <table class="manual-table">
+      <thead><tr><th>Milestone</th><th>%</th><th>Trigger</th></tr></thead>
+      <tbody>
+        <tr><td>Initial Deposit</td><td>30%</td><td>At contract signing</td></tr>
+        <tr><td>On Shipment</td><td>40%</td><td>At vessel departure</td></tr>
+        <tr><td>On Delivery</td><td>30%</td><td>At SFDA customs clearance</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 15. Analytics -->
+  <div class="section" id="analytics">
+    <div class="section-title"><span class="section-num">15</span><i class="fa fa-chart-bar" style="color:var(--amber)"></i> Exchange — Analytics Dashboard</div>
+    <div class="section-desc">Route: <code style="color:var(--amber)">/exchange/analytics</code> — Totals, rate intelligence, and invoice summaries for the entire exchange platform.</div>
+    <p style="font-size:13px;color:var(--text-muted)">Metrics: Total Lots / Spot+Forward split / Available Lots / Vendors / Verified Vendors / Buyers / Contracts / Invoices / SCA Gold Lots / Total Volume kg + live rate data + invoice VAT totals.</p>
+  </div>
+
+  <!-- 16-17. Vendor & Buyer -->
+  <div class="section" id="vendor">
+    <div class="section-title"><span class="section-num">16</span><i class="fa fa-store" style="color:var(--amber)"></i> Vendor Portal</div>
+    <div class="section-desc">Routes: <code style="color:var(--amber)">/vendor</code> · <code style="color:var(--amber)">/vendor/register</code> · <code style="color:var(--amber)">/vendor/lots/new</code></div>
+    <p style="font-size:13px;color:var(--text-muted)">International coffee producers register with company name, country, certification (SCA/UTZ/Rainforest), and list SPOT or FORWARD lots with full specifications, IoT sensor data, and climate passport links.</p>
+  </div>
+  <div class="section" id="buyer-portal">
+    <div class="section-title"><span class="section-num">17</span><i class="fa fa-handshake" style="color:var(--amber)"></i> Buyer Portal (Global Exchange)</div>
+    <div class="section-desc">Routes: <code style="color:var(--amber)">/buyer</code> · <code style="color:var(--amber)">/buyer/register</code> · <code style="color:var(--amber)">/buyer/contract</code> · <code style="color:var(--amber)">/buyer/invoice/:uuid</code></div>
+    <p style="font-size:13px;color:var(--text-muted)">Saudi roastery buyers register with CR number and ZATCA TIN. Landed Price Calculator converts origin USD/kg to final SAR/kg. Contracting generates ZATCA Phase-2 UBL XML invoices with 15% VAT.</p>
+  </div>
+
+  <!-- 18. Coffee Miles -->
+  <div class="section" id="loyalty">
+    <div class="section-title"><span class="section-num">18</span><i class="fa fa-medal" style="color:var(--amber)"></i> Coffee Miles — Loyalty Engine</div>
+    <div class="section-desc">Automatic tier assignment based on cumulative lifetime kilograms purchased. Tiers stack with bulk discounts for maximum savings.</div>
+
+    <div class="sub-title">Tier Definitions</div>
+    <table class="manual-table">
+      <thead><tr><th>Tier</th><th>Lifetime KG Range</th><th>Base Discount</th><th>Roastery Margin</th><th>Max Stacked (with bulk)</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><span class="tier-badge badge-bronze">🥉 Bronze</span></td>
+          <td>0 – 500 kg</td><td>0%</td><td>40%</td><td>10% (bulk only)</td>
+        </tr>
+        <tr>
+          <td><span class="tier-badge badge-silver">🥈 Silver</span></td>
+          <td>501 – 2,000 kg</td><td>3%</td><td>35%</td><td>13%</td>
+        </tr>
+        <tr>
+          <td><span class="tier-badge badge-gold">🥇 Gold</span></td>
+          <td>≥ 2,001 kg</td><td>5%</td><td>28%</td><td>15%</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="sub-title">Where Tiers Appear</div>
+    <ul class="checklist">
+      <li><i class="fa fa-mug-hot"></i> <strong>Cafe Portal</strong> — Loyalty Tracker card + tier price badge on every lot card</li>
+      <li><i class="fa fa-chart-line"></i> <strong>Finance Tab</strong> — Buyer Loyalty Ledger + QFI tier cards + per-lot wholesale price table</li>
+      <li><i class="fa fa-gauge"></i> <strong>Overview Tab</strong> — 4-tile Financial Impact grid (Bronze / Silver / Gold / Env P&L)</li>
+      <li><i class="fa fa-inbox"></i> <strong>Bean Requests Tab</strong> — DISPATCH auto-updates tier after fulfilment</li>
+      <li><i class="fa fa-cart-shopping"></i> <strong>Request Modal</strong> — Hybrid discount displayed in real-time before submission</li>
+    </ul>
+
+    <div class="sub-title">kgToNextTier( ) Logic</div>
+    <div class="code-block">
+if lifetimeKg >= 2001 → MAX TIER { nextTier: null, progressPct: 100 }
+if lifetimeKg >= 501  → next = Gold,   needed = 2001 - lifetimeKg
+else                  → next = Silver, needed = 501  - lifetimeKg
+    </div>
+  </div>
+
+  <!-- 19. Tier Watcher -->
+  <div class="section" id="tier-watcher">
+    <div class="section-title"><span class="section-num">19</span><i class="fa fa-bell" style="color:var(--amber)"></i> Tier Watcher & Milestone Nudge Engine</div>
+    <div class="section-desc">Threshold: <code style="color:var(--amber)">TIER_NUDGE_THRESHOLD = 50 kg</code>. Buyers within 50 kg of the next tier receive UI alerts and WhatsApp nudge messages.</div>
+
+    <div class="sub-title">Current Nudge-Zone Buyers (Demo)</div>
+    <table class="manual-table">
+      <thead><tr><th>Cafe</th><th>Lifetime KG</th><th>Tier</th><th>KG to Next</th><th>Next Tier</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>Qahwa Al Bahr (CAF-002)</td><td>1,965 kg</td>
+          <td><span class="tier-badge badge-silver">🥈 Silver</span></td>
+          <td style="color:var(--amber)">⚡ 36 kg</td>
+          <td><span class="tier-badge badge-gold">🥇 Gold</span></td>
+        </tr>
+        <tr>
+          <td>Pearl Roast Café (CAF-003)</td><td>460 kg</td>
+          <td><span class="tier-badge badge-bronze">🥉 Bronze</span></td>
+          <td style="color:var(--amber)">⚡ 41 kg</td>
+          <td><span class="tier-badge badge-silver">🥈 Silver</span></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="sub-title">Nudge Components</div>
+    <ul class="checklist">
+      <li><i class="fa fa-bolt" style="color:var(--amber)"></i> <strong>Cafe Portal Banner</strong> — pulsing amber banner above Loyalty Tracker, shows exact kg needed + WhatsApp button</li>
+      <li><i class="fa fa-table-list"></i> <strong>Finance Tier Watcher Dashboard</strong> — admin view of all nudge-zone buyers with SEND WHATSAPP NUDGE buttons</li>
+      <li><i class="fa fa-triangle-exclamation" style="color:var(--amber)"></i> <strong>Loyalty Ledger Badge</strong> — ⚡ amber badge on nudge-zone rows in the Finance tab table</li>
+    </ul>
+
+    <div class="sub-title">WhatsApp Message Template</div>
+    <div class="code-block">
+🎯 *Qabban Coffee Miles — Tier Upgrade Alert*
+
+Dear [Cafe Name],
+You are only *[X kg]* away from *[NextTier] Tier*!
+
+📦 Current: [CurrentTier] ([X]% discount)
+🏆 Next:    [NextTier] ([Y]% discount)
+📊 Progress: [Z]% complete
+
+Place your next order to unlock your upgrade!
+— Qabban Team
+    </div>
+
+    <div style="margin-top:16px">
+      <span class="method-post">POST</span>
+      <span class="endpoint-path" style="margin-left:8px">/api/cafe/tier-nudge</span>
+      <span style="color:var(--text-muted);font-size:12px;margin-left:12px">Body: { cafeId } → Returns: { ok, nextTier, kgNeeded, nudgeMessage, whatsappCopy }</span>
+    </div>
+  </div>
+
+  <!-- 20. Currency -->
+  <div class="section" id="currency">
+    <div class="section-title"><span class="section-num">20</span><i class="fa fa-coins" style="color:var(--amber)"></i> XE Currency & SAMA Rate Engine</div>
+    <div class="section-desc">Live USD/EUR → SAR conversion via XE Currency Data API. SAMA peg baseline (3.75 SAR/USD) with configurable buffer and 60-second execution lock.</div>
+
+    <div class="sub-title">Rate Architecture</div>
+    <table class="manual-table">
+      <thead><tr><th>Component</th><th>Value / Source</th><th>Configurable?</th></tr></thead>
+      <tbody>
+        <tr><td>SAMA USD Peg</td><td>3.75 SAR/USD (official)</td><td>No (regulatory fixed)</td></tr>
+        <tr><td>XE Live Rate</td><td>XE Currency Data API</td><td>Refresh via button</td></tr>
+        <tr><td>Exchange Buffer</td><td>0–10% markup</td><td>✓ Admin configurable</td></tr>
+        <tr><td>Effective Rate</td><td>liveRate × (1 + buffer/100)</td><td>Auto-calculated</td></tr>
+        <tr><td>Rate Lock Duration</td><td>60 seconds</td><td>Fixed constant</td></tr>
+      </tbody>
+    </table>
+
+    <div class="sub-title">Rate Execution Lock Workflow</div>
+    <ul class="checklist">
+      <li><i class="fa fa-lock"></i> Buyer clicks "LOCK RATE (60s)" in cafe portal</li>
+      <li><i class="fa fa-server"></i> POST /api/exchange/rate-lock → creates RateLock record with ID (RL-XXXX)</li>
+      <li><i class="fa fa-clock"></i> 60-second countdown displayed in currency bar</li>
+      <li><i class="fa fa-check-circle"></i> Rate frozen during order entry to prevent slippage</li>
+      <li><i class="fa fa-clock-rotate-left"></i> After 60s: "RATE EXPIRED" — buyer can re-lock</li>
+    </ul>
+  </div>
+
+  <!-- 21. Sponge -->
+  <div class="section" id="sponge">
+    <div class="section-title"><span class="section-num">21</span><i class="fa fa-flask" style="color:var(--amber)"></i> Sponge Effect — Dynamic Yield Engine</div>
+    <div class="section-desc">Dynamically adjusts the 0.82 roasting shrinkage baseline based on real warehouse humidity, affecting inventory value and environmental P&L.</div>
+
+    <table class="manual-table">
+      <thead><tr><th>Rule</th><th>Condition</th><th>Δ</th><th>Final Coefficient</th><th>Effect</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>Rule A</strong> — Moisture Absorption</td>
+          <td>RH &gt; 70%</td><td style="color:#4ade80">+0.005</td>
+          <td style="color:#4ade80;font-family:var(--font-mono)">0.825</td>
+          <td>Beans heavier → less shrinkage → <strong style="color:#4ade80">GAIN</strong></td>
+        </tr>
+        <tr>
+          <td><strong>Baseline</strong></td>
+          <td>20% ≤ RH ≤ 70%</td><td>0</td>
+          <td style="font-family:var(--font-mono)">0.820</td>
+          <td>Standard 18% shrinkage</td>
+        </tr>
+        <tr>
+          <td><strong>Rule B</strong> — Evaporation Loss</td>
+          <td>RH &lt; 20%</td><td style="color:#f87171">−0.003</td>
+          <td style="color:#f87171;font-family:var(--font-mono)">0.817</td>
+          <td>Beans lighter → more shrinkage → <strong style="color:#f87171">LOSS</strong></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="sub-title">Environmental P&L Calculation</div>
+    <div class="code-block">
+spongeKgDelta    = (spongeCoeff - 0.82) × greenKg
+environmentalPnL = spongeKgDelta × wpGold (SAR/kg)
+
+<span class="comment">// Positive = moisture gain (more saleable weight)</span>
+<span class="comment">// Negative = evaporation loss (less saleable weight)</span>
+    </div>
+  </div>
+
+  <!-- 22. ZATCA -->
+  <div class="section" id="zatca">
+    <div class="section-title"><span class="section-num">22</span><i class="fa fa-file-invoice" style="color:var(--amber)"></i> ZATCA Phase-2 Compliance</div>
+    <div class="section-desc">ZATCA_VAT_RATE = 15%. UBL XML e-invoicing and Bulk Shrinkage Report for Saudi tax authority compliance.</div>
+
+    <div class="sub-title">ZATCA Invoice Fields</div>
+    <table class="manual-table">
+      <thead><tr><th>Field</th><th>Value</th></tr></thead>
+      <tbody>
+        <tr><td>Invoice Type Code</td><td>388 (Standard Tax Invoice)</td></tr>
+        <tr><td>Unit Code</td><td>KGM (kilograms)</td></tr>
+        <tr><td>VAT Rate</td><td>15%</td></tr>
+        <tr><td>Schema</td><td>OASIS UBL Invoice-2</td></tr>
+        <tr><td>Format</td><td>XML download + HTML view</td></tr>
+      </tbody>
+    </table>
+
+    <div class="sub-title">Bulk Shrinkage Report</div>
+    <div class="info-box info-amber">
+      <i class="fa fa-download"></i>
+      <strong>GET /admin/finance/zatca-export</strong> → Downloads <code>qabban-zatca-bulk-shrinkage-{date}.csv</code><br>
+      Covers 30-day period · Standard 18% baseline · Sponge coefficient per branch · 15% ZATCA VAT
+    </div>
+  </div>
+
+  <!-- 23. SFDA -->
+  <div class="section" id="sfda">
+    <div class="section-title"><span class="section-num">23</span><i class="fa fa-shield-halved" style="color:var(--amber)"></i> SFDA Recall & Audit Shield</div>
+    <div class="section-desc">SFDA Article 18 compliance with lot-level sack photo traceability and real-time cafe recall notifications.</div>
+
+    <div class="sub-title">Recall Workflow</div>
+    <ul class="checklist">
+      <li><i class="fa fa-1"></i> Admin clicks "INITIATE RECALL" on lot → SFDA Recall Modal</li>
+      <li><i class="fa fa-2"></i> Enters recall instructions; system shows all cafes with DISPATCHED orders</li>
+      <li><i class="fa fa-3"></i> Confirms → POST /admin/inventory/:lotId/recall → status = RECALLED</li>
+      <li><i class="fa fa-4"></i> Affected cafes see urgent red banner on next portal load (checked every 1 min)</li>
+      <li><i class="fa fa-5"></i> Cafe staff acknowledges banner → dismissed, logged</li>
+    </ul>
+
+    <div class="info-box info-red">
+      <i class="fa fa-ban"></i>
+      Recalled lots are <strong>BLOCKED</strong> — cannot be ordered, excluded from financial calculations, shown with red "RECALLED — BLOCKED" overlay in all views.
+    </div>
+  </div>
+
+  <!-- 24. i18n -->
+  <div class="section" id="i18n">
+    <div class="section-title"><span class="section-num">24</span><i class="fa fa-language" style="color:var(--amber)"></i> Bilingual Engine (EN / AR)</div>
+    <div class="section-desc">Full bilingual support — English and Arabic with RTL layout toggle. All UI text translated via data-i18n attribute engine.</div>
+
+    <div class="info-box info-blue">
+      <i class="fa fa-info-circle"></i>
+      <strong>Coverage:</strong> Navigation, page titles, stat labels, table headers, button labels, modal text, form labels, climate terms, risk levels, lot card labels, financial labels, recall notifications, orders page — all bilingual.
+    </div>
+    <p style="font-size:13px;color:var(--text-muted);margin-top:12px">Language preference is persisted in localStorage. Switching triggers instant re-render with no page reload. Arabic layout uses <code>&lt;html dir="rtl"&gt;</code> for full RTL support including reversed navigation order.</p>
+  </div>
+
+  <!-- 25. API Reference -->
+  <div class="section" id="api">
+    <div class="section-title"><span class="section-num">25</span><i class="fa fa-plug" style="color:var(--amber)"></i> API Reference</div>
+    <div class="section-desc">All routes exposed by QABBAN OS. Admin, finance, cafe, exchange, vendor, buyer, and utility endpoints.</div>
+
+    <div class="sub-title">Finance APIs</div>
+    <table class="manual-table">
+      <thead><tr><th>Method</th><th>Path</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><span class="method-get">GET</span></td><td class="endpoint-path">/api/finance/snapshot</td><td>Live portfolio: Bronze/Silver/Gold totals + per-lot wholesale prices</td></tr>
+        <tr><td><span class="method-post">POST</span></td><td class="endpoint-path">/api/finance/set-tier-margins</td><td>Update Bronze/Silver/Gold margins (broadcasts to cafe portals)</td></tr>
+        <tr><td><span class="method-post">POST</span></td><td class="endpoint-path">/api/finance/set-exchange-buffer</td><td>Set exchange rate buffer % (0–10)</td></tr>
+        <tr><td><span class="method-post">POST</span></td><td class="endpoint-path">/api/finance/exchange-rates/refresh</td><td>Fetch live rates from XE Currency API</td></tr>
+        <tr><td><span class="method-get">GET</span></td><td class="endpoint-path">/admin/finance/zatca-export</td><td>Download ZATCA Bulk Shrinkage CSV</td></tr>
+      </tbody>
+    </table>
+
+    <div class="sub-title">Cafe APIs</div>
+    <table class="manual-table">
+      <thead><tr><th>Method</th><th>Path</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><span class="method-get">GET</span></td><td class="endpoint-path">/cafe?cid=CAF-XXX</td><td>Cafe portal with loyalty tracker and catalog</td></tr>
+        <tr><td><span class="method-post">POST</span></td><td class="endpoint-path">/cafe/request</td><td>Submit bean request</td></tr>
+        <tr><td><span class="method-post">POST</span></td><td class="endpoint-path">/cafe/roasting-interest</td><td>Submit out-of-stock pre-order interest</td></tr>
+        <tr><td><span class="method-get">GET</span></td><td class="endpoint-path">/cafe/orders</td><td>Order history page</td></tr>
+        <tr><td><span class="method-post">POST</span></td><td class="endpoint-path">/api/cafe/tier-nudge</td><td>Get tier nudge status + WhatsApp copy</td></tr>
+        <tr><td><span class="method-get">GET</span></td><td class="endpoint-path">/api/recalls/:cafeId</td><td>Active SFDA recalls for a cafe</td></tr>
+      </tbody>
+    </table>
+
+    <div class="sub-title">Exchange APIs</div>
+    <table class="manual-table">
+      <thead><tr><th>Method</th><th>Path</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><span class="method-post">POST</span></td><td class="endpoint-path">/api/exchange/rate-lock</td><td>Create 60-second SAR rate execution lock</td></tr>
+        <tr><td><span class="method-get">GET</span></td><td class="endpoint-path">/api/exchange/rate-lock/:id</td><td>Check rate lock validity</td></tr>
+        <tr><td><span class="method-post">POST</span></td><td class="endpoint-path">/api/exchange/iot-update</td><td>Update lot warehouse IoT sensor data</td></tr>
+        <tr><td><span class="method-post">POST</span></td><td class="endpoint-path">/api/exchange/forward/:id/milestone</td><td>Trigger milestone payment</td></tr>
+        <tr><td><span class="method-post">POST</span></td><td class="endpoint-path">/api/exchange/forward/:id/sas</td><td>Update SAS clause status</td></tr>
+        <tr><td><span class="method-get">GET</span></td><td class="endpoint-path">/api/exchange/analytics</td><td>Full analytics JSON payload</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 26. Constants -->
+  <div class="section" id="constants">
+    <div class="section-title"><span class="section-num">26</span><i class="fa fa-sliders" style="color:var(--amber)"></i> Business Constants & Configuration</div>
+    <div class="section-desc">All key business constants defined in <code style="color:var(--amber)">src/data.ts</code>. Modify to adjust system-wide behaviour.</div>
+
+    <table class="manual-table">
+      <thead><tr><th>Constant</th><th>Value</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td class="endpoint-path">BULK_ORDER_THRESHOLD_BAGS</td><td>10 bags</td><td>Minimum bags to trigger extra bulk discount</td></tr>
+        <tr><td class="endpoint-path">BAG_SIZE_KG</td><td>60 kg</td><td>Standard coffee sack weight</td></tr>
+        <tr><td class="endpoint-path">BULK_DISCOUNT_PCT</td><td>10%</td><td>Extra discount % for qualifying bulk orders</td></tr>
+        <tr><td class="endpoint-path">TIER_NUDGE_THRESHOLD</td><td>50 kg</td><td>Proximity to next tier that triggers WhatsApp nudge</td></tr>
+        <tr><td class="endpoint-path">SPONGE_BASELINE_COEFFICIENT</td><td>0.82</td><td>Standard green→roasted yield (18% shrinkage)</td></tr>
+        <tr><td class="endpoint-path">SPONGE_RH_HIGH_THRESHOLD</td><td>70%</td><td>RH above this → moisture absorption Rule A</td></tr>
+        <tr><td class="endpoint-path">SPONGE_RH_LOW_THRESHOLD</td><td>20%</td><td>RH below this → evaporation loss Rule B</td></tr>
+        <tr><td class="endpoint-path">ZATCA_VAT_RATE</td><td>0.15 (15%)</td><td>Saudi VAT rate for e-invoices</td></tr>
+        <tr><td class="endpoint-path">rateLockWindowSecs</td><td>60 seconds</td><td>Duration of SAR rate execution lock</td></tr>
+        <tr><td>Default Bronze Margin</td><td>40%</td><td>Default wholesale margin for Bronze buyers</td></tr>
+        <tr><td>Default Silver Margin</td><td>35%</td><td>Default wholesale margin for Silver buyers</td></tr>
+        <tr><td>Default Gold Margin</td><td>28%</td><td>Best rate — for highest-volume buyers</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 27. Demo Credentials -->
+  <div class="section" id="demo">
+    <div class="section-title"><span class="section-num">27</span><i class="fa fa-user-circle" style="color:var(--amber)"></i> Demo Credentials & Test Data</div>
+    <div class="section-desc">Pre-loaded sample data for immediate testing of all features.</div>
+
+    <div class="sub-title">Login Credentials</div>
+    <table class="manual-table">
+      <thead><tr><th>Portal</th><th>Username</th><th>Password</th><th>Tier</th><th>Lifetime KG</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><i class="fa fa-shield-alt" style="color:var(--amber)"></i> Admin</td>
+          <td class="endpoint-path">admin</td><td class="endpoint-path">qabban2026</td>
+          <td>—</td><td>—</td>
+        </tr>
+        <tr>
+          <td><i class="fa fa-mug-hot"></i> Al Nokhba Specialty (Riyadh)</td>
+          <td class="endpoint-path">alnokhba</td><td class="endpoint-path">cafe123</td>
+          <td><span class="tier-badge badge-gold">🥇 Gold</span></td><td>2,400 kg — MAX TIER</td>
+        </tr>
+        <tr>
+          <td><i class="fa fa-mug-hot"></i> Qahwa Al Bahr (Jeddah)</td>
+          <td class="endpoint-path">qahwa_bahr</td><td class="endpoint-path">cafe123</td>
+          <td><span class="tier-badge badge-silver">🥈 Silver</span></td><td>1,965 kg — ⚡ 36 kg to Gold</td>
+        </tr>
+        <tr>
+          <td><i class="fa fa-mug-hot"></i> Pearl Roast Café (Dammam)</td>
+          <td class="endpoint-path">pearl_roast</td><td class="endpoint-path">cafe123</td>
+          <td><span class="tier-badge badge-bronze">🥉 Bronze</span></td><td>460 kg — ⚡ 41 kg to Silver</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="sub-title">Useful Test API Calls</div>
+    <div class="code-block">
+<span class="comment"># Finance snapshot (Bronze/Silver/Gold portfolio values)</span>
+curl http://localhost:3000/api/finance/snapshot
+
+<span class="comment"># Tier nudge for Qahwa Al Bahr (36 kg from Gold)</span>
+curl -X POST http://localhost:3000/api/cafe/tier-nudge \
+  -H "Content-Type: application/json" -d '{"cafeId":"CAF-002"}'
+
+<span class="comment"># ZATCA Bulk Shrinkage CSV export</span>
+curl http://localhost:3000/admin/finance/zatca-export -o zatca.csv
+
+<span class="comment"># Exchange analytics (all totals, rates, invoice sums)</span>
+curl http://localhost:3000/api/exchange/analytics
+
+<span class="comment"># Sponge simulation — RH 85% (coastal high humidity)</span>
+curl -X POST http://localhost:3000/api/sponge/simulate \
+  -H "Content-Type: application/json" -d '{"humidity":85}'
+    </div>
+
+    <div class="info-box info-green" style="margin-top:24px">
+      <i class="fa fa-rocket"></i>
+      <strong>Live System URL:</strong> <a href="https://3000-ihghwgfukl99k815ye7z8-cbeee0f9.sandbox.novita.ai" style="color:#4ade80">https://3000-ihghwgfukl99k815ye7z8-cbeee0f9.sandbox.novita.ai</a>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div style="background:#0a0a0f;border-top:1px solid var(--border);padding:32px 60px;text-align:center">
+    <div style="color:var(--amber);font-family:var(--font-mono);font-weight:700;letter-spacing:3px;margin-bottom:8px">QABBAN OS</div>
+    <div style="color:var(--text-muted);font-size:12px">User Manual v2.0 · March 2026 · Qabban Global Exchange & Loyalty Engine v6</div>
+    <div style="color:var(--text-muted);font-size:11px;margin-top:6px">Hono + TypeScript + Cloudflare Pages · ~12,000 lines · Bilingual EN/AR</div>
+  </div>
+
+</main>
+
+<!-- Print button -->
+<button class="print-btn" onclick="window.print()">
+  <i class="fa fa-print"></i> Print / Export PDF
+</button>
+
+<script>
+  // Sidebar active link highlighting on scroll
+  const sections = document.querySelectorAll('.section');
+  const links = document.querySelectorAll('.sidebar-link');
+  
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        const id = entry.target.id;
+        links.forEach(l => {
+          l.classList.toggle('active', l.getAttribute('href') === '#' + id);
+        });
+      }
+    });
+  }, { threshold: 0.3 });
+  
+  sections.forEach(s => observer.observe(s));
+
+  // Smooth scroll
+  links.forEach(link => {
+    link.addEventListener('click', (e) => {
+      const href = link.getAttribute('href');
+      if (href.startsWith('#')) {
+        e.preventDefault();
+        const target = document.getElementById(href.slice(1));
+        if (target) {
+          target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }
+    });
+  });
+</script>
+</body>
+</html>
