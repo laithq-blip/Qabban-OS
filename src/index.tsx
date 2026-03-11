@@ -67,6 +67,9 @@ import {
   getTierBaseDiscount,
   kgToNextTier,
   calcHybridDiscount,
+  TIER_NUDGE_THRESHOLD,
+  getTierNudgeStatus,
+  type TierNudgeStatus,
   type CoffeeMilesTier,
   type GlobalVendor,
   type GlobalLot,
@@ -5676,6 +5679,7 @@ app.get('/admin/finance', (c) => {
             <th style="text-align:right;padding:8px 10px;font-family:var(--font-mono);font-size:9px;color:var(--text-muted)">BASE DISC.</th>
             <th style="text-align:right;padding:8px 10px;font-family:var(--font-mono);font-size:9px;color:var(--text-muted)">MAX STACKED</th>
             <th style="text-align:left;padding:8px 10px;font-family:var(--font-mono);font-size:9px;color:var(--text-muted)">PROGRESS</th>
+            <th style="text-align:center;padding:8px 10px;font-family:var(--font-mono);font-size:9px;color:#25d366">TIER WATCHER</th>
           </tr>
         </thead>
         <tbody>
@@ -5685,10 +5689,14 @@ app.get('/admin/finance', (c) => {
             const prog  = kgToNextTier(cl.lifetimeKgPurchased ?? 0)
             const col   = cm === 'Gold' ? '#f59e0b' : cm === 'Silver' ? '#94a3b8' : '#cd7f32'
             const icon  = cm === 'Gold' ? '🥇' : cm === 'Silver' ? '🥈' : '🥉'
+            const nudgeStatus = getTierNudgeStatus(cl.lifetimeKgPurchased ?? 0, cl.name)
             const dispatchedKg = beanRequests.filter(r => r.cafeId === cl.id && r.status === 'DISPATCHED').reduce((s,r) => s+r.quantityKg, 0)
             return `
-          <tr style="border-bottom:1px solid var(--bg-3)">
-            <td style="padding:10px;font-weight:600">${cl.name}<span style="font-family:var(--font-mono);font-size:9px;color:var(--text-muted);margin-left:6px">${cl.id}</span></td>
+          <tr style="border-bottom:1px solid var(--bg-3);${nudgeStatus.isNudge ? 'background:rgba(245,158,11,0.04);' : ''}">
+            <td style="padding:10px;font-weight:600">${cl.name}
+              ${nudgeStatus.isNudge ? `<span style="font-family:var(--font-mono);font-size:8px;background:rgba(245,158,11,0.18);color:var(--amber);border:1px solid rgba(245,158,11,0.4);border-radius:3px;padding:1px 5px;margin-left:6px;letter-spacing:.3px">⚡ NUDGE</span>` : ''}
+              <span style="font-family:var(--font-mono);font-size:9px;color:var(--text-muted);margin-left:6px">${cl.id}</span>
+            </td>
             <td style="padding:10px;text-align:right;font-family:var(--font-mono);font-weight:700">${(cl.lifetimeKgPurchased ?? 0).toLocaleString()} kg</td>
             <td style="padding:10px;text-align:center">
               <span style="font-size:14px">${icon}</span>
@@ -5698,14 +5706,24 @@ app.get('/admin/finance', (c) => {
             <td style="padding:10px;text-align:right;font-family:var(--font-mono);font-weight:700;color:var(--green)">${base + BULK_DISCOUNT_PCT}%</td>
             <td style="padding:10px;min-width:180px">
               ${prog.nextTier ? `
-              <div style="font-size:9px;color:var(--text-muted);font-family:var(--font-mono);margin-bottom:4px">
-                ${prog.kgNeeded.toLocaleString()} kg to ${prog.nextTier}
+              <div style="display:flex;justify-content:space-between;font-size:9px;color:var(--text-muted);font-family:var(--font-mono);margin-bottom:4px">
+                <span>${prog.kgNeeded.toLocaleString()} kg to <strong style="color:${prog.nextTier==='Gold'?'#f59e0b':'#94a3b8'}">${prog.nextTier}</strong></span>
+                <span>${prog.progressPct}%</span>
               </div>
               <div style="height:6px;background:var(--bg-3);border-radius:3px;overflow:hidden">
-                <div style="height:100%;width:${prog.progressPct}%;background:${col};border-radius:3px;transition:width .3s"></div>
+                <div style="height:100%;width:${prog.progressPct}%;background:${nudgeStatus.isNudge ? 'linear-gradient(90deg,var(--amber),#fbbf24)' : col};border-radius:3px;transition:width .3s;${nudgeStatus.isNudge ? 'box-shadow:0 0 6px rgba(245,158,11,0.5)' : ''}"></div>
               </div>
-              <div style="font-size:9px;color:var(--text-muted);font-family:var(--font-mono);margin-top:2px">${prog.progressPct}% complete</div>
               ` : `<span style="font-size:10px;font-family:var(--font-mono);color:#f59e0b">🥇 MAX TIER</span>`}
+            </td>
+            <td style="padding:10px;text-align:center">
+              ${nudgeStatus.isNudge ? `
+              <div style="display:flex;flex-direction:column;align-items:center;gap:4px">
+                <span style="font-size:9px;font-family:var(--font-mono);color:var(--amber);font-weight:700">${nudgeStatus.kgNeeded} kg left</span>
+                <a href="mailto:?subject=Tier+Upgrade+Alert&body=${encodeURIComponent(nudgeStatus.whatsappCopy)}"
+                   style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;background:rgba(37,211,102,0.15);border:1px solid rgba(37,211,102,0.4);border-radius:3px;color:#25d366;font-size:9px;font-family:var(--font-mono);text-decoration:none;font-weight:700">
+                  <i class="fa fa-brands fa-whatsapp"></i> NUDGE
+                </a>
+              </div>` : `<span style="font-size:9px;color:var(--text-muted);font-family:var(--font-mono)">—</span>`}
             </td>
           </tr>`
           }).join('')}
@@ -5713,13 +5731,133 @@ app.get('/admin/finance', (c) => {
       </table>
     </div>
 
-    <!-- Stacking formula -->
-    <div style="margin-top:18px;padding:12px 16px;background:rgba(245,158,11,0.04);border:1px dashed rgba(245,158,11,0.25);border-radius:var(--radius);font-size:10px;color:var(--text-muted);font-family:var(--font-mono);line-height:1.8">
-      <strong style="color:var(--amber)">Hybrid Pricing Formula:</strong><br>
-      <strong>Total Discount %</strong> = Tier Base % + Bulk Quantity %<br>
-      <strong>Final Price</strong> = Unit Price × (1 − Total Discount / 100)<br>
-      <strong>Bulk Trigger</strong>: Order &gt; ${BULK_ORDER_THRESHOLD_BAGS} bags (${BAG_SIZE_KG} kg/bag = ${BULK_ORDER_THRESHOLD_BAGS * BAG_SIZE_KG} kg minimum) → +${BULK_DISCOUNT_PCT}% additional<br>
-      Example: <span style="color:var(--amber)">Gold + Bulk = 5% + 10% = 15% total discount applied at checkout</span>
+    <!-- Tier Watcher Legend + Stacking formula -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:16px;flex-wrap:wrap">
+      <div style="padding:12px 16px;background:rgba(37,211,102,0.04);border:1px dashed rgba(37,211,102,0.25);border-radius:var(--radius);font-size:10px;color:var(--text-muted);font-family:var(--font-mono);line-height:1.8">
+        <strong style="color:#25d366">⚡ Tier Watcher Logic:</strong><br>
+        Buyers within <strong style="color:var(--amber)">${TIER_NUDGE_THRESHOLD} kg</strong> of the next tier trigger a <em>Milestone Nudge</em>.<br>
+        A mock WhatsApp notification is dispatched via the <code>/api/cafe/tier-nudge</code> endpoint.<br>
+        Badge: <span style="background:rgba(245,158,11,0.18);color:var(--amber);border:1px solid rgba(245,158,11,0.4);border-radius:3px;padding:1px 5px;font-size:8px">⚡ NUDGE</span> appears on row and buyer portal.
+      </div>
+      <div style="padding:12px 16px;background:rgba(245,158,11,0.04);border:1px dashed rgba(245,158,11,0.25);border-radius:var(--radius);font-size:10px;color:var(--text-muted);font-family:var(--font-mono);line-height:1.8">
+        <strong style="color:var(--amber)">Hybrid Pricing Formula:</strong><br>
+        <strong>Total Discount %</strong> = Tier Base % + Bulk Quantity %<br>
+        <strong>Bulk Trigger</strong>: &gt; ${BULK_ORDER_THRESHOLD_BAGS} bags (${BAG_SIZE_KG} kg/bag) → +${BULK_DISCOUNT_PCT}%<br>
+        Example: <span style="color:var(--amber)">Gold + Bulk = 5% + 10% = 15% total</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ TIER WATCHER DASHBOARD ══ -->
+  <div class="card" style="margin-bottom:28px;border-color:rgba(37,211,102,0.25)">
+    <div class="card-title" style="margin-bottom:4px">
+      <i class="fa fa-bell" style="color:#25d366"></i>
+      <span>Tier Watcher — Milestone Nudge Dashboard</span>
+      <span style="font-family:var(--font-mono);font-size:9px;padding:2px 7px;border-radius:2px;background:rgba(37,211,102,0.10);color:#25d366;border:1px solid rgba(37,211,102,0.25);margin-left:8px">⚡ ACTIVE</span>
+    </div>
+    <div style="font-size:11px;color:var(--text-muted);margin-bottom:18px;font-family:var(--font-mono)">
+      Buyers within <strong style="color:var(--amber)">${TIER_NUDGE_THRESHOLD} kg</strong> of the next tier — auto-detected · mock WhatsApp nudge dispatched via <code>/api/cafe/tier-nudge</code>
+    </div>
+
+    ${(() => {
+      const nudgeBuyers = cafeClients.filter(cl => {
+        const n = getTierNudgeStatus(cl.lifetimeKgPurchased ?? 0, cl.name)
+        return n.isNudge
+      })
+      if (nudgeBuyers.length === 0) return `
+      <div style="padding:24px;text-align:center;color:var(--text-muted);font-family:var(--font-mono);font-size:11px;border:1px dashed rgba(255,255,255,0.1);border-radius:var(--radius)">
+        <i class="fa fa-check-circle" style="color:#25d366;font-size:18px;margin-bottom:8px;display:block"></i>
+        No buyers currently in the nudge zone (within ${TIER_NUDGE_THRESHOLD} kg of next tier)
+      </div>`
+
+      return `
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px">
+        ${nudgeBuyers.map(cl => {
+          const nudge = getTierNudgeStatus(cl.lifetimeKgPurchased ?? 0, cl.name)
+          const nextCol = nudge.nextTier === 'Gold' ? '#f59e0b' : '#94a3b8'
+          const nextIcon = nudge.nextTier === 'Gold' ? '🥇' : '🥈'
+          const curCol = nudge.currentTier === 'Gold' ? '#f59e0b' : nudge.currentTier === 'Silver' ? '#94a3b8' : '#cd7f32'
+          const curIcon = nudge.currentTier === 'Gold' ? '🥇' : nudge.currentTier === 'Silver' ? '🥈' : '🥉'
+          return `
+          <div style="background:linear-gradient(135deg,rgba(37,211,102,0.06),rgba(245,158,11,0.04));border:1px solid rgba(245,158,11,0.35);border-radius:10px;padding:16px">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+              <div style="width:32px;height:32px;border-radius:50%;background:rgba(37,211,102,0.15);border:1.5px solid rgba(37,211,102,0.5);display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0">⚡</div>
+              <div>
+                <div style="font-weight:700;color:var(--text-pri);font-size:12px">${cl.name}</div>
+                <div style="font-family:var(--font-mono);font-size:9px;color:var(--text-muted)">${cl.id} · ${(cl.lifetimeKgPurchased ?? 0).toLocaleString()} kg lifetime</div>
+              </div>
+            </div>
+
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+              <span style="font-size:16px">${curIcon}</span>
+              <span style="font-family:var(--font-mono);font-size:10px;color:${curCol};font-weight:700">${nudge.currentTier}</span>
+              <span style="color:var(--text-muted);font-size:12px">→</span>
+              <span style="font-size:16px">${nextIcon}</span>
+              <span style="font-family:var(--font-mono);font-size:10px;color:${nextCol};font-weight:700">${nudge.nextTier}</span>
+              <span style="font-family:var(--font-mono);font-size:10px;color:var(--amber);margin-left:auto;font-weight:700">${nudge.kgNeeded} kg left</span>
+            </div>
+
+            <div style="height:6px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden;margin-bottom:10px">
+              <div style="height:100%;width:${nudge.progressPct}%;background:linear-gradient(90deg,var(--amber),#fbbf24);border-radius:3px;box-shadow:0 0 6px rgba(245,158,11,0.5)"></div>
+            </div>
+
+            <div style="font-size:10px;color:var(--text-muted);font-family:var(--font-mono);margin-bottom:10px;line-height:1.4">${nudge.nudgeMessage}</div>
+
+            <button onclick="adminSendNudge('${cl.id}', '${cl.name.replace(/'/g, "\\'")}')" style="width:100%;padding:7px;background:rgba(37,211,102,0.12);border:1px solid rgba(37,211,102,0.4);border-radius:6px;color:#25d366;font-size:10px;font-family:var(--font-mono);cursor:pointer;font-weight:700;letter-spacing:.3px;display:flex;align-items:center;justify-content:center;gap:6px">
+              <i class="fa fa-brands fa-whatsapp"></i> SEND WHATSAPP NUDGE
+            </button>
+          </div>`
+        }).join('')}
+      </div>`
+    })()}
+
+    <script>
+    function adminSendNudge(cafeId, name) {
+      fetch('/api/cafe/tier-nudge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cafeId: cafeId })
+      }).then(function(r){ return r.json(); }).then(function(d) {
+        if (d.ok) {
+          var modal = document.getElementById('admin-wa-modal');
+          var msgEl  = document.getElementById('admin-wa-msg');
+          if (modal && msgEl) {
+            msgEl.textContent = d.whatsappCopy;
+            modal.style.display = 'flex';
+          }
+        }
+      }).catch(function(){});
+    }
+    function closeAdminWaModal() {
+      var m = document.getElementById('admin-wa-modal');
+      if (m) m.style.display = 'none';
+    }
+    </script>
+  </div>
+
+  <!-- ── Admin Mock WhatsApp Preview Modal ── -->
+  <div id="admin-wa-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:9999;align-items:center;justify-content:center">
+    <div style="width:min(420px,94vw);background:#111b21;border-radius:16px;overflow:hidden;box-shadow:0 24px 80px rgba(0,0,0,0.7)">
+      <div style="background:#1f2c34;padding:12px 16px;display:flex;align-items:center;gap:12px">
+        <div style="width:36px;height:36px;border-radius:50%;background:#25d366;display:flex;align-items:center;justify-content:center;font-size:18px">☕</div>
+        <div>
+          <div style="font-weight:700;color:#e9edef;font-size:13px">Qabban Coffee Miles</div>
+          <div style="font-size:10px;color:#8696a0">Admin — Tier Watcher Nudge</div>
+        </div>
+        <button onclick="closeAdminWaModal()" style="margin-left:auto;background:transparent;border:none;color:#8696a0;font-size:18px;cursor:pointer;line-height:1">✕</button>
+      </div>
+      <div style="padding:20px 16px;background:#0b141a;min-height:160px">
+        <div style="display:flex;justify-content:flex-end">
+          <div style="max-width:82%;background:#005c4b;border-radius:12px 2px 12px 12px;padding:10px 14px">
+            <pre id="admin-wa-msg" style="font-size:12px;color:#e9edef;font-family:'Segoe UI',sans-serif;white-space:pre-wrap;word-break:break-word;margin:0;line-height:1.55"></pre>
+            <div style="text-align:right;font-size:10px;color:#8696a0;margin-top:4px">✓✓ Delivered</div>
+          </div>
+        </div>
+      </div>
+      <div style="padding:10px 16px;background:#1f2c34;display:flex;justify-content:space-between;align-items:center">
+        <div style="font-size:10px;color:#8696a0;font-family:var(--font-mono)">Mock — WhatsApp Business API</div>
+        <button onclick="closeAdminWaModal()" style="padding:6px 16px;background:rgba(37,211,102,0.2);border:1px solid rgba(37,211,102,0.5);border-radius:6px;color:#25d366;font-size:11px;font-family:var(--font-mono);cursor:pointer;font-weight:700">DONE</button>
+      </div>
     </div>
   </div>
 
@@ -6585,6 +6723,9 @@ app.get('/cafe', (c) => {
     : 'linear-gradient(135deg,rgba(205,127,50,0.12),rgba(205,127,50,0.04))'
   const cmBorderCol  = cmTier === 'Gold' ? 'rgba(245,158,11,0.40)' : cmTier === 'Silver' ? 'rgba(148,163,184,0.35)' : 'rgba(205,127,50,0.35)'
 
+  // ── Tier Watcher — Milestone Nudge (within 50 kg of next tier) ──
+  const nudge = getTierNudgeStatus(lifetimeKg, client.name)
+
   const content = `
   <!-- NOTE: Recall alerts are injected dynamically by checkRecalls() polling every 4s.
        No static server-rendered recall alert here — banners only appear when admin
@@ -6600,6 +6741,37 @@ app.get('/cafe', (c) => {
     <span style="color:var(--text-muted)">60-s rate lock · ${exchangeRateUpdatedAt ? `Updated ${exchangeRateUpdatedAt}` : 'Using cached rate'}</span>
     <a href="/admin/finance" style="color:#4ade80;text-decoration:none;margin-left:auto">⚙ Rate Settings</a>
   </div>
+
+  ${nudge.isNudge ? `
+  <!-- ── TIER WATCHER — MILESTONE NUDGE BANNER ── -->
+  <div id="tier-nudge-banner" style="display:flex;align-items:flex-start;gap:14px;padding:14px 18px;background:linear-gradient(135deg,rgba(245,158,11,0.14),rgba(245,158,11,0.06));border:1.5px solid rgba(245,158,11,0.55);border-radius:10px;margin-bottom:18px;animation:nudgePulse 2.5s ease-in-out infinite">
+    <div style="width:36px;height:36px;border-radius:50%;background:rgba(245,158,11,0.18);border:2px solid rgba(245,158,11,0.6);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">⚡</div>
+    <div style="flex:1">
+      <div style="font-family:var(--font-mono);font-size:11px;font-weight:800;color:var(--amber);letter-spacing:.6px;margin-bottom:3px">
+        TIER UPGRADE MILESTONE — ${nudge.kgNeeded} KG AWAY
+      </div>
+      <div style="font-size:12px;color:var(--text-pri);line-height:1.5">
+        ${nudge.nudgeMessage}
+      </div>
+      <div style="margin-top:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <div style="height:6px;flex:1;min-width:120px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden">
+          <div style="height:100%;width:${nudge.progressPct}%;background:linear-gradient(90deg,var(--amber),#fbbf24);border-radius:3px;box-shadow:0 0 8px rgba(245,158,11,0.5)"></div>
+        </div>
+        <span style="font-family:var(--font-mono);font-size:9px;color:var(--text-muted);white-space:nowrap">${nudge.progressPct}% → ${nudge.nextTier === 'Gold' ? '🥇' : '🥈'} ${nudge.nextTier}</span>
+        <button onclick="sendWhatsAppNudge('${client.id}')" style="padding:4px 12px;background:rgba(37,211,102,0.15);border:1px solid rgba(37,211,102,0.45);border-radius:4px;color:#25d366;font-size:10px;font-family:var(--font-mono);cursor:pointer;font-weight:700;letter-spacing:.3px">
+          <i class="fa fa-brands fa-whatsapp" style="margin-right:4px"></i>SEND WHATSAPP
+        </button>
+        <button onclick="document.getElementById('tier-nudge-banner').style.display='none'" style="padding:4px 10px;background:transparent;border:1px solid rgba(255,255,255,0.12);border-radius:4px;color:var(--text-muted);font-size:10px;cursor:pointer">✕ Dismiss</button>
+      </div>
+    </div>
+  </div>
+  <style>
+    @keyframes nudgePulse {
+      0%,100%{ box-shadow:0 0 0 0 rgba(245,158,11,0.0); }
+      50%    { box-shadow:0 0 0 6px rgba(245,158,11,0.18); }
+    }
+  </style>
+  ` : ''}
 
   <!-- ── LOYALTY TRACKER CARD (above catalog per spec) ── -->
   <div style="background:${cmBgGrad};border:1px solid ${cmBorderCol};border-radius:12px;padding:20px 24px;margin-bottom:24px">
@@ -6995,7 +7167,64 @@ app.get('/cafe', (c) => {
 
     // Poll every 10s as fallback
     setInterval(refreshWholesalePrices, 10000);
-  </script>`
+
+    /* ── Tier Watcher — sendWhatsAppNudge ─────────────────────────────────
+       Calls POST /api/cafe/tier-nudge to log the nudge, then shows a mock
+       WhatsApp message preview modal confirming dispatch.
+    ─────────────────────────────────────────────────────────────────────── */
+    function sendWhatsAppNudge(cafeId) {
+      fetch('/api/cafe/tier-nudge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cafeId: cafeId })
+      })
+      .then(function(r){ return r.json(); })
+      .then(function(d) {
+        if (d.ok) {
+          var modal = document.getElementById('wa-nudge-modal');
+          var msgEl = document.getElementById('wa-msg-body');
+          if (modal && msgEl) {
+            msgEl.textContent = d.whatsappCopy;
+            modal.style.display = 'flex';
+          }
+        }
+      })
+      .catch(function(){});
+    }
+    function closeWaNudgeModal() {
+      var m = document.getElementById('wa-nudge-modal');
+      if (m) m.style.display = 'none';
+    }
+  </script>
+
+  <!-- ── Mock WhatsApp Nudge Preview Modal ── -->
+  <div id="wa-nudge-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:9999;align-items:center;justify-content:center">
+    <div style="width:min(420px,94vw);background:#111b21;border-radius:16px;overflow:hidden;box-shadow:0 24px 80px rgba(0,0,0,0.7)">
+      <!-- WhatsApp-style header -->
+      <div style="background:#1f2c34;padding:12px 16px;display:flex;align-items:center;gap:12px">
+        <div style="width:36px;height:36px;border-radius:50%;background:#25d366;display:flex;align-items:center;justify-content:center;font-size:18px">☕</div>
+        <div>
+          <div style="font-weight:700;color:#e9edef;font-size:13px">Qabban Coffee Miles</div>
+          <div style="font-size:10px;color:#8696a0">Loyalty · Tier Watcher Bot</div>
+        </div>
+        <button onclick="closeWaNudgeModal()" style="margin-left:auto;background:transparent;border:none;color:#8696a0;font-size:18px;cursor:pointer;line-height:1">✕</button>
+      </div>
+      <!-- Chat area -->
+      <div style="padding:20px 16px;background:#0b141a;min-height:160px">
+        <div style="display:flex;justify-content:flex-end">
+          <div style="max-width:82%;background:#005c4b;border-radius:12px 2px 12px 12px;padding:10px 14px">
+            <pre id="wa-msg-body" style="font-size:12px;color:#e9edef;font-family:'Segoe UI',sans-serif;white-space:pre-wrap;word-break:break-word;margin:0;line-height:1.55"></pre>
+            <div style="text-align:right;font-size:10px;color:#8696a0;margin-top:4px">✓✓ Delivered</div>
+          </div>
+        </div>
+      </div>
+      <!-- Footer -->
+      <div style="padding:10px 16px;background:#1f2c34;display:flex;justify-content:space-between;align-items:center">
+        <div style="font-size:10px;color:#8696a0;font-family:var(--font-mono)">Mock notification — WhatsApp Business API</div>
+        <button onclick="closeWaNudgeModal()" style="padding:6px 16px;background:rgba(37,211,102,0.2);border:1px solid rgba(37,211,102,0.5);border-radius:6px;color:#25d366;font-size:11px;font-family:var(--font-mono);cursor:pointer;font-weight:700">DONE</button>
+      </div>
+    </div>
+  </div>`
 
   return c.html(cafeLayout('Coffee Catalog', 'lots', content, { name: client.name, tier: client.tier, branch: client.branch, id: client.id }))
 })
@@ -7173,6 +7402,40 @@ app.get('/api/interests',    (c) => c.json(roastingInterests))
 app.get('/api/catalog',      (c) => c.json(CATALOG_ORIGINS))
 
 // ── GET /api/recalls/:cafeId  ─────────────────────────────────────────
+// ── POST /api/cafe/tier-nudge ─────────────────────────────────────────────
+// Tier Watcher endpoint: logs the milestone nudge and returns the WhatsApp
+// message copy for client-side preview modal.
+// In production this would enqueue a WhatsApp Business API message.
+app.post('/api/cafe/tier-nudge', async (c) => {
+  try {
+    const { cafeId } = await c.req.json()
+    const client = resolveCafeClient(cafeId)
+    if (!client) return c.json({ error: 'Client not found' }, 404)
+
+    const nudge = getTierNudgeStatus(client.lifetimeKgPurchased ?? 0, client.name)
+    if (!nudge.isNudge) return c.json({ ok: false, message: 'Not within nudge threshold' })
+
+    // In production: POST to WhatsApp Business API with nudge.whatsappCopy
+    // For now: log + return copy for in-browser mock preview
+    console.log(`[TIER WATCHER] Nudge dispatched → ${client.name} (${client.id}) · ${nudge.kgNeeded} kg to ${nudge.nextTier}`)
+    return c.json({
+      ok: true,
+      cafeId,
+      clientName:   client.name,
+      currentTier:  nudge.currentTier,
+      nextTier:     nudge.nextTier,
+      kgNeeded:     nudge.kgNeeded,
+      progressPct:  nudge.progressPct,
+      nudgeMessage: nudge.nudgeMessage,
+      whatsappCopy: nudge.whatsappCopy,
+      channel:      'mock-whatsapp',
+      sentAt:       new Date().toISOString(),
+    })
+  } catch {
+    return c.json({ error: 'Invalid request' }, 400)
+  }
+})
+
 // Returns active recalls relevant to this cafe (had DISPATCHED orders for
 // a recalled lot). Used by the cafe portal to render urgent red banners.
 app.get('/api/recalls/:cafeId', (c) => {

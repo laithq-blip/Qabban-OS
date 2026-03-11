@@ -154,6 +154,46 @@ export function getTierBaseDiscount(tier: CoffeeMilesTier): number {
   return COFFEE_MILES_TIERS.find(t => t.tier === tier)?.baseDiscountPct ?? 0
 }
 
+// ─── Tier Watcher — Milestone Nudge ────────────────────────────────────────
+// If a buyer is within TIER_NUDGE_THRESHOLD kg of the next tier, the system
+// fires a Milestone Nudge: in-UI banner + mock WhatsApp notification.
+export const TIER_NUDGE_THRESHOLD = 50  // kg within next tier boundary
+
+export interface TierNudgeStatus {
+  isNudge: boolean          // true → within 50 kg of next tier
+  currentTier: CoffeeMilesTier
+  nextTier: CoffeeMilesTier | null
+  kgNeeded: number
+  progressPct: number
+  nudgeMessage: string      // human-readable copy for UI banner
+  whatsappCopy: string      // WhatsApp message template
+}
+
+export function getTierNudgeStatus(lifetimeKg: number, clientName: string): TierNudgeStatus {
+  const currentTier = getCoffeeMilesTier(lifetimeKg)
+  const prog        = kgToNextTier(lifetimeKg)
+
+  if (!prog.nextTier) {
+    return {
+      isNudge: false, currentTier, nextTier: null,
+      kgNeeded: 0, progressPct: 100,
+      nudgeMessage: '',
+      whatsappCopy:  '',
+    }
+  }
+
+  const isNudge = prog.kgNeeded <= TIER_NUDGE_THRESHOLD
+  const nextCol = prog.nextTier === 'Gold' ? '🥇' : '🥈'
+  const nudgeMessage = isNudge
+    ? `⚡ You're only ${prog.kgNeeded} kg away from ${prog.nextTier} tier! Order now to unlock your ${prog.nextTier === 'Gold' ? '5%' : '3%'} discount.`
+    : ''
+  const whatsappCopy = isNudge
+    ? `🎯 *Qabban Coffee Miles — Tier Upgrade Alert*\n\nHello ${clientName} ☕\n\nYou are only *${prog.kgNeeded} kg* away from reaching *${nextCol} ${prog.nextTier} Tier*!\n\n${prog.nextTier === 'Gold' ? '🥇 Gold Tier unlocks a *5% base discount* on all wholesale orders.' : '🥈 Silver Tier unlocks a *3% base discount* on all wholesale orders.'}\n\nStack with our Bulk Bonus: order >10 bags and get an extra 10% off!\n\n👉 Log in to your Qabban Buyer Portal to place your next order.\n\n_Qabban Global Exchange — Saudi Arabia_`
+    : ''
+
+  return { isNudge, currentTier, nextTier: prog.nextTier, kgNeeded: prog.kgNeeded, progressPct: prog.progressPct, nudgeMessage, whatsappCopy }
+}
+
 /** KG to next tier; null if already at Gold */
 export function kgToNextTier(lifetimeKg: number): { nextTier: CoffeeMilesTier | null; kgNeeded: number; progressPct: number } {
   if (lifetimeKg >= 2001) return { nextTier: null, kgNeeded: 0, progressPct: 100 }
@@ -743,8 +783,8 @@ export const branches: Branch[] = [
 // ─── Mock cafe clients ──────────────────────────────────────────────────────
 export const cafeClients: CafeClient[] = [
   { id: 'CAF-001', username: 'alnokhba',    password: 'cafe123', name: 'Al Nokhba Specialty', branch: 'Riyadh', tier: 'Gold',     lifetimeKgPurchased: 2400, coffeeMilesTier: 'Gold'   },
-  { id: 'CAF-002', username: 'qahwa_bahr',  password: 'cafe123', name: 'Qahwa Al Bahr',        branch: 'Jeddah', tier: 'Silver',   lifetimeKgPurchased: 850,  coffeeMilesTier: 'Silver' },
-  { id: 'CAF-003', username: 'pearl_roast', password: 'cafe123', name: 'Pearl Roast Café',      branch: 'Dammam', tier: 'Bronze',   lifetimeKgPurchased: 120,  coffeeMilesTier: 'Bronze' },
+  { id: 'CAF-002', username: 'qahwa_bahr',  password: 'cafe123', name: 'Qahwa Al Bahr',        branch: 'Jeddah', tier: 'Silver',   lifetimeKgPurchased: 1965, coffeeMilesTier: 'Silver' }, // 36 kg from Gold — nudge zone
+  { id: 'CAF-003', username: 'pearl_roast', password: 'cafe123', name: 'Pearl Roast Café',      branch: 'Dammam', tier: 'Bronze',   lifetimeKgPurchased: 460,  coffeeMilesTier: 'Bronze' }, // 41 kg from Silver — nudge zone
 ]
 
 // ─── In-memory bean requests store ────────────────────────────────────────
