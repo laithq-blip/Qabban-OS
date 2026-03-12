@@ -10138,6 +10138,9 @@ app.get('/manual', (c) => c.redirect('/static/manual', 301))
 // ── GET /patent — Patent Filing Document ────────────────────────────
 app.get('/patent', (c) => c.redirect('/static/patent', 301))
 
+// ── GET /patent-ar — Arabic Patent Filing Document ──────────────────
+app.get('/patent-ar', (c) => c.redirect('/static/patent-ar', 301))
+
 // ══════════════════════════════════════════════════════════════════
 //  QABBAN PULSE — Barista Waste Tracking Module
 //  Routes:

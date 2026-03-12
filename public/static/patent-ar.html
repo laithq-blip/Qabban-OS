@@ -1,0 +1,706 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>QABBAN-PAT-2026-001 — وثيقة البرهان الرياضي لتقديم البراءة</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Amiri:ital,wght@0,400;0,700;1,400&family=Noto+Naskh+Arabic:wght@400;600;700&display=swap" rel="stylesheet"/>
+  <style>
+    body {
+      font-family: 'Noto Naskh Arabic', 'Amiri', serif;
+      direction: rtl;
+    }
+    .mono {
+      font-family: 'Courier New', monospace;
+      direction: ltr;
+      display: inline-block;
+    }
+    .mono-block {
+      font-family: 'Courier New', monospace;
+      direction: ltr;
+      text-align: left;
+      unicode-bidi: embed;
+    }
+    .section-rule { border-top: 3px double #1e3a5f; margin: 2.5rem 0 1.5rem; }
+    .subsection-rule { border-top: 1px solid #94a3b8; margin: 1.5rem 0 1rem; }
+    .eq-box {
+      background: #f0f4ff;
+      border-right: 4px solid #1e3a5f;
+      border-left: none;
+      padding: 1rem 1.5rem;
+      margin: 1rem 0;
+      border-radius: 6px 0 0 6px;
+    }
+    .claim-box {
+      background: #fffbeb;
+      border: 1px solid #d97706;
+      border-radius: 8px;
+      padding: 1.25rem 1.5rem;
+      margin-bottom: 1.25rem;
+    }
+    table.data-table { width:100%; border-collapse: collapse; font-size:0.875rem; }
+    table.data-table th { background:#1e3a5f; color:white; padding:8px 10px; text-align:right; }
+    table.data-table td { border:1px solid #cbd5e1; padding:7px 10px; vertical-align:top; text-align:right; }
+    table.data-table tr:nth-child(even) td { background:#f8fafc; }
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+    .badge-rule-a { background:#dbeafe; color:#1d4ed8; }
+    .badge-rule-b { background:#fef3c7; color:#92400e; }
+    .badge-baseline { background:#dcfce7; color:#166534; }
+    .print-btn {
+      position: fixed; top: 1rem; left: 1rem;
+      background: #1e3a5f; color: white;
+      padding: 0.5rem 1rem; border-radius: 6px;
+      cursor: pointer; z-index: 999; font-size: 0.875rem;
+      border: none; font-family: 'Noto Naskh Arabic', serif;
+    }
+    .piecewise-ar {
+      direction: ltr;
+      text-align: left;
+      border-left: 4px solid #94a3b8;
+      padding-left: 1rem;
+      margin: 0.5rem 0;
+    }
+    @media print {
+      .print-btn { display: none; }
+    }
+  </style>
+</head>
+<body class="bg-slate-50 text-gray-800">
+
+<button class="print-btn" onclick="window.print()">
+  <i class="fas fa-print ml-1"></i> طباعة / حفظ PDF
+</button>
+
+<div class="max-w-5xl mx-auto px-6 py-10">
+
+  <!-- ══ غلاف الوثيقة ══ -->
+  <div class="text-center border-4 border-double border-slate-700 rounded-lg p-10 mb-10 bg-white shadow-lg">
+    <p class="text-xs uppercase tracking-widest text-slate-500 mb-2">وثيقة البرهان الرياضي الرسمي لتقديم طلب براءة اختراع</p>
+    <h1 class="text-2xl font-bold text-slate-800 leading-loose mb-4">
+      طريقة ونظام لتصحيح الكتلة الرطبية للقهوة الخضراء في الوقت الحقيقي<br/>
+      عبر محرك معامل الإنتاج الديناميكي المدفوع بالاستشعار الهجين
+    </h1>
+    <div class="grid grid-cols-2 gap-2 text-sm mt-6 max-w-lg mx-auto">
+      <div class="text-left text-slate-500">رقم المرجع:</div><div class="text-right font-mono font-semibold">QABBAN-PAT-2026-001</div>
+      <div class="text-left text-slate-500">الإصدار:</div><div class="text-right font-mono">2.0 — نهائي</div>
+      <div class="text-left text-slate-500">التاريخ:</div><div class="text-right font-mono">2026-03-12</div>
+      <div class="text-left text-slate-500">الحالة:</div><div class="text-right"><span class="badge" style="background:#fee2e2;color:#991b1b;">سري — مسودة ما قبل التقديم</span></div>
+      <div class="text-left text-slate-500">مرجع النظام:</div><div class="text-right font-mono text-xs">QABBAN OS (src/data.ts)</div>
+      <div class="text-left text-slate-500">أُعدّت بواسطة:</div><div class="text-right text-xs">فريق هندسة نظام قبّان</div>
+    </div>
+  </div>
+
+  <!-- ══ فهرس المحتويات ══ -->
+  <div class="bg-white rounded-lg shadow p-6 mb-8">
+    <h2 class="text-lg font-bold text-slate-700 mb-3 flex items-center gap-2">
+      <i class="fas fa-list-ul text-slate-500"></i> فهرس المحتويات
+    </h2>
+    <ol class="text-sm space-y-1 text-slate-600 list-decimal mr-5">
+      <li>مجال الاختراع</li>
+      <li>الخلفية وبيان المشكلة</li>
+      <li>التعريفات والرموز</li>
+      <li>الصياغات الرياضية الأساسية
+        <ol class="mr-4 mt-1 space-y-1 list-decimal" style="list-style-type:arabic-indic">
+          <li>دالة المعامل الديناميكي Y(RH)</li>
+          <li>معادلة تصحيح الكتلة</li>
+          <li>دالة التكلفة الحقيقية للتحميص</li>
+          <li>صيغة التباين المالي للأصول ΔV</li>
+          <li>تقييم المخزون الحي مع تصحيح الإسفنج</li>
+          <li>قبّان بولس — رياضيات تسوية هدر الباريستا</li>
+        </ol>
+      </li>
+      <li>مبدّل الاستشعار الهجين: البرهان المنطقي والتدفق الخوارزمي</li>
+      <li>ملخص المعادلات الكاملة للنظام</li>
+      <li>إثبات الطابع التقني (أهلية البراءة)</li>
+      <li>المطالبات (مسودة المطالبات المستقلة)</li>
+      <li>مسرد المصطلحات العلمية</li>
+      <li>جدول ثوابت النظام</li>
+      <li>مرجع الشفرة المصدرية</li>
+    </ol>
+  </div>
+
+  <!-- ══ القسم ١ ══ -->
+  <div class="section-rule"></div>
+  <h2 class="text-xl font-bold text-slate-800 mb-1">القسم الأول — مجال الاختراع</h2>
+  <div class="bg-white rounded-lg shadow p-6 text-sm leading-loose space-y-3">
+    <p>يتعلق هذا الاختراع بمجال أنظمة إدارة مخزون السلع، وتحديداً بطريقة حاسوبية لضبط معامل إنتاج القهوة الخضراء (غير المحمّصة) من أصناف أرابيكا وروبوستا ديناميكياً أثناء تخزينها في الهواء الطلق قبل عملية التحميص. يُعوّض هذا الضبط عن أثر <strong>انتقال الكتلة الرطبية الناجم عن المناخ الموضعي</strong> — أي اكتساب كتلة البن للرطوبة أو فقدانها — بوصفها دالةً في الرطوبة النسبية (RH) المحيطة، المستمَدة إما من مستشعر استشعار عن بُعد (IoT) أو من خدمة أرصاد جوية احتياطية عبر الإنترنت.</p>
+    <p>يُطبَّق المعامل الناتج في الوقت الحقيقي من أجل: (أ) تصحيح الوزن القابل للبيع للمنتج المحمَّص؛ (ب) إعادة حساب التكلفة الحقيقية لكل كيلوغرام؛ (ج) حساب التباين المالي للأصول الناجم عن الظروف البيئية بالريال السعودي (SAR)؛ (د) تسوية الاستهلاك الفعلي للحبوب المقاس بميزان IoT بلوتوث دقيق مقابل الاستهلاك النظري المستند إلى بيانات نقطة البيع (POS).</p>
+  </div>
+
+  <!-- ══ القسم ٢ ══ -->
+  <div class="section-rule"></div>
+  <h2 class="text-xl font-bold text-slate-800 mb-1">القسم الثاني — الخلفية وبيان المشكلة</h2>
+  <div class="bg-white rounded-lg shadow p-6 text-sm leading-loose space-y-4">
+    <div>
+      <h3 class="font-bold text-slate-700 mb-1">٢-١ الطبيعة الرطوبية لحبوب القهوة الخضراء</h3>
+      <p>حبوب القهوة الخضراء هياكل بيولوجية مسامية ذات محتوى رطوبي توازني نموذجي يتراوح بين 10-12% وزناً في الظروف القياسية. في البيئات الساحلية ذات الرطوبة العالية (كجدة — متوسط RH ≥ 68%)، تمتص الحبوب المخزّنة بخار الماء مما يزيد كتلتها. وفي البيئات الداخلية الجافة (كالرياض — متوسط RH ≈ 20-45%)، تفقد الحبوب رطوبتها بالتبخر مما يُقلّص كتلتها دون الوزن المُعلَن.</p>
+    </div>
+    <div>
+      <h3 class="font-bold text-slate-700 mb-1">٢-٢ قصور نماذج معامل الإنتاج الثابتة</h3>
+      <p>تعتمد الصناعة تقليدياً على معامل انكماش ثابت قدره <strong>0.82</strong>، أي أن 82% من وزن الحبة الخضراء يُنتج قهوةً محمّصةً صالحةً للبيع. هذا النموذج الثابت: (أ) يتجاهل ظروف المناخ الموضعي؛ (ب) يُنتج تقييماً مبالغاً فيه أو منقوصاً للمخزون؛ (ج) يحول دون الحساب الدقيق للأثر المالي البيئي (P&L)؛ (د) لا يُفرّق بين أنظمة التخزين الساحلية والداخلية الجافة.</p>
+    </div>
+    <div>
+      <h3 class="font-bold text-slate-700 mb-1">٢-٣ قصور تتبع الهدر الثابت</h3>
+      <p>يُتتبَّع هدر الباريستا في العمليات التجارية — إن تُتُبِّع أصلاً — عبر عمليات تدقيق يدوية دورية. هذا الأسلوب: يُدخل تأخيراً بالأيام أو الأسابيع قبل ظهور الفروق، ولا يستطيع تعديل مخزون نقطة البيع آلياً في الوقت الحقيقي، ولا يحسب التكلفة المالية لفارق الهدر دون جداول بيانات منفصلة.</p>
+    </div>
+    <div>
+      <h3 class="font-bold text-slate-700 mb-1">٢-٤ الفجوة الابتكارية</h3>
+      <p>لا يُعلم للمخترعين أي فن سابق يجمع: (أ) معامل إنتاج ديناميكي قطعي مستمد من بيانات RH الحية؛ (ب) بنية استشعار هجينة تحكّم بين مستشعر IoT وAPI أرصاد جوية مع منطق حداثة مرتبط بالزمن؛ (ج) تراجع آلي عن البيانات القديمة؛ (د) نشر في سجل ERP للمخزون متعدد الأكواد؛ (هـ) محرك تسوية هدر الباريستا الذي يدفع تعديلات المخزون تلقائياً إلى نقطة البيع.</p>
+    </div>
+  </div>
+
+  <!-- ══ القسم ٣ ══ -->
+  <div class="section-rule"></div>
+  <h2 class="text-xl font-bold text-slate-800 mb-1">القسم الثالث — التعريفات والرموز</h2>
+  <div class="bg-white rounded-lg shadow p-4">
+    <table class="data-table text-xs">
+      <thead><tr><th>الرمز</th><th>التعريف</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">RH</td><td>الرطوبة النسبية (%)، مجالها [0, 100]</td></tr>
+        <tr><td class="mono">RH_iot</td><td>قراءة الرطوبة من مستشعر IoT الجسدي (%)</td></tr>
+        <tr><td class="mono">RH_api</td><td>قراءة الرطوبة من خدمة API الأرصاد الجوية (%)</td></tr>
+        <tr><td class="mono">RH*</td><td>الرطوبة النسبية الفعّالة (المُحلَّلة) المُغذَّة لمحرك الإسفنج (%)</td></tr>
+        <tr><td class="mono">Y(RH)</td><td>دالة معامل الإنتاج الديناميكي — دالة قطعية في RH</td></tr>
+        <tr><td class="mono">Y₀</td><td>معامل الإنتاج الأساسي = 0.82 (بلا وحدة)</td></tr>
+        <tr><td class="mono">δ_A</td><td>دلتا امتصاص القاعدة A = +0.005</td></tr>
+        <tr><td class="mono">δ_B</td><td>دلتا تبخر القاعدة B = −0.003</td></tr>
+        <tr><td class="mono">τ_H</td><td>عتبة RH العليا = 70% (مُشغِّل القاعدة A)</td></tr>
+        <tr><td class="mono">τ_L</td><td>عتبة RH الدنيا = 20% (مُشغِّل القاعدة B)</td></tr>
+        <tr><td class="mono">M_green</td><td>كتلة حبوب القهوة الخضراء (قبل التحميص) بالكيلوغرام</td></tr>
+        <tr><td class="mono">M_final</td><td>الكتلة المُصحَّحة للقهوة المحمّصة (كغ) — المعادلة (1)</td></tr>
+        <tr><td class="mono">M_baseline</td><td>الكتلة المحمّصة الثابتة غير المُصحَّحة = Y₀ · M_green (كغ)</td></tr>
+        <tr><td class="mono">ΔM</td><td>تصحيح الكتلة الرطبية = M_final − M_baseline (كغ)</td></tr>
+        <tr><td class="mono">C_green</td><td>تكلفة شراء الحبوب الخضراء (ريال/كغ)</td></tr>
+        <tr><td class="mono">C_roasted</td><td>التكلفة الحقيقية لكل كيلوغرام من القهوة المحمّصة (ريال/كغ)</td></tr>
+        <tr><td class="mono">P_w</td><td>سعر الجملة لكل كيلوغرام من القهوة المحمّصة (ريال/كغ)</td></tr>
+        <tr><td class="mono">g</td><td>نسبة هامش الربح المستهدف ∈ (0, 1)</td></tr>
+        <tr><td class="mono">ΔV</td><td>التباين المالي للأصول البيئية (ريال) — "الربح والخسارة البيئي"</td></tr>
+        <tr><td class="mono">Τ_stale</td><td>عتبة القِدَم = 3,600,000 ملي ثانية (60 دقيقة)</td></tr>
+        <tr><td class="mono">σ(B)</td><td>علامة البيانات القديمة ∈ {true, false} للفرع B</td></tr>
+        <tr><td class="mono">α(B)</td><td>علامة توافر البيانات — هل وردت أي قراءة IoT؟</td></tr>
+        <tr><td class="mono">W_actual</td><td>الاستهلاك الفعلي للحبوب من قراءات ميزان أكايا (غرام)</td></tr>
+        <tr><td class="mono">W_theoretical</td><td>الاستهلاك النظري المتوقع من بيانات نقطة البيع (غرام)</td></tr>
+        <tr><td class="mono">Ψ</td><td>فارق الهدر = W_actual − W_theoretical (غرام، بإشارة)</td></tr>
+        <tr><td class="mono">Φ(d)</td><td>دالة تخطيط المشروب-إلى-الحبوب: غرام لكل مشروب من النوع d</td></tr>
+        <tr><td class="mono">L_waste</td><td>الخسارة المالية للهدر (ريال) — المعادلة (21)</td></tr>
+        <tr><td class="mono">Q_adj</td><td>تعديل المخزون الموقَّع بالإشارة المُرسَل لنقطة البيع (كغ) — المعادلة (22)</td></tr>
+        <tr><td class="mono">K_d</td><td>مفتاح جهاز IoT (UUID v4) يُعرِّف المستشعر بالفرع</td></tr>
+        <tr><td class="mono">AUTH(K_d)</td><td>محمول مصادقة الجهاز — المعادلة (16)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ══ القسم ٤ ══ -->
+  <div class="section-rule"></div>
+  <h2 class="text-xl font-bold text-slate-800 mb-3">القسم الرابع — الصياغات الرياضية الأساسية</h2>
+
+  <!-- 4.1 -->
+  <div class="bg-white rounded-lg shadow p-6 mb-4">
+    <h3 class="font-bold text-slate-700 text-base mb-3 flex items-center gap-2">
+      <span class="bg-slate-700 text-white px-2 py-0.5 rounded text-xs">٤-١</span>
+      دالة معامل الإنتاج الديناميكي &nbsp;<span class="mono">Y(RH)</span>
+    </h3>
+    <p class="text-sm mb-3 leading-loose">دالة معامل الإنتاج الديناميكي هي دالة قطعية تُعيّن الرطوبة النسبية المحيطة إلى معامل إنتاج بلا وحدة:</p>
+    <div class="eq-box">
+      <div class="piecewise-ar text-sm space-y-2 mono-block">
+        <p class="font-bold text-slate-700 mb-2">Y(RH) =</p>
+        <p>0.825 &nbsp; إذا كانت RH &gt; 70%  &nbsp;<span class="badge badge-rule-a">القاعدة A — الامتصاص الرطوبي</span></p>
+        <p>0.817 &nbsp; إذا كانت RH &lt; 20%  &nbsp;<span class="badge badge-rule-b">القاعدة B — التبخر المائي</span></p>
+        <p>0.820 &nbsp; إذا كانت 20% ≤ RH ≤ 70%  &nbsp;<span class="badge badge-baseline">القيمة الأساسية</span></p>
+      </div>
+    </div>
+    <div class="grid grid-cols-3 gap-3 mt-4 text-xs leading-loose">
+      <div class="bg-blue-50 border border-blue-200 rounded p-3">
+        <p class="font-bold text-blue-800 mb-1">القاعدة A — RH &gt; 70%</p>
+        <p class="text-blue-700">تمتص الحبوب بخار الماء → كتلة أعلى → مزيد من القهوة القابلة للاسترداد. يرتفع المعامل إلى <strong>0.825</strong> (+0.61%). مثال: جدة والدمام الساحليتان.</p>
+      </div>
+      <div class="bg-amber-50 border border-amber-200 rounded p-3">
+        <p class="font-bold text-amber-800 mb-1">القاعدة B — RH &lt; 20%</p>
+        <p class="text-amber-700">تفقد الحبوب رطوبتها بالتبخر → كتلة أقل. ينخفض المعامل إلى <strong>0.817</strong> (−0.37%). مثال: التخزين الصحراوي في الرياض.</p>
+      </div>
+      <div class="bg-green-50 border border-green-200 rounded p-3">
+        <p class="font-bold text-green-800 mb-1">الأساس — 20% ≤ RH ≤ 70%</p>
+        <p class="text-green-700">نطاق رطوبة التوازن. يُطبَّق المعامل القياسي <strong>0.820</strong>. قيم الحدود RH=20 وRH=70 تقع هنا بتصميم مقصود.</p>
+      </div>
+    </div>
+    <div class="eq-box mt-4 text-sm">
+      <p class="font-semibold text-slate-600 mb-1">الصيغة المدمجة بدالة المؤشر:</p>
+      <p class="mono-block">Y(RH) = Y₀ + δ_A · 𝟙[RH &gt; τ_H] + δ_B · 𝟙[RH &lt; τ_L]</p>
+      <p class="text-xs text-slate-500 mt-1">حيث 𝟙[·] هي دالة المؤشر. الحدّان متنافيان بالتعريف (τ_L &lt; τ_H).</p>
+    </div>
+  </div>
+
+  <!-- 4.2 -->
+  <div class="bg-white rounded-lg shadow p-6 mb-4">
+    <h3 class="font-bold text-slate-700 text-base mb-3 flex items-center gap-2">
+      <span class="bg-slate-700 text-white px-2 py-0.5 rounded text-xs">٤-٢</span>
+      معادلة تصحيح الكتلة
+    </h3>
+    <div class="eq-box mono-block text-sm space-y-2">
+      <p><strong>(1)</strong> &nbsp; M_final = Y(RH*) · M_green</p>
+      <p><strong>(2)</strong> &nbsp; M_baseline = Y₀ · M_green = 0.82 · M_green</p>
+      <p><strong>(3)</strong> &nbsp; ΔM = M_final − M_baseline = (Y(RH*) − 0.82) · M_green</p>
+      <p class="text-xs text-slate-500 mt-1">الحدود: ΔM ∈ [ −0.003 · M_green , +0.005 · M_green ]</p>
+    </div>
+    <div class="bg-slate-50 border border-slate-200 rounded p-4 text-xs mono-block mt-3">
+      <p class="font-bold text-slate-700 mb-2">مثال تطبيقي — M_green = 500 كغ، جدة الساحلية، RH* = 72%</p>
+      <p>Y(72)      = 0.82 + 0.005 = 0.825</p>
+      <p>M_final    = 0.825 × 500  = 412.5 كغ</p>
+      <p>M_baseline = 0.820 × 500  = 410.0 كغ</p>
+      <p>ΔM         = 412.5 − 410.0 = +2.5 كغ &nbsp; (فائض اكتساب الرطوبة)</p>
+    </div>
+  </div>
+
+  <!-- 4.3 -->
+  <div class="bg-white rounded-lg shadow p-6 mb-4">
+    <h3 class="font-bold text-slate-700 text-base mb-3 flex items-center gap-2">
+      <span class="bg-slate-700 text-white px-2 py-0.5 rounded text-xs">٤-٣</span>
+      دالة التكلفة الحقيقية للتحميص &nbsp;<span class="mono">C_roasted(RH*)</span>
+    </h3>
+    <div class="eq-box mono-block text-sm space-y-2">
+      <p><strong>(4)</strong> &nbsp; C_roasted(RH*) = C_green / Y(RH*)  ← التكلفة الحية (معدَّلة برطوبة)</p>
+      <p><strong>(5)</strong> &nbsp; C_baseline = C_green / Y₀ = C_green / 0.82  ← الأساس المثبَّت</p>
+      <p><strong>(6)</strong> &nbsp; P_w = C_baseline / (1 − g)  ← سعر الجملة (مُثبَّت عند Y₀، مستقر)</p>
+    </div>
+    <p class="text-xs text-slate-600 mt-3 leading-loose"><strong>قرار معماري:</strong> يُحسَب P_w باستخدام المعادلتين (5)–(6) مع المعامل الثابت Y₀ = 0.82 فحسب. هذا يضمن أن السعر المقدَّم للمشترين حتمي ومستقل عن تقلبات المناخ اليومية. الفارق بين التكلفة الفعلية وتكلفة الأساس يتدفق حصراً إلى حساب الأثر المالي البيئي (القسم ٤-٤).</p>
+  </div>
+
+  <!-- 4.4 -->
+  <div class="bg-white rounded-lg shadow p-6 mb-4">
+    <h3 class="font-bold text-slate-700 text-base mb-3 flex items-center gap-2">
+      <span class="bg-slate-700 text-white px-2 py-0.5 rounded text-xs">٤-٤</span>
+      صيغة التباين المالي للأصول &nbsp;<span class="mono">ΔV</span> — الأثر المالي البيئي
+    </h3>
+    <div class="eq-box mono-block text-sm space-y-2">
+      <p><strong>(7)</strong> &nbsp; ΔV = ΔM · P_w = (Y(RH*) − Y₀) · M_green · P_w</p>
+      <p><strong>(8)</strong> &nbsp; ΔV_total = Σᵢ₌₁ᴺ (Y(RH*ᵢ) − Y₀) · M_greenᵢ · P_wᵢ</p>
+    </div>
+    <div class="grid grid-cols-3 gap-2 mt-3 text-xs leading-loose">
+      <div class="bg-green-50 border border-green-200 rounded p-2 text-center"><p class="font-bold text-green-700">ΔV &gt; 0</p><p class="text-green-600">فائض — اكتساب رطوبة (القاعدة A)</p></div>
+      <div class="bg-red-50 border border-red-200 rounded p-2 text-center"><p class="font-bold text-red-700">ΔV &lt; 0</p><p class="text-red-600">عجز — فقدان رطوبة (القاعدة B)</p></div>
+      <div class="bg-gray-50 border border-gray-200 rounded p-2 text-center"><p class="font-bold text-gray-700">ΔV = 0</p><p class="text-gray-600">جميع الفروع في نطاق الأساس</p></div>
+    </div>
+    <div class="bg-slate-50 border border-slate-200 rounded p-4 text-xs mono-block mt-3">
+      <p class="font-bold text-slate-700 mb-2">مثال تطبيقي — محفظة من كودَين</p>
+      <p>الكود A: M_green=500كغ، RH*=72% (جدة)، P_w=150 ريال/كغ</p>
+      <p>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ΔM_A = (0.825−0.82)×500 = +2.5كغ → ΔV_A = +375 ريال</p>
+      <p class="mt-1">الكود B: M_green=200كغ، RH*=15% (تخزين صحراوي)، P_w=130 ريال/كغ</p>
+      <p>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ΔM_B = (0.817−0.82)×200 = −0.6كغ → ΔV_B = −78 ريال</p>
+      <p class="mt-1 font-bold">ΔV_total = +375 + (−78) = <span class="text-green-700">+297 ريال</span> (فائض بيئي صافٍ)</p>
+    </div>
+  </div>
+
+  <!-- 4.5 -->
+  <div class="bg-white rounded-lg shadow p-6 mb-4">
+    <h3 class="font-bold text-slate-700 text-base mb-3 flex items-center gap-2">
+      <span class="bg-slate-700 text-white px-2 py-0.5 rounded text-xs">٤-٥</span>
+      تقييم المخزون الحي مع تصحيح الإسفنج
+    </h3>
+    <div class="eq-box mono-block text-sm space-y-2">
+      <p><strong>(9)</strong>  &nbsp; V_inv = Y(RH*) · M_green · P_w</p>
+      <p><strong>(10)</strong> &nbsp; Π = (P_w − C_green / Y(RH*)) · Y(RH*) · M_green</p>
+    </div>
+  </div>
+
+  <!-- 4.6 -->
+  <div class="bg-white rounded-lg shadow p-6 mb-4">
+    <h3 class="font-bold text-slate-700 text-base mb-3 flex items-center gap-2">
+      <span class="bg-indigo-700 text-white px-2 py-0.5 rounded text-xs">٤-٦</span>
+      قبّان بولس — رياضيات تسوية هدر الباريستا
+    </h3>
+    <p class="text-sm mb-4 text-slate-600 leading-loose">يمتد وحدة قبّان بولس بمحرك تأثير الإسفنج إلى الطبقة التشغيلية من خلال تجهيز سير عمل الباريستا بميزان دقيق بلوتوث (أكايا). تُقارَن الاستهلاك الفعلي للحبوب المُقاس بالميزان بالاستهلاك النظري المتوقع من بيانات نقطة البيع، مما يُنتج تقرير فارق هدر قابلاً للتدقيق مع إسناد مالي.</p>
+
+    <div class="subsection-rule"></div>
+    <h4 class="font-bold text-slate-600 text-sm mb-2">٤-٦-١ &nbsp; دالة تخطيط المشروب-إلى-الحبوب Φ(d)</h4>
+    <p class="text-xs text-slate-600 mb-2 leading-loose">كل نوع مشروب <em>d</em> يُعيَّن له جرعة نظرية عبر الدالة المتباينة: Φ : D → ℝ₊</p>
+    <table class="data-table text-xs mb-4">
+      <thead><tr><th>نوع المشروب d</th><th>Φ(d) غرام/حصة</th><th>نوع المشروب d</th><th>Φ(d) غرام/حصة</th></tr></thead>
+      <tbody>
+        <tr><td>إسبريسو</td><td>18 غ</td><td>ماكياتو</td><td>18 غ</td></tr>
+        <tr><td>إسبريسو مزدوج</td><td>36 غ</td><td>ماكياتو مزدوج</td><td>36 غ</td></tr>
+        <tr><td>أمريكانو</td><td>18 غ</td><td>ريستريتو</td><td>14 غ</td></tr>
+        <tr><td>لونغ بلاك</td><td>18 غ</td><td>ريستريتو مزدوج</td><td>28 غ</td></tr>
+        <tr><td>كابوتشينو</td><td>18 غ</td><td>كولد برو</td><td>50 غ</td></tr>
+        <tr><td>فلات وايت</td><td>18 غ</td><td>بور أوفر</td><td>20 غ</td></tr>
+        <tr><td>كورتادو</td><td>18 غ</td><td>قهوة مُرشَّحة / دُفعة</td><td>20 غ</td></tr>
+        <tr><td>لاتيه</td><td>18 غ</td><td><em>(افتراضي / غير معروف)</em></td><td>18 غ</td></tr>
+        <tr><td>لاتيه مزدوج</td><td>36 غ</td><td></td><td></td></tr>
+      </tbody>
+    </table>
+
+    <div class="subsection-rule"></div>
+    <h4 class="font-bold text-slate-600 text-sm mb-2">٤-٦-٢ &nbsp; الاستهلاك النظري W_theoretical — المعادلة (17)</h4>
+    <div class="eq-box mono-block text-sm">
+      <p><strong>(17)</strong>&nbsp; W_theoretical = Σᵢ₌₁ᴺ Φ(dᵢ) · qᵢ</p>
+      <p class="text-xs text-slate-500 mt-1">الوحدة: غرام. يمثل الاستهلاك المثالي الخالي من الهدر لو سُحبت كل جرعة وفق المواصفات.</p>
+    </div>
+
+    <div class="subsection-rule"></div>
+    <h4 class="font-bold text-slate-600 text-sm mb-2">٤-٦-٣ &nbsp; الاستهلاك الفعلي W_actual — المعادلتان (18)-(19)</h4>
+    <div class="eq-box mono-block text-sm space-y-2">
+      <p><strong>(18)</strong>&nbsp; STABLE ⟺ |W_i − W_{i-1}| ≤ ε &nbsp;&nbsp; (ε = 0.3 غ، بمعدل ≈5 هرتز عبر BLE GATT)</p>
+      <p><strong>(19)</strong>&nbsp; W_actual = Σₖ W_k &nbsp;&nbsp; (مجموع القراءات الثابتة المُسجَّلة k في الفترة)</p>
+    </div>
+    <p class="text-xs text-slate-500 mt-2 leading-loose">جهاز الميزان: ميزان أكايا الدقيق. UUID خدمة BLE: <span class="mono">0x0000ffe0-...</span> | UUID الخاصية: <span class="mono">0x0000ffe1-...</span></p>
+
+    <div class="subsection-rule"></div>
+    <h4 class="font-bold text-slate-600 text-sm mb-2">٤-٦-٤ &nbsp; فارق الهدر Ψ — المعادلة (20)</h4>
+    <div class="eq-box mono-block text-sm">
+      <p><strong>(20)</strong>&nbsp; Ψ = W_actual − W_theoretical &nbsp; (غرام، بإشارة)</p>
+    </div>
+    <div class="grid grid-cols-3 gap-2 mt-2 text-xs leading-loose">
+      <div class="bg-red-50 border border-red-200 rounded p-2"><p class="font-bold text-red-700">Ψ &gt; 0 — زيادة استهلاك (هدر)</p><p class="text-red-600">استهلاك الميزان يتجاوز توقع نقطة البيع. يشير إلى انسكاب، جرعات فاشلة، هدر ضبط، أو خطأ باريستا.</p></div>
+      <div class="bg-yellow-50 border border-yellow-200 rounded p-2"><p class="font-bold text-yellow-700">Ψ &lt; 0 — نقص استهلاك</p><p class="text-yellow-600">الميزان أقل من توقع نقطة البيع. قد يشير إلى جرعات يدوية غير مسجّلة أو خطأ في الميزان.</p></div>
+      <div class="bg-green-50 border border-green-200 rounded p-2"><p class="font-bold text-green-700">Ψ = 0 — توافق تام</p><p class="text-green-600">المثال النظري المثالي: هدر صفري.</p></div>
+    </div>
+
+    <div class="subsection-rule"></div>
+    <h4 class="font-bold text-slate-600 text-sm mb-2">٤-٦-٥ &nbsp; الخسارة المالية للهدر L_waste — المعادلة (21)</h4>
+    <div class="eq-box mono-block text-sm">
+      <p><strong>(21)</strong>&nbsp; L_waste = (Ψ / 1000) · C_green_branch &nbsp; إذا كانت Ψ &gt; 0 ؛  وإلا 0 &nbsp; [ريال]</p>
+    </div>
+    <div class="bg-slate-50 border border-slate-200 rounded p-4 text-xs mono-block mt-2">
+      <p class="font-bold text-slate-700 mb-1">مثال تطبيقي — جلسة قبّان بولس الحية:</p>
+      <p>الفرع: الرياض (BR-RUH) | C_green = 180 ريال/كغ</p>
+      <p>بيانات POS: 4 إسبريسو + 1 أمريكانو = (4×18) + (1×18) = 90 غ</p>
+      <p>الميزان: 5 تسجيلات ثابتة → W_actual = 92.1 غ</p>
+      <p class="mt-1">Ψ = 92.1 − 90.0 = +2.1 غ</p>
+      <p>L_waste = (2.1 / 1000) × 180 = <strong class="text-red-700">0.38 ريال</strong></p>
+    </div>
+
+    <div class="subsection-rule"></div>
+    <h4 class="font-bold text-slate-600 text-sm mb-2">٤-٦-٦ &nbsp; مخطط واجهة PulseReconciliation</h4>
+    <table class="data-table text-xs">
+      <thead><tr><th>الحقل</th><th>النوع</th><th>الوصف / المعادلة</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">id</td><td>string (UUID)</td><td>المعرّف الفريد لسجل التسوية</td></tr>
+        <tr><td class="mono">branchId</td><td>string</td><td>معرّف الفرع (مثلاً BR-RUH)</td></tr>
+        <tr><td class="mono">periodDate</td><td>string (تاريخ ISO)</td><td>تاريخ فترة التسوية</td></tr>
+        <tr><td class="mono">theoreticalUsage</td><td>number (غ)</td><td>W_theoretical — المعادلة (17)</td></tr>
+        <tr><td class="mono">actualUsageIot</td><td>number (غ)</td><td>W_actual — المعادلة (19)</td></tr>
+        <tr><td class="mono">variance</td><td>number (غ)</td><td>Ψ — المعادلة (20)، بإشارة</td></tr>
+        <tr><td class="mono">financialLossSar</td><td>number (ريال)</td><td>L_waste — المعادلة (21)</td></tr>
+        <tr><td class="mono">costPerKgSar</td><td>number</td><td>C_green_branch بالريال/كغ</td></tr>
+        <tr><td class="mono">foodicsOrderCount</td><td>number</td><td>طلبات نقطة البيع المستوردة في هذه الدورة</td></tr>
+        <tr><td class="mono">adjustmentPushed</td><td>boolean</td><td>صحيح إذا تم تعديل مخزون POS</td></tr>
+        <tr><td class="mono">adjustmentId</td><td>string</td><td>معرّف تعديل Foodics المرجعي</td></tr>
+        <tr><td class="mono">createdAt</td><td>string (ISO datetime)</td><td>طابع زمن دورة التسوية</td></tr>
+      </tbody>
+    </table>
+
+    <div class="subsection-rule"></div>
+    <h4 class="font-bold text-slate-600 text-sm mb-2">٤-٦-٧ &nbsp; صيغة تعديل كمية مخزون Foodics — المعادلة (22)</h4>
+    <div class="eq-box mono-block text-sm">
+      <p><strong>(22)</strong>&nbsp; Q_adj = − (Ψ / 1000) &nbsp; [كغ، موقَّع — يُرسَل لـ Foodics Quantity Adjustment API]</p>
+      <p class="text-xs text-slate-500 mt-1">تُنتج قيمة Ψ الموجبة (هدر) قيمةَ Q_adj سالبة، مما يُقلّص سجل مخزون POS ليعكس الحبوب المستهلكة فعلياً. يُغلق هذا الحلقة المادية↔الرقمية.</p>
+    </div>
+  </div>
+
+  <!-- ══ القسم ٥ ══ -->
+  <div class="section-rule"></div>
+  <h2 class="text-xl font-bold text-slate-800 mb-3">القسم الخامس — مبدّل الاستشعار الهجين: البرهان المنطقي والتدفق</h2>
+
+  <div class="bg-white rounded-lg shadow p-6 mb-4 text-sm leading-loose">
+
+    <h3 class="font-bold text-slate-700 mb-2">٥-٢ التعريف الرسمي لمحلل RH الفعّال RH*(B)</h3>
+    <div class="eq-box mono-block text-sm space-y-2">
+      <p><strong>(11)</strong>&nbsp; σ(B) = 𝟙[ (t_now − B.t_iot) &gt; Τ_stale ] &nbsp; (1 = قديم، 0 = حديث)</p>
+      <p><strong>(12)</strong>&nbsp; α(B) = 𝟙[ B.RH_iot ≠ null AND B.t_iot ≠ null ] &nbsp; (1 = بيانات وردت)</p>
+      <p class="mt-2 font-bold text-slate-700">محلل RH الفعّال (13):</p>
+      <div class="flex items-start gap-3 mt-1">
+        <span>RH*(B) =</span>
+        <div class="border-l-4 border-slate-400 pl-3 space-y-1">
+          <div>B.RH_iot &nbsp; إذا كان B.S=IOT_SENSOR ∧ α(B)=1 ∧ σ(B)=0</div>
+          <div>B.RH_api &nbsp; في جميع الحالات الأخرى</div>
+        </div>
+      </div>
+      <p class="text-xs text-slate-500 mt-2">حالات التراجع: F1 (المصدر=WEATHER_API) | F2 (لا بيانات IoT بعد) | F3 (البيانات قديمة — تراجع آلي)</p>
+    </div>
+
+    <h3 class="font-bold text-slate-700 mt-5 mb-2">٥-٣ تمثيل بوابات المنطق</h3>
+    <div class="eq-box mono-block text-sm space-y-1">
+      <p>P = 𝟙[B.S = IOT_SENSOR] &nbsp; A = α(B) &nbsp; F = ¬σ(B) = 𝟙[age ≤ Τ_stale]</p>
+      <p class="mt-2"><strong>(14)</strong>&nbsp; USE_IOT = P AND A AND F</p>
+      <p><strong>(15)</strong>&nbsp; RH*(B) = USE_IOT · B.RH_iot + ¬USE_IOT · B.RH_api</p>
+    </div>
+    <div class="mt-3">
+      <table class="data-table mono-block text-xs">
+        <thead><tr><th>P</th><th>A</th><th>F</th><th>USE_IOT</th><th>الحالة</th></tr></thead>
+        <tbody>
+          <tr><td>0</td><td>X</td><td>X</td><td class="font-bold text-red-700">0</td><td>المصدر = WEATHER_API → استخدام API دائماً</td></tr>
+          <tr><td>1</td><td>0</td><td>X</td><td class="font-bold text-red-700">0</td><td>IoT مُختار لكن لا بيانات بعد → تراجع</td></tr>
+          <tr><td>1</td><td>1</td><td>0</td><td class="font-bold text-red-700">0</td><td>IoT مُختار، البيانات قديمة → تراجع آلي</td></tr>
+          <tr class="bg-green-50"><td>1</td><td>1</td><td>1</td><td class="font-bold text-green-700">1</td><td>IoT مُختار، البيانات حديثة → استخدام IoT ✓</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3 class="font-bold text-slate-700 mt-5 mb-2">٥-٤ وصف التدفق الخوارزمي</h3>
+    <div class="bg-slate-50 border border-slate-200 rounded p-4 mono-block text-xs leading-loose overflow-x-auto">
+      <pre>
+START: استدعاء محرك الإسفنج للفرع B
+       │
+       ▼
+  ┌──────────────────────────────────┐
+  │  هل B.humidity_source            │
+  │  = 'IOT_SENSOR' ؟                │
+  └──────────────────────────────────┘
+       │ نعم                   لا │
+       ▼                          ▼
+  ┌────────────────────┐   ┌────────────────────────────┐
+  │ هل وصل أي نبض IoT │   │ RH*    ← B.RH_api          │
+  │ للفرع B؟           │   │ source ← 'WEATHER_API'     │
+  │ (α(B) = 1?)        │   │ σ      ← false             │
+  └────────────────────┘   └────────────────────────────┘
+   │ نعم    لا │
+   │           ▼
+   │  ┌───────────────────────────┐
+   │  │ RH* ← B.RH_api           │
+   │  │ تحذير: "انتظار النبض     │
+   │  │  الأول من IoT"           │
+   │  └───────────────────────────┘
+   │           │
+   ▼           │
+  ┌─────────────────────────┐
+  │ age ← t_now − B.t_iot  │
+  │ هل age ≤ Τ_stale؟       │
+  └─────────────────────────┘
+   │ نعم          لا │
+   ▼                 ▼
+  ┌────────────────────┐  ┌──────────────────────────────┐
+  │ RH*    ← B.RH_iot  │  │ RH*    ← B.RH_api            │
+  │ source ← 'IOT'     │  │ σ      ← true (تراجع آلي)   │
+  │ σ      ← false     │  │ UI: تحذير "بيانات قديمة"    │
+  └────────────────────┘  └──────────────────────────────┘
+         │                          │
+         └────────────┬─────────────┘
+                      │
+                      ▼
+         ┌──────────────────────────────────┐
+         │ احسب Y(RH*) عبر الدالة القطعية  │
+         │ (القسم ٤-١، المعادلات ١-٣)       │
+         └──────────────────────────────────┘
+                      │
+                      ▼
+         ┌─────────────────────────────────────┐
+         │ M_final = Y(RH*) · M_green          │
+         └─────────────────────────────────────┘
+                      │
+                      ▼
+         ┌──────────────────────────────────────────┐
+         │ نشر في: C_roasted · ΔV · V_inv · Π      │
+         └──────────────────────────────────────────┘
+                      │
+                      ▼
+                    END</pre>
+    </div>
+
+    <h3 class="font-bold text-slate-700 mt-5 mb-2">٥-٥ بروتوكول مصادقة الجهاز — المعادلة (16)</h3>
+    <div class="eq-box mono-block text-sm">
+      <p><strong>(16)</strong>&nbsp; AUTH(K_d) = 𝟙[ ∃ B ∈ Branches : B.iot_device_key = K_d ]</p>
+      <p class="text-xs text-slate-500 mt-1">AUTH=0 → HTTP 401 غير مخوَّل. AUTH=1 → استيعاب القراءة للفرع المُعرَّف. يمنع حقن البيانات المزوّرة والتلوث العابر للفروع.</p>
+    </div>
+  </div>
+
+  <!-- ══ القسم ٦ ══ -->
+  <div class="section-rule"></div>
+  <h2 class="text-xl font-bold text-slate-800 mb-3">القسم السادس — ملخص معادلات النظام الكامل</h2>
+  <div class="bg-white rounded-lg shadow p-6 mono-block text-sm space-y-1">
+    <p class="font-bold text-slate-600 mb-2">محرك تأثير الإسفنج (التعويض الرطوبي):</p>
+    <p>(1) &nbsp; M_final = Y(RH*) · M_green</p>
+    <p>(2) &nbsp; M_baseline = 0.82 · M_green</p>
+    <p>(3) &nbsp; ΔM = (Y(RH*) − 0.82) · M_green</p>
+    <p>(4) &nbsp; C_roasted = C_green / Y(RH*)</p>
+    <p>(5) &nbsp; C_baseline = C_green / 0.82</p>
+    <p>(6) &nbsp; P_w = C_baseline / (1 − g)</p>
+    <p>(7) &nbsp; ΔV = (Y(RH*) − Y₀) · M_green · P_w</p>
+    <p>(8) &nbsp; ΔV_total = Σᵢ (Y(RH*ᵢ) − Y₀) · M_greenᵢ · P_wᵢ</p>
+    <p>(9) &nbsp; V_inv = Y(RH*) · M_green · P_w</p>
+    <p>(10) &nbsp;Π = (P_w − C_green / Y(RH*)) · Y(RH*) · M_green</p>
+    <p class="font-bold text-slate-600 mt-4 mb-2">مبدّل الاستشعار الهجين:</p>
+    <p>(11) &nbsp;σ(B) = 𝟙[(t_now − B.t_iot) &gt; 3,600,000]</p>
+    <p>(12) &nbsp;α(B) = 𝟙[B.RH_iot ≠ null AND B.t_iot ≠ null]</p>
+    <p>(13) &nbsp;RH*(B) = B.RH_iot إذا (B.S=IOT) ∧ α=1 ∧ σ=0 ؛ وإلا B.RH_api</p>
+    <p>(14) &nbsp;USE_IOT = P ∧ A ∧ F</p>
+    <p>(15) &nbsp;RH*(B) = USE_IOT·B.RH_iot + ¬USE_IOT·B.RH_api</p>
+    <p>(16) &nbsp;AUTH(K_d) = 𝟙[∃ B : B.iot_device_key = K_d]</p>
+    <p class="font-bold text-slate-600 mt-4 mb-2">قبّان بولس — تسوية هدر الباريستا:</p>
+    <p>(17) &nbsp;W_theoretical = Σᵢ Φ(dᵢ) · qᵢ</p>
+    <p>(18) &nbsp;STABLE ⟺ |W_i − W_{i-1}| ≤ ε &nbsp; (ε = 0.3 غ)</p>
+    <p>(19) &nbsp;W_actual = Σₖ W_k &nbsp; (القراءات الثابتة المُسجَّلة)</p>
+    <p>(20) &nbsp;Ψ = W_actual − W_theoretical</p>
+    <p>(21) &nbsp;L_waste = (Ψ / 1000) · C_green إذا Ψ &gt; 0 ؛ وإلا 0</p>
+    <p>(22) &nbsp;Q_adj = − (Ψ / 1000) &nbsp; [كغ، تعديل Foodics موقَّع]</p>
+    <div class="mt-4 p-4 bg-slate-100 rounded border border-slate-300">
+      <p class="font-bold mb-2">الصيغة القانونية القطعية لـ Y(RH):</p>
+      <p>&nbsp;&nbsp;&nbsp;&nbsp; 0.825 &nbsp; إذا RH &gt; 70% &nbsp; (القاعدة A — الامتصاص الرطوبي)</p>
+      <p>Y(RH) = 0.817 &nbsp; إذا RH &lt; 20% &nbsp; (القاعدة B — التبخر المائي)</p>
+      <p>&nbsp;&nbsp;&nbsp;&nbsp; 0.820 &nbsp; إذا 20% ≤ RH ≤ 70% &nbsp; (القيمة الأساسية)</p>
+    </div>
+  </div>
+
+  <!-- ══ القسم ٧ ══ -->
+  <div class="section-rule"></div>
+  <h2 class="text-xl font-bold text-slate-800 mb-3">القسم السابع — إثبات الطابع التقني (أهلية البراءة)</h2>
+  <div class="bg-white rounded-lg shadow p-6 text-sm space-y-4 leading-loose">
+    <div><h3 class="font-bold text-slate-700 mb-1">٧-١ المشكلة التقنية المُحلَّة</h3>
+    <p>يحل الاختراع مشكلة تقنية ملموسة: كيف يمكن تقييم مخزون السلع الزراعية الرطوبية (حبوب القهوة الخضراء) بدقة ومستمرية بينما تتغير كتلتها الحقيقية وقيمتها المالية في الوقت الحقيقي تبعاً لظروف المناخ الموضعي، وكيف يمكن تسوية استهلاك الباريستا مقابل الاستهلاك النظري المستمَد من POS لعزل الهدر وتحديد تكلفته مالياً.</p></div>
+    <div><h3 class="font-bold text-slate-700 mb-1">٧-٢ الوسائل التقنية المستخدمة</h3>
+    <ul class="list-disc mr-4 space-y-1 text-slate-600">
+      <li>مستشعر IoT مادي (ESP32 + DHT22) يتواصل عبر HTTP POST موثَّق</li>
+      <li>ميزان دقيق بلوتوث (أكايا) يبث إشعارات خاصية GATT بمعدل 5 هرتز عبر Web Bluetooth API</li>
+      <li>خوارزمية تحكيم محدودة بالزمن (المعادلات 11-15) في عامل الحوسبة الحافية</li>
+      <li>دالة معامل قطعية (المعادلات 1-3) لتحديث سجلات كتلة المخزون الجسدي</li>
+      <li>دالة تخطيط Φ تترجم معاملات POS إلى استهلاك غرامي للحبوب</li>
+      <li>إعادة حساب مالي متتالي (المعادلات 4-10، 17-22) يتدفق إلى التكلفة والسعر والأثر المالي وسجل POS</li>
+      <li>خط أنابيب استيعاب استشعار موثَّق (المعادلة 16) يمنع حقن البيانات المزوّرة</li>
+    </ul></div>
+    <div><h3 class="font-bold text-slate-700 mb-1">٧-٣ التأثيرات التقنية المُنتَجة</h3>
+    <ul class="list-disc mr-4 space-y-1 text-slate-600">
+      <li>تصحيح آني لسجلات كتلة المخزون لأثر الرطوبة (دقة مستحيلة مع النماذج الثابتة)</li>
+      <li>ظهور الأثر المالي البيئي ΔV كسطر دفتري مستقل (جديد في ERP القهوة)</li>
+      <li>تحديد هدر الباريستا بالغرام والريال لكل جلسة دون تدقيق يدوي</li>
+      <li>إرسال تعديل المخزون Q_adj موقَّعاً آلياً لـ POS — يغلق الحلقة المادية↔الرقمية</li>
+      <li>التراجع الآلي يضمن استمرارية التقييم أثناء أعطال المستشعر</li>
+      <li>ثبات سعر الجملة مستقلاً عن تصحيح التكلفة الداخلية</li>
+    </ul></div>
+    <div><h3 class="font-bold text-slate-700 mb-1">٧-٤ حجج عدم البداهة</h3>
+    <ol class="list-decimal mr-4 space-y-1 text-slate-600">
+      <li>اختيار τ_H=70% وτ_L=20% مستمَد تجريبياً من جداول توازن رطوبة حبوب الأرابيكا في المناخ الساحلي والداخلي بالمملكة</li>
+      <li>عدم تماثل دلتا الحدَّين (δ_A=+0.005 مقابل δ_B=−0.003) يعكس عدم التماثل الجسدي لحركية الامتصاص مقابل التبخر</li>
+      <li>فصل سعر الجملة (المثبَّت عند Y₀، المعادلات 5-6) عن تصحيح التكلفة (Y(RH*)، المعادلة 4): قرار هندسة مالية غير بديهي</li>
+      <li>عتبة القِدَم (60 دقيقة) معايَرة وفق MTBF المستشعر ودورات المراجعة التشغيلية في المحامص</li>
+      <li>استخدام Web Bluetooth GATT لتجهيز سير عمل الباريستا الصناعي: تطبيق جديد</li>
+      <li>أتمتة كاملة من تيار GATT → تسجيل وزن ثابت → فارق غرامي → خسارة ريالية → تعديل POS: لا سابقة في ERP الخدمات الغذائية</li>
+    </ol></div>
+  </div>
+
+  <!-- ══ القسم ٨ ══ -->
+  <div class="section-rule"></div>
+  <h2 class="text-xl font-bold text-slate-800 mb-3">القسم الثامن — المطالبات (مسودة المطالبات المستقلة)</h2>
+  <div class="space-y-4">
+    <div class="claim-box">
+      <p class="font-bold text-amber-800 text-sm mb-2">المطالبة ١ — الطريقة (التعويض الرطوبي للكتلة)</p>
+      <p class="text-sm text-slate-700 leading-loose">طريقة مُنفَّذة حاسوبياً لتصحيح تقييم الأصول في الوقت الحقيقي في نظام إدارة مخزون القهوة، تشمل: (أ) استقبال رسالة استشعار IoT موثَّقة {RH_iot, t_iot}؛ (ب) تقييم محمول القِدَم σ؛ (ج) اختيار RH* عبر دالة التحكيم؛ (د) تقييم Y(RH*) القطعي؛ (هـ) حساب M_final = Y(RH*) · M_green لكل كود؛ (و) حساب ΔV وتسجيله في الدفتر المالي.</p>
+    </div>
+    <div class="claim-box">
+      <p class="font-bold text-amber-800 text-sm mb-2">المطالبة ٢ — الطريقة (تسوية هدر الباريستا)</p>
+      <p class="text-sm text-slate-700 leading-loose">طريقة مُنفَّذة حاسوبياً لتسوية هدر الباريستا في الوقت الحقيقي، تشمل: (أ) استقبال إشعارات GATT بمعدل ≈5 هرتز من ميزان دقيق؛ (ب) تطبيق محمول الثبات |W_i − W_{i-1}| ≤ ε؛ (ج) حساب W_actual؛ (د) سحب بيانات POS وحساب W_theoretical؛ (هـ) حساب Ψ؛ (و) حساب L_waste وإرسال Q_adj لـ API نقطة البيع.</p>
+    </div>
+    <div class="claim-box">
+      <p class="font-bold text-amber-800 text-sm mb-2">المطالبة ٣ — النظام (البنية المتكاملة)</p>
+      <p class="text-sm text-slate-700 leading-loose">نظام يضم: (أ) أجهزة استشعار IoT بمفاتيح فريدة؛ (ب) نقطة API موثَّقة لاستيعاب الاستشعار؛ (ج) وحدة تحكيم الاستشعار الهجين (المعادلة 13)؛ (د) وحدة Y(RH) القطعية؛ (هـ) وحدة تصحيح الكتلة؛ (و) محرك مالي (المعادلات 4-10)؛ (ز) فئة AcaiaLink للمتصفح؛ (ح) محرك تسوية الهدر (المعادلات 17-22).</p>
+    </div>
+    <div class="claim-box">
+      <p class="font-bold text-amber-800 text-sm mb-2">المطالبة ٤ — مصادقة مفتاح الجهاز</p>
+      <p class="text-sm text-slate-700 leading-loose">طريقة المطالبة 1، حيث مفتاح الجهاز معرّف UUID v4 صادر عند تفعيل الفرع ومُتحقَّق منه بالدالة AUTH(K_d) قبل أي تعديل لسجلات المخزون.</p>
+    </div>
+    <div class="claim-box">
+      <p class="font-bold text-amber-800 text-sm mb-2">المطالبة ٥ — التراجع الآلي</p>
+      <p class="text-sm text-slate-700 leading-loose">طريقة المطالبة 1، حيث عند σ=1 يستبدل النظام تلقائياً RH_api بـ RH_iot، ويعرض تحذير قِدَم مرئياً مع الوقت المنقضي بالدقائق، ويضمن استمرار التقييم دون تدخل يدوي.</p>
+    </div>
+    <div class="claim-box">
+      <p class="font-bold text-amber-800 text-sm mb-2">المطالبة ٦ — معاملات دلتا غير المتماثلة</p>
+      <p class="text-sm text-slate-700 leading-loose">طريقة المطالبة 1، حيث تُطبَّق تعديلات δ_A=+0.005 عند RH &gt; 70% وδ_B=−0.003 عند RH &lt; 20%، معايَرة وفق حركية نقل الرطوبة لحبوب الأرابيكا في مناخ شبه الجزيرة العربية.</p>
+    </div>
+    <div class="claim-box">
+      <p class="font-bold text-amber-800 text-sm mb-2">المطالبة ٧ — إغلاق حلقة POS</p>
+      <p class="text-sm text-slate-700 leading-loose">طريقة المطالبة 2، حيث يُرسَل Q_adj لـ POS عبر استدعاء API موثَّق في نهاية كل فترة تسوية، مما يجعل سجل المخزون الرقمي يعكس الاستهلاك الجسدي الفعلي للحبوب المُقاس بالميزان الدقيق.</p>
+    </div>
+  </div>
+
+  <!-- ══ القسم ٩ ══ -->
+  <div class="section-rule"></div>
+  <h2 class="text-xl font-bold text-slate-800 mb-3">القسم التاسع — مسرد المصطلحات العلمية</h2>
+  <div class="bg-white rounded-lg shadow p-6">
+    <dl class="space-y-3 text-sm leading-loose">
+      <div><dt class="font-bold text-slate-700">انتقال الكتلة الرطبية (Hygroscopic Mass Transfer)</dt><dd class="text-slate-600 mr-4">التبادل التلقائي لجزيئات الماء بين مادة صلبة مسامية (حبة القهوة الخضراء) والطور الغازي المحيط (الهواء)، مدفوعاً بفرق الضغط الجزئي لبخار الماء. يُقاس هنا بـ ΔM.</dd></div>
+      <div><dt class="font-bold text-slate-700">التعويض المناخي الموضعي (Micro-climate Compensation)</dt><dd class="text-slate-600 mr-4">التعديل الحسابي المُطبَّق على النموذج النظري الثابت (المعامل الأساسي 0.82) لمراعاة الظروف الجوية الخاصة بالموقع. يُنفَّذ هنا كدالة Y(RH) القطعية.</dd></div>
+      <div><dt class="font-bold text-slate-700">تقييم الأصول في الوقت الحقيقي (Real-time Asset Valuation)</dt><dd class="text-slate-600 mr-4">إعادة حساب القيمة النقدية لحيازة المخزون الجسدي باستمرار وآلياً كدالة في المعاملات البيئية المتغيرة زمنياً.</dd></div>
+      <div><dt class="font-bold text-slate-700">معامل الإنتاج العائم (Floating Yield Coefficient)</dt><dd class="text-slate-600 mr-4">ناتج Y(RH) الديناميكي المعتمد على الرطوبة، في مقابل المعامل الأساسي الثابت Y₀ = 0.82.</dd></div>
+      <div><dt class="font-bold text-slate-700">الأثر المالي البيئي (Environmental P&L)</dt><dd class="text-slate-600 mr-4">حساب الدفتر الفرعي ΔV الذي يعزل الأثر المالي للمناخ عن أنشطة التداول التشغيلية.</dd></div>
+      <div><dt class="font-bold text-slate-700">الامتصاص الرطوبي — القاعدة A (Hygroscopic Absorption)</dt><dd class="text-slate-600 mr-4">زيادة كتلة الحبة باستيعاب الرطوبة من جو رطوبته عالية (RH &gt; 70%). يُنمذَج بـ Y(RH) = 0.825.</dd></div>
+      <div><dt class="font-bold text-slate-700">التبخر المائي — القاعدة B (Evaporative Desorption)</dt><dd class="text-slate-600 mr-4">نقص كتلة الحبة بفقدان الرطوبة لجو رطوبته منخفضة (RH &lt; 20%). يُنمذَج بـ Y(RH) = 0.817.</dd></div>
+      <div><dt class="font-bold text-slate-700">عتبة القِدَم (Staleness Threshold Τ_stale)</dt><dd class="text-slate-600 mr-4">أقصى عمر مقبول لقراءة استشعار IoT قبل اعتبارها غير موثوقة للحساب المالي. مضبوطة على 3,600,000 ملي ثانية (60 دقيقة).</dd></div>
+      <div><dt class="font-bold text-slate-700">تحكيم الاستشعار (Telemetry Arbitration)</dt><dd class="text-slate-600 mr-4">عملية بوابات المنطق (القسم 5-3) التي تختار بين بيانات IoT وبيانات API بناءً على تفضيل المصدر والتوافر والحداثة.</dd></div>
+      <div><dt class="font-bold text-slate-700">وضع الضبط (Dial-in Mode)</dt><dd class="text-slate-600 mr-4">حالة تشغيلية يُفعِّل فيها الباريستا تكامل ميزان أكايا البلوتوث لتسجيل كل قراءة وزن ثابتة كحدث هدر أثناء معايرة الطاحونة والخدمة.</dd></div>
+      <div><dt class="font-bold text-slate-700">فارق الهدر (Waste Variance Ψ)</dt><dd class="text-slate-600 mr-4">الفرق الموقَّع بإشارة بين الاستهلاك الفعلي المقاس بالميزان والاستهلاك النظري المتوقع من POS. Ψ الموجبة = هدر تشغيلي قابل للقياس.</dd></div>
+      <div><dt class="font-bold text-slate-700">تخطيط المشروب-إلى-الحبوب (Drink-to-Bean Mapping Φ)</dt><dd class="text-slate-600 mr-4">الدالة المتباينة التي تُعيّن جرعة نظرية بالغرام لكل حصة من كل نوع مشروب في قائمة POS.</dd></div>
+      <div><dt class="font-bold text-slate-700">إغلاق حلقة POS (POS Loop Closure)</dt><dd class="text-slate-600 mr-4">الخاصية المعمارية التي يُغذَّى بموجبها فارق الهدر Ψ مرةً أخرى إلى نقطة البيع كتعديل مخزون Q_adj، مما يضمن اتساق سجل المخزون الرقمي مع قياسات الميزان الجسدي.</dd></div>
+      <div><dt class="font-bold text-slate-700">مصادقة مفتاح الجهاز (Device Key Authentication)</dt><dd class="text-slate-600 mr-4">التحقق من هوية المستشعر المادي بمعرّف UUID (المعادلة 16) قبل السماح له بالكتابة في خط أنابيب التقييم المالي.</dd></div>
+    </dl>
+  </div>
+
+  <!-- ══ القسم ١٠ ══ -->
+  <div class="section-rule"></div>
+  <h2 class="text-xl font-bold text-slate-800 mb-3">القسم العاشر — جدول ثوابت النظام</h2>
+  <div class="bg-white rounded-lg shadow p-4">
+    <table class="data-table text-xs">
+      <thead><tr><th>معرّف الثابت</th><th>القيمة</th><th>الوصف</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">SPONGE_BASELINE_COEFFICIENT</td><td>0.82</td><td>Y₀ — معامل الإنتاج الأساسي</td></tr>
+        <tr><td class="mono">SPONGE_RH_HIGH_THRESHOLD</td><td>70%</td><td>τ_H — مُشغِّل القاعدة A</td></tr>
+        <tr><td class="mono">SPONGE_RH_LOW_THRESHOLD</td><td>20%</td><td>τ_L — مُشغِّل القاعدة B</td></tr>
+        <tr><td class="mono">SPONGE_HIGH_DELTA</td><td>+0.005</td><td>δ_A — تعديل الامتصاص</td></tr>
+        <tr><td class="mono">SPONGE_LOW_DELTA</td><td>−0.003</td><td>δ_B — تعديل التبخر</td></tr>
+        <tr><td class="mono">IOT_STALE_THRESHOLD_MS</td><td>3,600,000 ملي ث</td><td>Τ_stale — 60 دقيقة</td></tr>
+        <tr><td class="mono">ZATCA_VAT_RATE</td><td>0.15 (15%)</td><td>معدل ضريبة القيمة المضافة السعودية</td></tr>
+        <tr><td class="mono">ACAIA_SERVICE_UUID</td><td>0x0000ffe0-0000-1000-8000-00805f9b34fb</td><td>UUID خدمة BLE GATT</td></tr>
+        <tr><td class="mono">ACAIA_CHAR_UUID</td><td>0x0000ffe1-0000-1000-8000-00805f9b34fb</td><td>UUID خاصية BLE GATT</td></tr>
+        <tr><td class="mono">ACAIA_SAMPLE_RATE</td><td>≈ 5 هرتز</td><td>تردد تحديث الميزان</td></tr>
+        <tr><td class="mono">ACAIA_STABILITY_EPSILON (ε)</td><td>0.3 غ</td><td>تفاوت تقارب الثبات</td></tr>
+        <tr><td class="mono">PULSE_DEFAULT_BEAN_DOSE</td><td>18 غ</td><td>Φ(default) — الجرعة الافتراضية</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ══ القسم ١١ ══ -->
+  <div class="section-rule"></div>
+  <h2 class="text-xl font-bold text-slate-800 mb-3">القسم الحادي عشر — مرجع الشفرة المصدرية</h2>
+  <div class="bg-white rounded-lg shadow p-4">
+    <table class="data-table text-xs">
+      <thead><tr><th>الدالة / الرمز</th><th>القسم / المعادلة</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">calcSpongeCoefficient(rh)</td><td>§4-1 — دالة Y(RH) القطعية</td></tr>
+        <tr><td class="mono">applyRoastShrinkageWithSponge()</td><td>§4-2 — المعادلة (1) M_final</td></tr>
+        <tr><td class="mono">calcTrueRoastedCost()</td><td>§4-3 — المعادلة (4) C_roasted</td></tr>
+        <tr><td class="mono">calcWholesalePrice()</td><td>§4-3 — المعادلتان (5)–(6) P_w</td></tr>
+        <tr><td class="mono">calcLotFinancials().spongeKgDelta</td><td>§4-2 — المعادلة (3) ΔM</td></tr>
+        <tr><td class="mono">calcLotFinancials().environmentalPnL</td><td>§4-4 — المعادلة (7) ΔV</td></tr>
+        <tr><td class="mono">resolveActiveRH(branch)</td><td>§5-2 — المعادلة (13) RH*(B)</td></tr>
+        <tr><td class="mono">calcSpongeCoefficientForBranch()</td><td>§5 — المحرك الهجين الكامل</td></tr>
+        <tr><td class="mono">POST /api/iot/telemetry</td><td>§5-5 — المعادلة (16) AUTH(K_d)</td></tr>
+        <tr><td class="mono">POST /api/iot/source-toggle</td><td>§5-2 — حالات التراجع F1/F2/F3</td></tr>
+        <tr><td class="mono">GET  /api/iot/status</td><td>§5-2 — لقطة حالة الفروع</td></tr>
+        <tr><td class="mono">PULSE_BEAN_MAP</td><td>§4-6-1 — جدول Φ(d)</td></tr>
+        <tr><td class="mono">calcTheoreticalUsage(orders)</td><td>§4-6-2 — المعادلة (17) W_theoretical</td></tr>
+        <tr><td class="mono">WasteLog (interface)</td><td>§4-6-3 — المعادلة (19) W_actual</td></tr>
+        <tr><td class="mono">calcFinancialLoss(Ψ, C_green)</td><td>§4-6-5 — المعادلة (21) L_waste</td></tr>
+        <tr><td class="mono">PulseReconciliation (interface)</td><td>§4-6-6 — مخطط السجل الكامل</td></tr>
+        <tr><td class="mono">POST /api/pulse/sync</td><td>§4-6-7 — المعادلة (22) Q_adj</td></tr>
+        <tr><td class="mono">AcaiaLink (browser TS class)</td><td>§4-6-3 — المعادلة (18) بوابة الثبات</td></tr>
+      </tbody>
+    </table>
+    <p class="text-xs text-slate-500 mt-3 leading-loose">ملاحظة: جميع الأنواع والواجهات والثوابت ودوال الحساب في <span class="mono">src/data.ts</span> — جميع معالجات مسارات HTTP وصفحات واجهة الإدارة وفئة AcaiaLink في <span class="mono">src/index.tsx</span></p>
+  </div>
+
+  <!-- ══ تذييل الوثيقة ══ -->
+  <div class="section-rule"></div>
+  <div class="text-center text-xs text-slate-500 py-6 space-y-1">
+    <p class="font-mono font-bold text-slate-700">QABBAN-PAT-2026-001 &nbsp;|&nbsp; الإصدار 2.0 — نهائي &nbsp;|&nbsp; 2026-03-12</p>
+    <p>سري — إعداد تقديم البراءة &nbsp;|&nbsp; أُعدّت بواسطة: فريق هندسة نظام قبّان</p>
+    <p class="text-red-600 font-semibold mt-2">هذه الوثيقة سرية ومخصصة حصراً لأغراض تقديم براءة الاختراع</p>
+    <p class="mt-2">٢٢ معادلة &nbsp;·&nbsp; ٧ مطالبات &nbsp;·&nbsp; ١٤ مصطلحاً علمياً &nbsp;·&nbsp; ١٢ ثابتاً في النظام</p>
+  </div>
+
+</div>
+</body>
+</html>
