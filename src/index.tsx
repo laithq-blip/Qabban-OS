@@ -89,6 +89,12 @@ import {
   PULSE_BEAN_MAP,
   type WasteLog,
   type PulseReconciliation,
+  // ── Hybrid Humidity / IoT ─────────────────────────────────────
+  resolveActiveRH,
+  calcSpongeCoefficientForBranch,
+  IOT_STALE_THRESHOLD_MS,
+  type HumiditySource,
+  type HybridSpongeResult,
 } from './data'
 
 const app = new Hono()
@@ -2804,7 +2810,7 @@ app.get('/admin/branches', (c) => {
     .sensor-modal-overlay.open { display:flex; }
     .sensor-modal {
       background:var(--bg-2); border:1px solid rgba(59,130,246,0.4);
-      border-radius:var(--radius-lg); padding:28px; width:420px; max-width:95vw;
+      border-radius:var(--radius-lg); padding:28px; width:460px; max-width:95vw;
     }
     .sensor-modal-title {
       font-family:var(--font-mono); font-size:13px; color:#3b82f6;
@@ -2827,6 +2833,19 @@ app.get('/admin/branches', (c) => {
       font-family:var(--font-mono); font-size:11px; font-weight:700;
       letter-spacing:.8px; border:none; border-radius:var(--radius); cursor:pointer;
     }
+    /* ── IoT Data Fidelity Toggle ── */
+    .iot-toggle { position:relative; display:inline-block; width:38px; height:20px; cursor:pointer; }
+    .iot-toggle input { opacity:0; width:0; height:0; }
+    .iot-slider {
+      position:absolute; inset:0; background:#334155; border-radius:20px; transition:.3s;
+      border:1px solid var(--border);
+    }
+    .iot-slider::before {
+      content:''; position:absolute; width:14px; height:14px; left:2px; bottom:2px;
+      background:white; border-radius:50%; transition:.3s;
+    }
+    .iot-toggle input:checked + .iot-slider { background:rgba(16,185,129,0.3); border-color:rgba(16,185,129,0.6); }
+    .iot-toggle input:checked + .iot-slider::before { transform:translateX(18px); background:var(--green); }
     .btn-save-sensor:hover { background:#2563eb; }
     /* ── BRANCH FILTER TABS ── */
     .branch-tabs {
@@ -2966,6 +2985,62 @@ app.get('/admin/branches', (c) => {
         </div>
         <span class="bcard-climate ${b.climateType}">${b.climateType}</span>
       </div>
+
+      <!-- ── DATA FIDELITY TOGGLE ── -->
+      ${(() => {
+        const hasIot    = b.iot_humidity !== null && b.last_iot_reading_at !== null
+        const ageMs     = hasIot ? Date.now() - new Date(b.last_iot_reading_at!).getTime() : null
+        const isStale   = ageMs !== null && ageMs > IOT_STALE_THRESHOLD_MS
+        const isIotMode = b.humidity_source === 'IOT_SENSOR'
+        const showStale = isIotMode && isStale
+        const showNoData= isIotMode && !hasIot
+        const { rh: activeRH } = resolveActiveRH(b)
+        return `
+      <div style="padding:8px 18px;background:rgba(15,23,42,0.6);border-top:1px solid var(--border)">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
+          <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted)">
+            <i class="fa fa-tower-broadcast" style="margin-right:4px"></i>Data Fidelity
+          </div>
+          <div style="display:flex;align-items:center;gap:6px">
+            <span style="font-size:10px;color:${isIotMode ? 'var(--text-muted)' : 'var(--amber)'}">City Weather</span>
+            <label class="iot-toggle" title="Switch between General City Weather and Local Room Sensor">
+              <input type="checkbox" ${isIotMode ? 'checked' : ''}
+                onchange="toggleIotSource('${b.id}', this.checked)"
+                id="iot-toggle-${b.id}"/>
+              <span class="iot-slider"></span>
+            </label>
+            <span style="font-size:10px;color:${isIotMode ? 'var(--green)' : 'var(--text-muted)'}">Local Sensor</span>
+          </div>
+        </div>
+        <!-- Source badge row -->
+        <div style="margin-top:5px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+          <span id="src-badge-${b.id}" style="font-size:10px;font-family:var(--font-mono);padding:2px 7px;border-radius:3px;background:${isIotMode ? 'rgba(16,185,129,0.12)' : 'rgba(245,158,11,0.12)'};border:1px solid ${isIotMode ? 'rgba(16,185,129,0.4)' : 'rgba(245,158,11,0.4)'};color:${isIotMode ? 'var(--green)' : 'var(--amber)'}">
+            ${isIotMode ? '<i class="fa fa-microchip"></i> IOT_SENSOR' : '<i class="fa fa-cloud-sun"></i> WEATHER_API'}
+          </span>
+          <span style="font-size:10px;color:var(--text-muted)">Active RH:
+            <span style="font-family:var(--font-mono);color:${humiColor}">${activeRH}%</span>
+          </span>
+          ${hasIot && !isStale ? `<span style="font-size:10px;color:var(--green)"><i class="fa fa-circle-check"></i> IoT Live</span>` : ''}
+          ${showNoData ? `<span style="font-size:10px;color:#fb923c"><i class="fa fa-triangle-exclamation"></i> Waiting for first pulse</span>` : ''}
+          ${showStale ? `<span id="stale-warn-${b.id}" style="font-size:10px;color:var(--red);font-weight:600;animation:pulse 1.4s ease-in-out infinite">
+            <i class="fa fa-clock-rotate-left"></i> STALE DATA — ${ageMs !== null ? Math.round(ageMs/60000) : '?'}min ago · Auto-fallback active
+          </span>` : ''}
+        </div>
+        <!-- IoT reading display (when available) -->
+        ${hasIot ? `<div style="margin-top:4px;font-size:10px;color:var(--text-muted)">
+          <i class="fa fa-microchip" style="color:var(--green);margin-right:3px"></i>
+          Sensor: <span style="font-family:var(--font-mono);color:${isStale ? 'var(--red)' : 'var(--green)'}">
+            ${b.iot_humidity}% RH · ${b.iot_temperature}°C
+          </span>
+          <span style="margin-left:4px;font-family:var(--font-mono)">
+            · Last: ${b.last_iot_reading_at ? new Date(b.last_iot_reading_at).toLocaleString('en-SA', {hour:'2-digit',minute:'2-digit'}) : '—'}
+          </span>
+        </div>` : `<div style="margin-top:4px;font-size:10px;color:var(--text-muted)">
+          <i class="fa fa-microchip" style="margin-right:3px"></i>Device key: <span style="font-family:var(--font-mono);color:var(--text-muted);font-size:9px">${b.iot_device_key.slice(0,28)}…</span>
+        </div>`}
+      </div>`
+      })()}
+
       <div class="bcard-metrics">
         <div class="bcard-metric-box">
           <div class="bcard-metric-label">Humidity</div>
@@ -2999,7 +3074,7 @@ app.get('/admin/branches', (c) => {
       </div>
       <div class="bcard-footer">
         <div class="bcard-checked"><i class="fa fa-clock" style="margin-right:4px"></i>Checked: ${b.lastChecked}</div>
-        <button class="btn-edit-sensor" onclick="openSensorModal('${b.id}','${b.name}',${b.humidity},${b.temperature})">
+        <button class="btn-edit-sensor" onclick="openSensorModal('${b.id}','${b.name}',${b.humidity},${b.temperature},'${b.iot_device_key}')">
           <i class="fa fa-sliders"></i> Update Sensors
         </button>
       </div>
@@ -3120,6 +3195,24 @@ app.get('/admin/branches', (c) => {
         <input type="number" name="humidity" id="sensorHumidity" min="0" max="100" required/>
         <label>Temperature (°C)</label>
         <input type="number" name="temperature" id="sensorTemperature" min="0" max="60" required/>
+
+        <!-- IoT Device Key (read-only reference for ESP32 firmware) -->
+        <label style="margin-top:16px">IoT Device Key <span style="color:var(--text-muted);font-weight:400">(copy to firmware)</span></label>
+        <div style="display:flex;gap:6px;align-items:center">
+          <input type="text" id="sensorDeviceKey" readonly style="cursor:text;color:var(--amber);font-size:11px;letter-spacing:.3px"/>
+          <button type="button" onclick="copyDeviceKey()" title="Copy to clipboard"
+            style="padding:6px 10px;background:#334155;border:1px solid var(--border);border-radius:4px;color:var(--text);cursor:pointer;font-size:12px">
+            <i class="fa fa-copy"></i>
+          </button>
+        </div>
+        <div style="margin-top:8px;padding:10px;background:rgba(16,185,129,0.07);border:1px solid rgba(16,185,129,0.2);border-radius:6px;font-size:10px;color:var(--text-sec);line-height:1.6">
+          <i class="fa fa-circle-info" style="color:var(--green);margin-right:4px"></i>
+          Flash this key into your <strong>ESP32/DHT22</strong> firmware. The sensor should POST to
+          <code style="background:#0f172a;padding:1px 5px;border-radius:3px">/api/iot/telemetry</code>
+          with <code style="background:#0f172a;padding:1px 5px;border-radius:3px">{ device_key, humidity, temperature }</code>.
+          Readings older than <strong>60 min</strong> trigger automatic fallback to City Weather API.
+        </div>
+
         <div class="sensor-modal-footer">
           <button type="button" class="btn-cancel-branch" onclick="closeSensorModal()">CANCEL</button>
           <button type="submit" class="btn-save-sensor"><i class="fa fa-check"></i>&nbsp; SAVE READING</button>
@@ -3156,15 +3249,23 @@ app.get('/admin/branches', (c) => {
   }
 
   // ── Update Sensor modal ───────────────────────────────────────
-  function openSensorModal(id, name, humidity, temperature) {
+  function openSensorModal(id, name, humidity, temperature, deviceKey) {
     document.getElementById('sensorBranchName').textContent = name
     document.getElementById('sensorBranchId').value         = id
     document.getElementById('sensorHumidity').value         = humidity
     document.getElementById('sensorTemperature').value      = temperature
+    document.getElementById('sensorDeviceKey').value        = deviceKey || ''
     document.getElementById('sensorOverlay').classList.add('open')
   }
   function closeSensorModal() {
     document.getElementById('sensorOverlay').classList.remove('open')
+  }
+  function copyDeviceKey() {
+    const el = document.getElementById('sensorDeviceKey')
+    navigator.clipboard.writeText(el.value).then(() => {
+      el.style.borderColor = 'var(--green)'
+      setTimeout(() => el.style.borderColor = '', 1500)
+    })
   }
   async function submitSensorUpdate(e) {
     e.preventDefault()
@@ -3183,6 +3284,51 @@ app.get('/admin/branches', (c) => {
     } else {
       const err = await res.json().catch(() => ({ error: 'Unknown error' }))
       alert('Error: ' + (err.error ?? 'Could not update sensor'))
+    }
+  }
+
+  // ── Data Fidelity Toggle — switches humidity source ───────────
+  async function toggleIotSource(branchId, wantIot) {
+    const source = wantIot ? 'IOT_SENSOR' : 'WEATHER_API'
+    const toggle = document.getElementById('iot-toggle-' + branchId)
+    if (toggle) toggle.disabled = true
+    try {
+      const res = await fetch('/api/iot/source-toggle', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ branchId, source }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Toggle failed')
+      // Update source badge without full reload
+      const badge = document.getElementById('src-badge-' + branchId)
+      if (badge) {
+        badge.innerHTML = source === 'IOT_SENSOR'
+          ? '<i class="fa fa-microchip"></i> IOT_SENSOR'
+          : '<i class="fa fa-cloud-sun"></i> WEATHER_API'
+        badge.style.background = source === 'IOT_SENSOR' ? 'rgba(16,185,129,0.12)' : 'rgba(245,158,11,0.12)'
+        badge.style.borderColor = source === 'IOT_SENSOR' ? 'rgba(16,185,129,0.4)' : 'rgba(245,158,11,0.4)'
+        badge.style.color = source === 'IOT_SENSOR' ? 'var(--green)' : 'var(--amber)'
+      }
+      if (data.warning) {
+        // Show transient warning banner instead of blocking alert
+        const warnId = 'iot-warn-' + branchId
+        let warn = document.getElementById(warnId)
+        if (!warn) {
+          warn = document.createElement('div')
+          warn.id = warnId
+          warn.style.cssText = 'position:fixed;bottom:20px;right:20px;z-index:9999;padding:12px 16px;background:#1e293b;border:1px solid rgba(245,158,11,0.5);border-radius:8px;font-size:12px;color:var(--amber);max-width:340px;line-height:1.5'
+          document.body.appendChild(warn)
+        }
+        warn.innerHTML = '<i class="fa fa-triangle-exclamation" style="margin-right:6px"></i>' + data.warning
+        setTimeout(() => warn.remove(), 6000)
+      }
+    } catch(e) {
+      alert('Source toggle error: ' + e.message)
+      // Revert toggle UI on error
+      if (toggle) toggle.checked = !wantIot
+    } finally {
+      if (toggle) toggle.disabled = false
     }
   }
 
@@ -3239,6 +3385,12 @@ app.post('/admin/branches/add', async (c) => {
     humidity,
     temperature,
     lastChecked:  new Date().toISOString().replace('T', ' ').slice(0, 16),
+    // ── IoT defaults ──
+    humidity_source     : 'WEATHER_API' as HumiditySource,
+    iot_device_key      : `dkey-${newId.toLowerCase()}-${crypto.randomUUID()}`,
+    iot_humidity        : null,
+    iot_temperature     : null,
+    last_iot_reading_at : null,
     riskStatus,
     activeLots:   0,
     totalGreenKg: 0,
@@ -10778,6 +10930,193 @@ async function pulseFoodicsSync() {
 `
   const pendingCountAdmin = beanRequests.filter(r => r.status === 'PENDING').length
   return c.html(adminLayout('Qabban Pulse — Waste Tracking', 'pulse', content, pendingCountAdmin))
+})
+
+// ══════════════════════════════════════════════════════════════════
+//  HYBRID HUMIDITY MODEL — IoT Telemetry & Source Toggle
+// ══════════════════════════════════════════════════════════════════
+
+// ── POST /api/iot/telemetry ───────────────────────────────────────
+// Receives a telemetry pulse from a physical ESP32/DHT22 sensor.
+//
+// Payload: { device_key: string, humidity: number, temperature: number }
+//
+// Flow:
+//  1. Validate device_key → find matching branch
+//  2. Update branch iot_humidity, iot_temperature, last_iot_reading_at
+//  3. Re-run Sponge Effect on all lots in that branch → return updated yields
+//  4. If branch source is WEATHER_API, reading is stored but not yet active
+//     (admin must toggle source to IOT_SENSOR to activate)
+app.post('/api/iot/telemetry', async (c) => {
+  try {
+    const body = await c.req.json() as {
+      device_key  : string
+      humidity    : number
+      temperature : number
+    }
+
+    const { device_key, humidity, temperature } = body
+
+    // ── Validate payload ──────────────────────────────────────────
+    if (!device_key || typeof device_key !== 'string') {
+      return c.json({ error: 'device_key is required' }, 400)
+    }
+    if (typeof humidity !== 'number' || humidity < 0 || humidity > 100) {
+      return c.json({ error: 'humidity must be a number 0–100' }, 400)
+    }
+    if (typeof temperature !== 'number' || temperature < -20 || temperature > 80) {
+      return c.json({ error: 'temperature must be a number -20–80' }, 400)
+    }
+
+    // ── Authenticate device_key → look up branch ──────────────────
+    const branch = branches.find(b => b.iot_device_key === device_key)
+    if (!branch) {
+      return c.json({ error: 'Unknown device_key — no branch configured for this sensor' }, 401)
+    }
+
+    const now = new Date().toISOString()
+
+    // ── Persist IoT reading ───────────────────────────────────────
+    branch.iot_humidity         = Math.round(humidity * 10) / 10
+    branch.iot_temperature      = Math.round(temperature * 10) / 10
+    branch.last_iot_reading_at  = now
+
+    // ── Determine active RH and run hybrid Sponge ─────────────────
+    const { rh: activeRH, source: resolvedSource, stale } = resolveActiveRH(branch)
+    const spongeResult = calcSpongeCoefficientForBranch(branch)
+
+    // ── Recalculate roasted weight for all lots in this branch ────
+    const affectedLots = coffeeLots.filter(l => l.branch === branch.name && l.status !== 'RECALLED')
+    const lotUpdates = affectedLots.map(lot => {
+      const newRoasted = Math.round(lot.greenWeightKg * spongeResult.coefficient * 10) / 10
+      lot.roastedWeightKg = newRoasted
+      return {
+        lotId          : lot.id,
+        origin         : lot.origin,
+        greenWeightKg  : lot.greenWeightKg,
+        roastedWeightKg: newRoasted,
+        spongeCoeff    : spongeResult.coefficient,
+      }
+    })
+
+    return c.json({
+      ok           : true,
+      branchId     : branch.id,
+      branchName   : branch.name,
+      receivedAt   : now,
+      iotReading   : { humidity: branch.iot_humidity, temperature: branch.iot_temperature },
+      activeSource : resolvedSource,
+      autoFallback : stale,
+      sponge       : {
+        activeRH,
+        coefficient  : spongeResult.coefficient,
+        rule         : spongeResult.rule,
+        label        : spongeResult.label,
+        pct          : spongeResult.pct,
+        delta        : spongeResult.delta,
+      },
+      lotsRecalculated: lotUpdates.length,
+      lotUpdates,
+    })
+
+  } catch (e) {
+    return c.json({ error: String(e) }, 400)
+  }
+})
+
+// ── POST /api/iot/source-toggle ───────────────────────────────────
+// Switches a branch between WEATHER_API and IOT_SENSOR data source.
+// Body: { branchId: string, source: 'WEATHER_API' | 'IOT_SENSOR' }
+app.post('/api/iot/source-toggle', async (c) => {
+  try {
+    const body = await c.req.json() as { branchId: string; source: HumiditySource }
+    const { branchId, source } = body
+
+    if (!branchId) return c.json({ error: 'branchId is required' }, 400)
+    if (source !== 'WEATHER_API' && source !== 'IOT_SENSOR') {
+      return c.json({ error: 'source must be WEATHER_API or IOT_SENSOR' }, 400)
+    }
+
+    const branch = branches.find(b => b.id === branchId)
+    if (!branch) return c.json({ error: `Branch ${branchId} not found` }, 404)
+
+    const hasIotData = branch.iot_humidity !== null && branch.last_iot_reading_at !== null
+    const ageMs      = hasIotData
+      ? Date.now() - new Date(branch.last_iot_reading_at!).getTime()
+      : null
+    const isStale    = ageMs !== null && ageMs > IOT_STALE_THRESHOLD_MS
+
+    branch.humidity_source = source
+
+    const { rh: activeRH, stale } = resolveActiveRH(branch)
+    const sponge = calcSpongeCoefficientForBranch(branch)
+
+    return c.json({
+      ok            : true,
+      branchId      : branch.id,
+      branchName    : branch.name,
+      newSource     : source,
+      activeRH,
+      autoFallback  : stale,
+      warning       : source === 'IOT_SENSOR' && !hasIotData
+        ? 'No IoT reading received yet — will use WEATHER_API until first pulse arrives'
+        : source === 'IOT_SENSOR' && isStale
+        ? `IoT data is stale (${Math.round((ageMs! / 60000))} min old) — auto-fallback to WEATHER_API until fresh pulse`
+        : null,
+      sponge: {
+        coefficient: sponge.coefficient,
+        rule       : sponge.rule,
+        label      : sponge.label,
+        pct        : sponge.pct,
+      },
+      iotStatus: {
+        hasData            : hasIotData,
+        iot_humidity       : branch.iot_humidity,
+        iot_temperature    : branch.iot_temperature,
+        last_iot_reading_at: branch.last_iot_reading_at,
+        stale              : isStale,
+        iot_device_key     : branch.iot_device_key,
+      },
+    })
+  } catch (e) {
+    return c.json({ error: String(e) }, 400)
+  }
+})
+
+// ── GET /api/iot/status ───────────────────────────────────────────
+// Returns IoT status for all branches — useful for a monitoring dashboard.
+app.get('/api/iot/status', (c) => {
+  const now = Date.now()
+  const statuses = branches.map(b => {
+    const hasData = b.iot_humidity !== null && b.last_iot_reading_at !== null
+    const ageMs   = hasData ? now - new Date(b.last_iot_reading_at!).getTime() : null
+    const stale   = ageMs !== null && ageMs > IOT_STALE_THRESHOLD_MS
+    const { rh: activeRH, source: resolvedSource } = resolveActiveRH(b)
+    const sponge  = calcSpongeCoefficientForBranch(b)
+    return {
+      branchId            : b.id,
+      branchName          : b.name,
+      humidity_source     : b.humidity_source,
+      resolvedSource,
+      autoFallback        : b.humidity_source === 'IOT_SENSOR' && stale,
+      iot_device_key      : b.iot_device_key,
+      iot_humidity        : b.iot_humidity,
+      iot_temperature     : b.iot_temperature,
+      last_iot_reading_at : b.last_iot_reading_at,
+      iot_age_min         : ageMs !== null ? Math.round(ageMs / 60000) : null,
+      stale,
+      weather_humidity    : b.humidity,
+      weather_temperature : b.temperature,
+      activeRH,
+      sponge: {
+        coefficient: sponge.coefficient,
+        rule       : sponge.rule,
+        pct        : sponge.pct,
+        label      : sponge.label,
+      },
+    }
+  })
+  return c.json({ branches: statuses })
 })
 
 export default app

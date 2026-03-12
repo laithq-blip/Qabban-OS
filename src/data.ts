@@ -92,17 +92,59 @@ export const classifyRiskForPreset = (
   return 'CRITICAL'
 }
 
+// ─── IoT Humidity Source Enum ────────────────────────────────────────────────
+/** Determines which humidity reading the Sponge Effect engine uses. */
+export type HumiditySource = 'WEATHER_API' | 'IOT_SENSOR'
+
+/** Milliseconds before an IoT reading is considered stale (60 min) */
+export const IOT_STALE_THRESHOLD_MS = 60 * 60 * 1000   // 60 minutes
+
 export interface Branch {
   id:          string
   name:        string          // widened from union — supports user-added branches
   city:        string
   climateType: ClimateType
-  humidity:    number
-  temperature: number
-  lastChecked: string
+  humidity:    number          // weather-API humidity (always updated)
+  temperature: number          // weather-API temperature
+  lastChecked: string          // ISO timestamp of last weather-API sync
+
+  // ── Hybrid Humidity Model (IoT integration) ──────────────────────────────
+  /** Active data source. Defaults to WEATHER_API. */
+  humidity_source      : HumiditySource
+  /** UUID issued at branch creation; used to authenticate the physical sensor. */
+  iot_device_key       : string
+  /** Live RH% from the IoT sensor (null = never received). */
+  iot_humidity         : number | null
+  /** Live temperature from the IoT sensor (null = never received). */
+  iot_temperature      : number | null
+  /** ISO timestamp of the last successful IoT telemetry pulse. */
+  last_iot_reading_at  : string | null
+
   riskStatus:  'LOW' | 'MODERATE' | 'HIGH' | 'CRITICAL'
   activeLots:  number
   totalGreenKg: number
+}
+
+// ─── Helper: resolve the active RH for Sponge calculations ───────────────────
+/**
+ * Returns the humidity the Sponge Effect engine should use for a given branch.
+ * - If source is IOT_SENSOR AND data is fresh (< 60 min old) → iot_humidity
+ * - Otherwise falls back to weather-API humidity automatically.
+ */
+export function resolveActiveRH(branch: Branch): { rh: number; source: HumiditySource; stale: boolean } {
+  if (
+    branch.humidity_source === 'IOT_SENSOR' &&
+    branch.iot_humidity !== null &&
+    branch.last_iot_reading_at !== null
+  ) {
+    const ageMs = Date.now() - new Date(branch.last_iot_reading_at).getTime()
+    if (ageMs <= IOT_STALE_THRESHOLD_MS) {
+      return { rh: branch.iot_humidity, source: 'IOT_SENSOR', stale: false }
+    }
+    // Stale — fallback to weather API
+    return { rh: branch.humidity, source: 'WEATHER_API', stale: true }
+  }
+  return { rh: branch.humidity, source: 'WEATHER_API', stale: false }
 }
 
 // ─── Unified Tier System ────────────────────────────────────────────────────
@@ -374,6 +416,38 @@ export const calcSpongeCoefficient = (humidity: number): SpongeCoeffResult => {
 export const spongeCoeffForBranch = (humidity: number): number =>
   calcSpongeCoefficient(humidity).coefficient
 
+/**
+ * calcSpongeCoefficientForBranch (Hybrid Model)
+ * ────────────────────────────────────────────────────────────────────────────
+ * Resolves the active RH from a Branch object using the Hybrid Humidity Model:
+ *   1. If humidity_source === 'IOT_SENSOR' and a fresh reading exists → use iot_humidity
+ *   2. If IoT data is stale (> 60 min) → auto-fallback to weather-API humidity
+ *   3. If humidity_source === 'WEATHER_API' → always use weather-API humidity
+ *
+ * Returns the full SpongeCoeffResult plus resolved source metadata.
+ */
+export interface HybridSpongeResult extends SpongeCoeffResult {
+  /** Which data source was actually used for this calculation */
+  resolvedSource : HumiditySource
+  /** True when IoT was requested but data was too old → fell back to weather */
+  autoFallback   : boolean
+  /** The RH value that was fed into the engine */
+  activeRH       : number
+}
+
+export function calcSpongeCoefficientForBranch(branch: Branch): HybridSpongeResult {
+  const { rh, source, stale } = resolveActiveRH(branch)
+  const base = calcSpongeCoefficient(rh)
+  return {
+    ...base,
+    resolvedSource : source,
+    autoFallback   : stale,
+    activeRH       : rh,
+    // Enrich label with source context
+    label: `${base.label} [${source}${stale ? ' ⚠ Stale→Fallback' : ''}]`,
+  }
+}
+
 // ─── Shrinkage formula ─────────────────────────────────────────────────────
 // The baseline formula always uses 0.82.
 // For humidity-adjusted calculations use applyRoastShrinkageWithSponge().
@@ -454,10 +528,10 @@ export const calcLiveBalance = (
   requests: BeanRequest[],
   branchList: Branch[] = branches
 ): AggregateBalance => {
-  // Build a humidity lookup by branch name
+  // Build a humidity lookup by branch name — uses Hybrid Model (IoT or Weather API)
   const humidityByBranch = new Map<string, number>()
   for (const b of branchList) {
-    humidityByBranch.set(b.name, b.humidity)
+    humidityByBranch.set(b.name, resolveActiveRH(b).rh)
   }
 
   const dispatchedByLot = new Map<string, number>()
@@ -750,6 +824,12 @@ export const branches: Branch[] = [
     humidity:    45,
     temperature: 22,
     lastChecked: '2026-02-24 08:30',
+    // ── IoT ──
+    humidity_source     : 'WEATHER_API',
+    iot_device_key      : 'dkey-ruh-0a1b2c3d-4e5f-6789-abcd-ef0123456789',
+    iot_humidity        : null,
+    iot_temperature     : null,
+    last_iot_reading_at : null,
     riskStatus:  'LOW',
     activeLots:  coffeeLots.filter(l => l.branch === 'Riyadh').length,
     totalGreenKg: coffeeLots.filter(l => l.branch === 'Riyadh').reduce((s, l) => s + l.greenWeightKg, 0),
@@ -762,6 +842,12 @@ export const branches: Branch[] = [
     humidity:    68,
     temperature: 26,
     lastChecked: '2026-02-24 08:28',
+    // ── IoT ──
+    humidity_source     : 'WEATHER_API',
+    iot_device_key      : 'dkey-jed-1f2e3d4c-5b6a-7890-bcde-fa1234567890',
+    iot_humidity        : null,
+    iot_temperature     : null,
+    last_iot_reading_at : null,
     riskStatus:  'CRITICAL',
     activeLots:  coffeeLots.filter(l => l.branch === 'Jeddah').length,
     totalGreenKg: coffeeLots.filter(l => l.branch === 'Jeddah').reduce((s, l) => s + l.greenWeightKg, 0),
@@ -774,6 +860,12 @@ export const branches: Branch[] = [
     humidity:    80,
     temperature: 28,
     lastChecked: '2026-02-24 08:25',
+    // ── IoT ──
+    humidity_source     : 'WEATHER_API',
+    iot_device_key      : 'dkey-dmm-2a3b4c5d-6e7f-8901-cdef-ab2345678901',
+    iot_humidity        : null,
+    iot_temperature     : null,
+    last_iot_reading_at : null,
     riskStatus:  'CRITICAL',
     activeLots:  coffeeLots.filter(l => l.branch === 'Dammam').length,
     totalGreenKg: coffeeLots.filter(l => l.branch === 'Dammam').reduce((s, l) => s + l.greenWeightKg, 0),
@@ -992,8 +1084,9 @@ export const calcPortfolioFinancials = (
   overrideDefaultMargin?: number,
   forceMargin?: number,           // when set, overrides ALL per-lot targetMargins
 ): PortfolioFinancials => {
+  // Build a humidity lookup by branch name — uses Hybrid Model (IoT or Weather API)
   const humidityByBranch = new Map<string, number>()
-  for (const b of branchList) humidityByBranch.set(b.name, b.humidity)
+  for (const b of branchList) humidityByBranch.set(b.name, resolveActiveRH(b).rh)
 
   const activeLots = lots.filter(l => l.status !== 'RECALLED')
   const byLot: LotFinancials[] = []
