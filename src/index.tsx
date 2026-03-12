@@ -80,6 +80,15 @@ import {
   type RateLock,
   type LandedPriceBreakdown,
   type ZatcaInvoice,
+  // ── Qabban Pulse ─────────────────────────────────────────────────
+  wasteLogs,
+  pulseRecons,
+  pulseId,
+  calcTheoreticalUsage,
+  calcFinancialLoss,
+  PULSE_BEAN_MAP,
+  type WasteLog,
+  type PulseReconciliation,
 } from './data'
 
 const app = new Hono()
@@ -1823,6 +1832,7 @@ function adminLayout(pageTitle: string, activeNav: string, content: string, pend
     { href: '/admin/finance',   icon: 'fa-chart-line',    label: 'Finance',         id: 'finance',    i18n: 'fin.nav'       },
     { href: '/admin/requests',  icon: 'fa-bell',          label: 'Bean Requests',   id: 'requests',   i18n: 'nav.requests'  },
     { href: '/exchange',        icon: 'fa-globe',         label: 'Global Exchange', id: 'exchange',   i18n: 'nav.exchange'  },
+    { href: '/admin/pulse',     icon: 'fa-wave-square',   label: 'Pulse',           id: 'pulse',      i18n: 'nav.pulse'     },
   ]
   const body = `
   <header class="topbar">
@@ -9972,5 +9982,802 @@ app.get('/api/exchange/analytics', (c) => {
 // ── GET /manual — User Manual ──────────────────────────────────────
 // wrangler pages dev serves public/static/manual.html at /static/manual
 app.get('/manual', (c) => c.redirect('/static/manual', 301))
+
+// ══════════════════════════════════════════════════════════════════
+//  QABBAN PULSE — Barista Waste Tracking Module
+//  Routes:
+//    GET  /admin/pulse              — Dashboard UI
+//    POST /api/pulse/waste-log      — Append Acaia scale reading
+//    GET  /api/pulse/logs           — Fetch waste logs (filter by branchId/sessionId)
+//    POST /api/pulse/sync           — Foodics POS sync + reconciliation
+//    GET  /api/pulse/reconciliations— List past reconciliations
+// ══════════════════════════════════════════════════════════════════
+
+// ── POST /api/pulse/waste-log ─────────────────────────────────────
+// Body: { branchId, sessionId, weightGrams, stable }
+app.post('/api/pulse/waste-log', async (c) => {
+  try {
+    const body = await c.req.json() as {
+      branchId    : string
+      sessionId   : string
+      weightGrams : number
+      stable?     : boolean
+    }
+    if (!body.branchId || !body.sessionId || typeof body.weightGrams !== 'number') {
+      return c.json({ error: 'branchId, sessionId, and weightGrams are required' }, 400)
+    }
+    const log: WasteLog = {
+      id          : pulseId('WL'),
+      sessionId   : body.sessionId,
+      branchId    : body.branchId,
+      weightGrams : Math.round(body.weightGrams * 10) / 10,
+      stable      : body.stable ?? true,
+      loggedAt    : new Date().toISOString(),
+    }
+    wasteLogs.push(log)
+    return c.json({ ok: true, log })
+  } catch (e) {
+    return c.json({ error: String(e) }, 400)
+  }
+})
+
+// ── GET /api/pulse/logs ───────────────────────────────────────────
+// Query: ?branchId=BR-001&sessionId=DI-xxx&limit=200
+app.get('/api/pulse/logs', (c) => {
+  const branchId  = c.req.query('branchId')
+  const sessionId = c.req.query('sessionId')
+  const limit     = Math.min(parseInt(c.req.query('limit') ?? '200'), 1000)
+
+  let list = [...wasteLogs]
+  if (branchId)  list = list.filter(l => l.branchId  === branchId)
+  if (sessionId) list = list.filter(l => l.sessionId === sessionId)
+
+  // Most-recent first
+  list.sort((a, b) => b.loggedAt.localeCompare(a.loggedAt))
+  list = list.slice(0, limit)
+
+  const totalGrams = list.reduce((s, l) => s + l.weightGrams, 0)
+  return c.json({ count: list.length, totalGrams: Math.round(totalGrams * 10) / 10, logs: list })
+})
+
+// ── POST /api/pulse/sync ──────────────────────────────────────────
+// Pulls Foodics POS orders for a branch+date, computes reconciliation,
+// optionally pushes inventory adjustment back to Foodics.
+//
+// Body: {
+//   branchId        : string      — e.g. "BR-001"
+//   periodDate      : string      — ISO "YYYY-MM-DD"
+//   foodicsApiKey   : string      — Foodics API key (passed from client)
+//   pushAdjustment  : boolean     — whether to push inventory adj to Foodics
+//   sessionId?      : string      — filter wasteLogs to this session only
+// }
+app.post('/api/pulse/sync', async (c) => {
+  try {
+    const body = await c.req.json() as {
+      branchId       : string
+      periodDate     : string
+      foodicsApiKey  : string
+      pushAdjustment?: boolean
+      sessionId?     : string
+    }
+    const { branchId, periodDate, foodicsApiKey, pushAdjustment = false, sessionId } = body
+
+    if (!branchId || !periodDate || !foodicsApiKey) {
+      return c.json({ error: 'branchId, periodDate, and foodicsApiKey are required' }, 400)
+    }
+
+    // ── 1. Pull Foodics orders for the day ──────────────────────────
+    // Foodics Orders API v2: GET /orders?filters[business_date]={date}&filters[branch_id]={id}
+    // We request the first page (up to 50 orders), following pagination if needed.
+    const FOODICS_BASE = 'https://api.foodics.com/api/v5'
+    const orderItems: { productName: string; quantity: number }[] = []
+    let foodicsOrderCount = 0
+    let adjustmentId      = 'N/A'
+
+    try {
+      const foodicsRes = await fetch(
+        `${FOODICS_BASE}/orders?filters[business_date]=${periodDate}&filters[branch_id]=${branchId}&per_page=100`,
+        {
+          headers: {
+            Authorization : `Bearer ${foodicsApiKey}`,
+            'Content-Type': 'application/json',
+            Accept        : 'application/json',
+          },
+        }
+      )
+      if (foodicsRes.ok) {
+        const payload = await foodicsRes.json() as {
+          data?: {
+            products?: { name: string; quantity: number }[]
+          }[]
+        }
+        const orders = payload.data ?? []
+        foodicsOrderCount = orders.length
+        for (const order of orders) {
+          for (const product of (order.products ?? [])) {
+            // Only espresso-based drinks
+            const g = PULSE_BEAN_MAP[product.name]
+            if (g !== undefined) {
+              orderItems.push({ productName: product.name, quantity: product.quantity ?? 1 })
+            }
+          }
+        }
+      }
+    } catch {
+      // Network/auth error — continue with zero theoretical usage so we still save IoT data
+    }
+
+    // ── 2. Compute theoretical usage ────────────────────────────────
+    const theoreticalUsage = calcTheoreticalUsage(orderItems)
+
+    // ── 3. Sum actual IoT readings ───────────────────────────────────
+    let iotLogs = wasteLogs.filter(l => l.branchId === branchId)
+    if (sessionId) iotLogs = iotLogs.filter(l => l.sessionId === sessionId)
+    // Filter to same day if loggedAt date matches periodDate
+    iotLogs = iotLogs.filter(l => l.loggedAt.startsWith(periodDate))
+    const actualUsageIot = Math.round(iotLogs.reduce((s, l) => s + l.weightGrams, 0) * 10) / 10
+
+    // ── 4. Variance & financial loss ────────────────────────────────
+    const variance = Math.round((actualUsageIot - theoreticalUsage) * 10) / 10
+
+    // Get cost per kg from the branch's active coffee lot (first available lot)
+    const activeLot    = coffeeLots.find(l => l.status === 'OPTIMAL' || l.status === 'MONITOR') ?? coffeeLots[0]
+    const costPerKgSar = activeLot
+      ? Math.round((activeLot.costPerKg ?? 48) * (lastKnownUsdToSar || 3.75) * 100) / 100
+      : 180   // SAR fallback
+
+    const financialLossSar = calcFinancialLoss(variance, costPerKgSar)
+
+    // ── 5. Push inventory adjustment to Foodics (if requested) ──────
+    if (pushAdjustment && variance !== 0 && foodicsApiKey) {
+      try {
+        // Foodics Quantity Adjustment endpoint:
+        // POST /inventory_transactions with type = "waste" and quantity in kg
+        const adjRes = await fetch(`${FOODICS_BASE}/inventory_transactions`, {
+          method : 'POST',
+          headers: {
+            Authorization : `Bearer ${foodicsApiKey}`,
+            'Content-Type': 'application/json',
+            Accept        : 'application/json',
+          },
+          body: JSON.stringify({
+            type         : 'waste',
+            branch_id    : branchId,
+            reference    : `PULSE-${periodDate}`,
+            quantity     : Math.abs(variance) / 1000,  // grams → kg
+            unit         : 'kg',
+            notes        : `Qabban Pulse reconciliation — variance: ${variance > 0 ? '+' : ''}${variance}g`,
+          }),
+        })
+        if (adjRes.ok) {
+          const adjPayload = await adjRes.json() as { data?: { id?: string } }
+          adjustmentId = adjPayload?.data?.id ?? 'ADJ-OK'
+        }
+      } catch {
+        adjustmentId = 'ADJ-FAILED'
+      }
+    }
+
+    // ── 6. Save reconciliation record ───────────────────────────────
+    const recon: PulseReconciliation = {
+      id               : pulseId('PR'),
+      branchId,
+      periodDate,
+      theoreticalUsage,
+      actualUsageIot,
+      variance,
+      financialLossSar,
+      costPerKgSar,
+      foodicsOrderCount,
+      adjustmentPushed : pushAdjustment && variance !== 0,
+      adjustmentId,
+      createdAt        : new Date().toISOString(),
+    }
+    pulseRecons.push(recon)
+
+    return c.json({ ok: true, reconciliation: recon })
+  } catch (e) {
+    return c.json({ error: String(e) }, 400)
+  }
+})
+
+// ── GET /api/pulse/reconciliations ───────────────────────────────
+// Query: ?branchId=BR-001&limit=50
+app.get('/api/pulse/reconciliations', (c) => {
+  const branchId = c.req.query('branchId')
+  const limit    = Math.min(parseInt(c.req.query('limit') ?? '50'), 200)
+
+  let list = [...pulseRecons]
+  if (branchId) list = list.filter(r => r.branchId === branchId)
+  list.sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+  list = list.slice(0, limit)
+
+  const totalLoss = list.reduce((s, r) => s + r.financialLossSar, 0)
+  return c.json({ count: list.length, totalFinancialLossSar: Math.round(totalLoss * 100) / 100, reconciliations: list })
+})
+
+// ── GET /admin/pulse — Pulse Dashboard ───────────────────────────
+app.get('/admin/pulse', (c) => {
+  // Snapshot numbers for the top cards
+  const totalWasteLogs = wasteLogs.length
+  const totalIotGrams  = Math.round(wasteLogs.reduce((s, l) => s + l.weightGrams, 0) * 10) / 10
+  const lastRecon      = pulseRecons.length > 0 ? pulseRecons[pulseRecons.length - 1] : null
+
+  const recentLogs = [...wasteLogs]
+    .sort((a, b) => b.loggedAt.localeCompare(a.loggedAt))
+    .slice(0, 30)
+
+  const recentRecons = [...pulseRecons]
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    .slice(0, 10)
+
+  const branchOptions = branches.map(b =>
+    `<option value="${b.id}">${b.name}</option>`
+  ).join('')
+
+  const logsTableRows = recentLogs.length === 0
+    ? `<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:24px">No waste logs yet — connect scale and start Dial-in Mode</td></tr>`
+    : recentLogs.map(l => `
+      <tr>
+        <td style="font-family:var(--font-mono);font-size:11px">${l.id}</td>
+        <td>${l.branchId}</td>
+        <td>${l.sessionId}</td>
+        <td style="font-family:var(--font-mono);color:var(--amber);font-weight:600">${l.weightGrams.toFixed(1)} g</td>
+        <td style="color:${l.stable ? 'var(--green)' : 'var(--red)'}">${l.stable ? '✔ Stable' : '~ Live'}</td>
+        <td style="font-size:11px;color:var(--text-muted)">${new Date(l.loggedAt).toLocaleString('en-SA')}</td>
+      </tr>`).join('')
+
+  const reconTableRows = recentRecons.length === 0
+    ? `<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:24px">No reconciliations yet</td></tr>`
+    : recentRecons.map(r => {
+        const varClass = r.variance > 50 ? 'var(--red)' : r.variance < -50 ? '#60a5fa' : 'var(--green)'
+        return `<tr>
+          <td style="font-size:11px;color:var(--text-muted)">${r.periodDate}</td>
+          <td>${r.branchId}</td>
+          <td style="font-family:var(--font-mono)">${r.theoreticalUsage.toFixed(0)} g</td>
+          <td style="font-family:var(--font-mono);color:var(--amber)">${r.actualUsageIot.toFixed(1)} g</td>
+          <td style="font-family:var(--font-mono);font-weight:700;color:${varClass}">${r.variance > 0 ? '+' : ''}${r.variance.toFixed(1)} g</td>
+          <td style="font-family:var(--font-mono);color:var(--red)">${r.financialLossSar > 0 ? `${r.financialLossSar.toFixed(2)} SAR` : '—'}</td>
+          <td style="color:${r.adjustmentPushed ? 'var(--green)' : 'var(--text-muted)'}">
+            ${r.adjustmentPushed ? `<i class="fa fa-check-circle"></i> ${r.adjustmentId}` : '—'}
+          </td>
+        </tr>`
+      }).join('')
+
+  const content = `
+<!-- ── QABBAN PULSE STYLES ─────────────────────────────────────── -->
+<style>
+  .pulse-gauge {
+    position:relative; width:220px; height:220px; margin:0 auto;
+  }
+  .gauge-svg { width:220px; height:220px; }
+  .gauge-bg { fill:none; stroke:#1e293b; stroke-width:18; }
+  .gauge-arc {
+    fill:none; stroke:var(--amber); stroke-width:18;
+    stroke-linecap:round;
+    stroke-dasharray: 565; /* circumference of r=90: 2π×90 ≈ 565 */
+    stroke-dashoffset: 565;
+    transition: stroke-dashoffset 0.4s ease;
+    transform-origin: center;
+    transform: rotate(-90deg);
+  }
+  .gauge-center {
+    position:absolute; top:50%; left:50%;
+    transform:translate(-50%,-50%);
+    text-align:center; pointer-events:none;
+  }
+  .gauge-weight {
+    font-family:var(--font-mono); font-size:34px; font-weight:700;
+    color:var(--amber); line-height:1;
+  }
+  .gauge-unit { font-size:13px; color:var(--text-muted); margin-top:2px; }
+  .gauge-stable { font-size:11px; margin-top:4px; }
+  .pulse-ring {
+    display:inline-block; width:8px; height:8px; border-radius:50%;
+    background:var(--green); animation: pulseRing 1.2s ease-in-out infinite;
+    vertical-align:middle; margin-right:4px;
+  }
+  @keyframes pulseRing { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.4;transform:scale(1.4)} }
+  .dial-active { border-color:var(--red) !important; }
+  .btn-bluetooth { background:linear-gradient(135deg,#1d4ed8,#3b82f6); }
+  .btn-dialing    { background:linear-gradient(135deg,#b91c1c,#ef4444); }
+  .btn-foodics    { background:linear-gradient(135deg,#065f46,#10b981); }
+  .weight-history { display:flex; gap:3px; align-items:flex-end; height:40px; margin-top:8px; }
+  .wh-bar {
+    flex:1; background:var(--amber); border-radius:2px 2px 0 0; opacity:0.7;
+    min-width:4px; transition:height 0.2s;
+  }
+  .sim-hint { font-size:10px; color:var(--text-muted); text-align:center; margin-top:6px; }
+</style>
+
+<!-- ── TOP STAT CARDS ─────────────────────────────────────────── -->
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:24px">
+  <div class="card" style="padding:20px">
+    <div class="card-label" style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted)">Scale Readings</div>
+    <div style="font-size:28px;font-weight:700;font-family:var(--font-mono);color:var(--amber)">${totalWasteLogs}</div>
+    <div style="font-size:11px;color:var(--text-muted);margin-top:4px">${totalIotGrams.toFixed(1)} g total logged</div>
+  </div>
+  <div class="card" style="padding:20px">
+    <div class="card-label" style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted)">Reconciliations</div>
+    <div style="font-size:28px;font-weight:700;font-family:var(--font-mono);color:var(--green)">${pulseRecons.length}</div>
+    <div style="font-size:11px;color:var(--text-muted);margin-top:4px">${lastRecon ? `Last: ${lastRecon.periodDate}` : 'None yet'}</div>
+  </div>
+  <div class="card" style="padding:20px">
+    <div class="card-label" style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted)">Last Variance</div>
+    <div style="font-size:28px;font-weight:700;font-family:var(--font-mono);color:${lastRecon && lastRecon.variance > 50 ? 'var(--red)' : 'var(--green)'}">
+      ${lastRecon ? `${lastRecon.variance > 0 ? '+' : ''}${lastRecon.variance.toFixed(1)}g` : '—'}
+    </div>
+    <div style="font-size:11px;color:var(--text-muted);margin-top:4px">${lastRecon && lastRecon.financialLossSar > 0 ? `≈ ${lastRecon.financialLossSar.toFixed(2)} SAR lost` : 'No loss recorded'}</div>
+  </div>
+  <div class="card" style="padding:20px">
+    <div class="card-label" style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted)">Foodics Adjustments</div>
+    <div style="font-size:28px;font-weight:700;font-family:var(--font-mono);color:#60a5fa">
+      ${pulseRecons.filter(r => r.adjustmentPushed).length}
+    </div>
+    <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Pushed to Foodics POS</div>
+  </div>
+</div>
+
+<!-- ── MAIN TWO-COLUMN LAYOUT ─────────────────────────────────── -->
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:24px">
+
+  <!-- LEFT: Live Scale / Dial-in Mode -->
+  <div class="card" id="scale-card" style="padding:24px">
+    <div class="card-hdr" style="margin-bottom:18px">
+      <i class="fa fa-scale-balanced" style="color:var(--amber)"></i>
+      Acaia Scale — Live Weight
+      <span id="bt-status" style="margin-left:auto;font-size:11px;font-family:var(--font-mono);color:var(--text-muted)">
+        <i class="fa fa-circle" style="font-size:8px"></i> Disconnected
+      </span>
+    </div>
+
+    <!-- Gauge -->
+    <div class="pulse-gauge" id="gauge-wrap">
+      <svg class="gauge-svg" viewBox="0 0 220 220">
+        <circle class="gauge-bg" cx="110" cy="110" r="90"/>
+        <circle class="gauge-arc" id="gauge-arc" cx="110" cy="110" r="90"/>
+      </svg>
+      <div class="gauge-center">
+        <div class="gauge-weight" id="gauge-weight">0.0</div>
+        <div class="gauge-unit">grams</div>
+        <div class="gauge-stable" id="gauge-stable" style="color:var(--text-muted)">—</div>
+      </div>
+    </div>
+
+    <!-- Mini bar-chart history -->
+    <div class="weight-history" id="wh-bars"></div>
+    <div class="sim-hint" id="sim-hint">Connect Acaia scale via Bluetooth · Chrome/Edge required</div>
+
+    <!-- Controls -->
+    <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap">
+      <button id="btn-bt-connect" class="btn btn-bluetooth" onclick="pulseConnectBt()" style="flex:1;min-width:120px">
+        <i class="fa fa-bluetooth"></i> Connect Scale
+      </button>
+      <button id="btn-bt-tare" class="btn" onclick="pulseTare()" disabled style="flex:1;min-width:80px;background:#334155">
+        <i class="fa fa-arrows-to-dot"></i> Tare
+      </button>
+      <button id="btn-simulate" class="btn" onclick="pulseSimulate()" style="flex:1;min-width:100px;background:#334155;font-size:11px">
+        <i class="fa fa-flask"></i> Simulate
+      </button>
+    </div>
+
+    <!-- Branch selector & Dial-in -->
+    <div style="margin-top:16px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <select id="pulse-branch" style="flex:1;background:#0f172a;color:var(--text);border:1px solid var(--border);border-radius:4px;padding:6px 10px;font-family:var(--font-mono);font-size:12px">
+        ${branchOptions}
+      </select>
+      <button id="btn-dialin" class="btn btn-dialing" onclick="pulseToggleDialIn()" style="flex:1;min-width:120px">
+        <i class="fa fa-record-vinyl"></i> Dial-in Mode
+      </button>
+    </div>
+
+    <!-- Session stats -->
+    <div id="session-stats" style="margin-top:12px;padding:10px;background:#0f172a;border-radius:6px;font-size:12px;display:none">
+      <span style="color:var(--text-muted)">Session:</span>
+      <span id="sess-id" style="font-family:var(--font-mono);color:var(--amber);font-size:11px"></span><br/>
+      <span style="color:var(--text-muted)">Readings:</span>
+      <span id="sess-count" style="font-family:var(--font-mono);font-weight:700">0</span>
+      <span style="margin-left:12px;color:var(--text-muted)">Total:</span>
+      <span id="sess-total" style="font-family:var(--font-mono);font-weight:700;color:var(--amber)">0.0 g</span>
+    </div>
+  </div>
+
+  <!-- RIGHT: Foodics Sync -->
+  <div class="card" style="padding:24px">
+    <div class="card-hdr" style="margin-bottom:18px">
+      <i class="fa fa-rotate" style="color:var(--green)"></i>
+      Foodics POS Sync
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <div>
+        <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:4px">Foodics API Key</label>
+        <input id="foodics-key" type="password" placeholder="Bearer token from Foodics Console"
+          style="width:100%;box-sizing:border-box;background:#0f172a;color:var(--text);border:1px solid var(--border);border-radius:4px;padding:8px 12px;font-family:var(--font-mono);font-size:12px"/>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div>
+          <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:4px">Branch ID</label>
+          <select id="sync-branch" style="width:100%;box-sizing:border-box;background:#0f172a;color:var(--text);border:1px solid var(--border);border-radius:4px;padding:6px 10px;font-family:var(--font-mono);font-size:12px">
+            ${branchOptions}
+          </select>
+        </div>
+        <div>
+          <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:4px">Date</label>
+          <input id="sync-date" type="date" value="${new Date().toISOString().slice(0, 10)}"
+            style="width:100%;box-sizing:border-box;background:#0f172a;color:var(--text);border:1px solid var(--border);border-radius:4px;padding:6px 10px;font-family:var(--font-mono);font-size:12px"/>
+        </div>
+      </div>
+      <label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer">
+        <input id="push-adj" type="checkbox"/>
+        <span>Push inventory adjustment to Foodics after sync</span>
+      </label>
+
+      <button id="btn-sync" class="btn btn-foodics" onclick="pulseFoodicsSync()" style="width:100%;padding:12px">
+        <i class="fa fa-rotate"></i> Sync with Foodics
+      </button>
+
+      <!-- Sync result -->
+      <div id="sync-result" style="display:none;padding:14px;background:#0f172a;border-radius:6px;font-size:12px;border:1px solid var(--border)">
+        <div style="font-weight:600;color:var(--green);margin-bottom:8px"><i class="fa fa-check-circle"></i> Reconciliation Complete</div>
+        <table style="width:100%;border-collapse:collapse">
+          <tr><td style="color:var(--text-muted);padding:3px 0">Theoretical Usage:</td><td id="sr-theoretical" style="text-align:right;font-family:var(--font-mono)">—</td></tr>
+          <tr><td style="color:var(--text-muted);padding:3px 0">Actual IoT Usage:</td><td id="sr-actual" style="text-align:right;font-family:var(--font-mono);color:var(--amber)">—</td></tr>
+          <tr style="border-top:1px solid var(--border)"><td style="color:var(--text-muted);padding:3px 0">Variance:</td><td id="sr-variance" style="text-align:right;font-family:var(--font-mono);font-weight:700">—</td></tr>
+          <tr><td style="color:var(--text-muted);padding:3px 0">Financial Loss:</td><td id="sr-loss" style="text-align:right;font-family:var(--font-mono);color:var(--red)">—</td></tr>
+          <tr><td style="color:var(--text-muted);padding:3px 0">Foodics Orders:</td><td id="sr-orders" style="text-align:right;font-family:var(--font-mono)">—</td></tr>
+          <tr><td style="color:var(--text-muted);padding:3px 0">Adjustment:</td><td id="sr-adj" style="text-align:right;font-family:var(--font-mono)">—</td></tr>
+        </table>
+      </div>
+
+      <!-- Drink map reference -->
+      <details style="margin-top:8px">
+        <summary style="font-size:11px;color:var(--text-muted);cursor:pointer">
+          <i class="fa fa-coffee"></i> Bean-to-Drink Map (${Object.keys(PULSE_BEAN_MAP).length - 1} drinks)
+        </summary>
+        <div style="margin-top:8px;display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:11px">
+          ${Object.entries(PULSE_BEAN_MAP).filter(([k]) => k !== 'default').map(([name, g]) =>
+            `<div style="display:flex;justify-content:space-between;padding:3px 6px;background:#0f172a;border-radius:3px">
+              <span>${name}</span><span style="font-family:var(--font-mono);color:var(--amber)">${g}g</span>
+            </div>`
+          ).join('')}
+        </div>
+      </details>
+    </div>
+  </div>
+</div>
+
+<!-- ── WASTE LOGS TABLE ────────────────────────────────────────── -->
+<div class="card" style="padding:24px;margin-bottom:20px">
+  <div class="card-hdr" style="margin-bottom:16px">
+    <i class="fa fa-list-ul" style="color:var(--amber)"></i>
+    Recent Waste Logs
+    <span style="margin-left:auto;font-size:11px;font-family:var(--font-mono);color:var(--text-muted)">${totalWasteLogs} total</span>
+    <button onclick="location.reload()" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:12px;margin-left:8px" title="Refresh">
+      <i class="fa fa-refresh"></i>
+    </button>
+  </div>
+  <div style="overflow-x:auto">
+    <table style="width:100%;border-collapse:collapse;font-size:12px">
+      <thead>
+        <tr style="border-bottom:1px solid var(--border)">
+          <th style="text-align:left;padding:6px 8px;color:var(--text-muted);font-weight:500">ID</th>
+          <th style="text-align:left;padding:6px 8px;color:var(--text-muted);font-weight:500">Branch</th>
+          <th style="text-align:left;padding:6px 8px;color:var(--text-muted);font-weight:500">Session</th>
+          <th style="text-align:left;padding:6px 8px;color:var(--text-muted);font-weight:500">Weight</th>
+          <th style="text-align:left;padding:6px 8px;color:var(--text-muted);font-weight:500">Status</th>
+          <th style="text-align:left;padding:6px 8px;color:var(--text-muted);font-weight:500">Logged At</th>
+        </tr>
+      </thead>
+      <tbody id="logs-tbody">
+        ${logsTableRows}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ── RECONCILIATION HISTORY TABLE ──────────────────────────── -->
+<div class="card" style="padding:24px">
+  <div class="card-hdr" style="margin-bottom:16px">
+    <i class="fa fa-chart-bar" style="color:var(--green)"></i>
+    Reconciliation History
+  </div>
+  <div style="overflow-x:auto">
+    <table style="width:100%;border-collapse:collapse;font-size:12px">
+      <thead>
+        <tr style="border-bottom:1px solid var(--border)">
+          <th style="text-align:left;padding:6px 8px;color:var(--text-muted);font-weight:500">Date</th>
+          <th style="text-align:left;padding:6px 8px;color:var(--text-muted);font-weight:500">Branch</th>
+          <th style="text-align:left;padding:6px 8px;color:var(--text-muted);font-weight:500">Theoretical</th>
+          <th style="text-align:left;padding:6px 8px;color:var(--text-muted);font-weight:500">Actual IoT</th>
+          <th style="text-align:left;padding:6px 8px;color:var(--text-muted);font-weight:500">Variance</th>
+          <th style="text-align:left;padding:6px 8px;color:var(--text-muted);font-weight:500">Loss (SAR)</th>
+          <th style="text-align:left;padding:6px 8px;color:var(--text-muted);font-weight:500">Foodics Adj</th>
+        </tr>
+      </thead>
+      <tbody>${reconTableRows}</tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ── CLIENT-SIDE PULSE ENGINE ─────────────────────────────── -->
+<script>
+// ════════════════════════════════════════════════════════════════
+//  Qabban Pulse — Browser Engine
+//  Uses the AcaiaLink protocol inline (no module bundler needed).
+// ════════════════════════════════════════════════════════════════
+
+const ACAIA_SERVICE_UUID        = '0000ffe0-0000-1000-8000-00805f9b34fb'
+const ACAIA_CHARACTERISTIC_UUID = '0000ffe1-0000-1000-8000-00805f9b34fb'
+const ACAIA_MSG_WEIGHT    = 0x0b
+const ACAIA_HEADER_1      = 0xef
+const ACAIA_HEADER_2      = 0xdd
+const HEARTBEAT_CMD = new Uint8Array([0xef,0xdd,0x00,0x02,0x00,0x02,0x00,0x05,0x0f])
+const TARE_CMD      = new Uint8Array([0xef,0xdd,0x04,0x02,0x00,0x00,0x00,0x05,0x0b])
+const MAX_GAUGE_GRAMS = 200   // full-scale = 200 g
+
+let _btDevice=null, _btChar=null, _btConnected=false, _hbTimer=null
+let _parseBuffer=[], _lastWeightTs=0
+const MIN_INTERVAL_MS = 200
+
+// Dial-in state
+let _dialIn=false, _dialInSession='', _dialInCount=0, _dialInTotal=0.0
+
+// Weight history (last 20 readings)
+let _history=[]
+
+// ─ Gauge update ──────────────────────────────────────────────────
+function updateGauge(grams, stable) {
+  document.getElementById('gauge-weight').textContent = grams.toFixed(1)
+  const pct = Math.min(Math.max(grams / MAX_GAUGE_GRAMS, 0), 1)
+  const circumference = 2 * Math.PI * 90  // ≈ 565
+  const offset = circumference * (1 - pct)
+  const arc = document.getElementById('gauge-arc')
+  if (arc) arc.style.strokeDashoffset = offset.toFixed(1)
+  const color = grams > 150 ? 'var(--red)' : grams > 80 ? 'var(--amber)' : 'var(--green)'
+  if (arc) arc.style.stroke = color
+  document.getElementById('gauge-weight').style.color = color
+  const stEl = document.getElementById('gauge-stable')
+  if (stEl) {
+    stEl.textContent = stable ? '✔ Stable' : '~ Settling...'
+    stEl.style.color = stable ? 'var(--green)' : 'var(--amber)'
+  }
+  // history bars
+  _history.push(grams)
+  if (_history.length > 20) _history.shift()
+  const maxH = Math.max(..._history, 1)
+  const barsEl = document.getElementById('wh-bars')
+  if (barsEl) {
+    barsEl.innerHTML = _history.map(h => {
+      const pctH = (h / maxH * 100).toFixed(0)
+      return '<div class="wh-bar" style="height:' + pctH + '%"></div>'
+    }).join('')
+  }
+}
+
+// ─ BT Status badge ───────────────────────────────────────────────
+function setBtStatus(connected) {
+  const el = document.getElementById('bt-status')
+  const scaleCard = document.getElementById('scale-card')
+  if (connected) {
+    el.innerHTML = '<span class="pulse-ring"></span> Connected'
+    el.style.color = 'var(--green)'
+    document.getElementById('btn-bt-connect').textContent = '⎋ Disconnect'
+    document.getElementById('btn-bt-tare').disabled = false
+    if (scaleCard) scaleCard.style.borderColor = 'rgba(16,185,129,0.4)'
+    document.getElementById('sim-hint').style.display = 'none'
+  } else {
+    el.innerHTML = '<i class="fa fa-circle" style="font-size:8px"></i> Disconnected'
+    el.style.color = 'var(--text-muted)'
+    document.getElementById('btn-bt-connect').innerHTML = '<i class="fa fa-bluetooth"></i> Connect Scale'
+    document.getElementById('btn-bt-tare').disabled = true
+    if (scaleCard) scaleCard.style.borderColor = ''
+    document.getElementById('sim-hint').style.display = 'block'
+  }
+}
+
+// ─ Packet parser ─────────────────────────────────────────────────
+function drainBuffer() {
+  while (_parseBuffer.length >= 7) {
+    const h1 = _parseBuffer.indexOf(ACAIA_HEADER_1)
+    if (h1 === -1) { _parseBuffer = []; return }
+    if (h1 > 0) _parseBuffer.splice(0, h1)
+    if (_parseBuffer.length < 4) return
+    if (_parseBuffer[1] !== ACAIA_HEADER_2) { _parseBuffer.splice(0,1); continue }
+    const msgType = _parseBuffer[2]
+    const payloadLen = _parseBuffer[3]
+    const totalLen = 4 + payloadLen + 1
+    if (_parseBuffer.length < totalLen) return
+    const packet = new Uint8Array(_parseBuffer.splice(0, totalLen))
+    if (msgType === ACAIA_MSG_WEIGHT && packet.length >= 9) parseWeightPacket(packet)
+  }
+}
+
+function parseWeightPacket(packet) {
+  const now = performance.now()
+  if (now - _lastWeightTs < MIN_INTERVAL_MS) return
+  _lastWeightTs = now
+  const rawInt = (packet[5] << 8) | packet[4]
+  const signed = rawInt > 0x7FFF ? rawInt - 0x10000 : rawInt
+  const grams  = Math.round(signed) / 10
+  const stable = Boolean(packet[7] & 0x01)
+  updateGauge(grams, stable)
+
+  // Dial-in: log stable positive readings
+  if (_dialIn && stable && grams > 0) {
+    _dialInCount++
+    _dialInTotal = Math.round((_dialInTotal + grams) * 10) / 10
+    updateSessionStats()
+    // POST to backend
+    const branchId = document.getElementById('pulse-branch').value
+    fetch('/api/pulse/waste-log', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ branchId, sessionId: _dialInSession, weightGrams: grams, stable: true })
+    }).catch(()=>{})
+  }
+}
+
+function onCharChanged(ev) {
+  const view = ev.target.value
+  if (!view) return
+  const raw = []
+  for (let i=0;i<view.byteLength;i++) raw.push(view.getUint8(i))
+  _parseBuffer.push(...raw)
+  drainBuffer()
+}
+
+function startHeartbeat() {
+  stopHeartbeat()
+  _hbTimer = setInterval(async () => {
+    if (!_btChar || !_btConnected) return
+    try { await _btChar.writeValue(HEARTBEAT_CMD) } catch(e){}
+  }, 2800)
+}
+function stopHeartbeat() { if (_hbTimer) { clearInterval(_hbTimer); _hbTimer=null } }
+
+// ─ Public: Connect BT ────────────────────────────────────────────
+async function pulseConnectBt() {
+  if (_btConnected) { await pulseDisconnectBt(); return }
+  if (!navigator.bluetooth) {
+    alert('Web Bluetooth is not available.\\nUse Google Chrome or Edge on a supported OS (not iOS/Firefox).')
+    return
+  }
+  try {
+    _btDevice = await navigator.bluetooth.requestDevice({
+      filters: [
+        { services: [ACAIA_SERVICE_UUID] },
+        { namePrefix: 'ACAIA' }, { namePrefix: 'Acaia' },
+        { namePrefix: 'LUNAR' }, { namePrefix: 'PEARL' },
+      ],
+      optionalServices: [ACAIA_SERVICE_UUID],
+    })
+    _btDevice.addEventListener('gattserverdisconnected', () => {
+      stopHeartbeat(); _btConnected=false; _btChar=null; setBtStatus(false)
+    })
+    const server  = await _btDevice.gatt.connect()
+    const service = await server.getPrimaryService(ACAIA_SERVICE_UUID)
+    _btChar       = await service.getCharacteristic(ACAIA_CHARACTERISTIC_UUID)
+    await _btChar.startNotifications()
+    _btChar.addEventListener('characteristicvaluechanged', onCharChanged)
+    startHeartbeat()
+    _btConnected = true
+    setBtStatus(true)
+  } catch(e) {
+    if (!e.message.includes('cancelled')) alert('Bluetooth error: ' + e.message)
+  }
+}
+
+async function pulseDisconnectBt() {
+  stopHeartbeat()
+  if (_btChar) { try { await _btChar.stopNotifications() } catch(e){} ; _btChar=null }
+  if (_btDevice && _btDevice.gatt.connected) _btDevice.gatt.disconnect()
+  _btDevice=null; _btConnected=false; setBtStatus(false)
+}
+
+async function pulseTare() {
+  if (!_btChar) return
+  try { await _btChar.writeValue(TARE_CMD) } catch(e){}
+}
+
+// ─ Simulate weight (dev/demo) ────────────────────────────────────
+let _simTimer=null
+function pulseSimulate() {
+  if (_simTimer) { clearInterval(_simTimer); _simTimer=null; document.getElementById('btn-simulate').innerHTML='<i class="fa fa-flask"></i> Simulate'; return }
+  document.getElementById('btn-simulate').innerHTML='<i class="fa fa-stop"></i> Stop Sim'
+  let t=0
+  _simTimer = setInterval(() => {
+    t += 0.2
+    // Simulate a shot curve: 0→18g in 25s, then stable at 18g, then reset
+    const cycle = t % 40
+    let g = cycle < 25 ? (cycle/25)*18 : cycle < 30 ? 18 : 0
+    g = Math.round((g + (Math.random()-0.5)*0.4)*10)/10
+    const stable = cycle >= 23 && cycle < 30
+    parseWeightPacket(buildFakePacket(g, stable))
+  }, 200)
+}
+
+function buildFakePacket(grams, stable) {
+  const raw10 = Math.round(grams * 10)
+  const lo = raw10 & 0xff, hi = (raw10 >> 8) & 0xff
+  const status = stable ? 0x01 : 0x00
+  let xor = 0x0b ^ 0x06 ^ lo ^ hi ^ 0x02 ^ status
+  return new Uint8Array([0xef, 0xdd, 0x0b, 0x06, lo, hi, 0x02, status, 0x00, 0x00, xor])
+}
+
+// ─ Dial-in Mode ──────────────────────────────────────────────────
+function pulseToggleDialIn() {
+  const btn = document.getElementById('btn-dialin')
+  const statsEl = document.getElementById('session-stats')
+  if (!_dialIn) {
+    _dialIn = true
+    _dialInSession = 'DI-' + Date.now()
+    _dialInCount   = 0
+    _dialInTotal   = 0.0
+    btn.innerHTML = '<i class="fa fa-stop-circle"></i> Stop Dial-in'
+    btn.style.background = 'linear-gradient(135deg,#7f1d1d,#dc2626)'
+    statsEl.style.display = 'block'
+    document.getElementById('sess-id').textContent = _dialInSession
+    updateSessionStats()
+  } else {
+    _dialIn = false
+    btn.innerHTML = '<i class="fa fa-record-vinyl"></i> Dial-in Mode'
+    btn.style.background = 'linear-gradient(135deg,#b91c1c,#ef4444)'
+  }
+}
+
+function updateSessionStats() {
+  document.getElementById('sess-count').textContent = _dialInCount
+  document.getElementById('sess-total').textContent = _dialInTotal.toFixed(1) + ' g'
+}
+
+// ─ Foodics Sync ──────────────────────────────────────────────────
+async function pulseFoodicsSync() {
+  const key       = document.getElementById('foodics-key').value.trim()
+  const branchId  = document.getElementById('sync-branch').value
+  const date      = document.getElementById('sync-date').value
+  const pushAdj   = document.getElementById('push-adj').checked
+  const btn       = document.getElementById('btn-sync')
+  const resultEl  = document.getElementById('sync-result')
+
+  if (!key) { alert('Please enter your Foodics API key.'); return }
+  if (!date) { alert('Please select a date.'); return }
+
+  btn.disabled = true
+  btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Syncing...'
+
+  try {
+    const res = await fetch('/api/pulse/sync', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        branchId, periodDate: date, foodicsApiKey: key,
+        pushAdjustment: pushAdj,
+        sessionId: _dialInSession || undefined
+      })
+    })
+    const data = await res.json()
+    if (!res.ok || data.error) throw new Error(data.error || 'Sync failed')
+    const r = data.reconciliation
+    const varianceColor = r.variance > 50 ? '#ef4444' : r.variance < -50 ? '#60a5fa' : '#10b981'
+    document.getElementById('sr-theoretical').textContent = r.theoreticalUsage.toFixed(0) + ' g'
+    document.getElementById('sr-actual').textContent      = r.actualUsageIot.toFixed(1) + ' g'
+    document.getElementById('sr-variance').textContent    = (r.variance > 0 ? '+' : '') + r.variance.toFixed(1) + ' g'
+    document.getElementById('sr-variance').style.color    = varianceColor
+    document.getElementById('sr-loss').textContent        = r.financialLossSar > 0 ? r.financialLossSar.toFixed(2) + ' SAR' : '—'
+    document.getElementById('sr-orders').textContent      = r.foodicsOrderCount + ' orders'
+    document.getElementById('sr-adj').textContent         = r.adjustmentPushed ? '✔ ' + r.adjustmentId : 'Not pushed'
+    document.getElementById('sr-adj').style.color         = r.adjustmentPushed ? 'var(--green)' : 'var(--text-muted)'
+    resultEl.style.display = 'block'
+  } catch(e) {
+    alert('Sync error: ' + e.message)
+  } finally {
+    btn.disabled = false
+    btn.innerHTML = '<i class="fa fa-rotate"></i> Sync with Foodics'
+  }
+}
+</script>
+`
+  const pendingCountAdmin = beanRequests.filter(r => r.status === 'PENDING').length
+  return c.html(adminLayout('Qabban Pulse — Waste Tracking', 'pulse', content, pendingCountAdmin))
+})
 
 export default app

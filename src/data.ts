@@ -1834,3 +1834,85 @@ export interface GlobalBuyer {
   registeredAt: string
 }
 
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  QABBAN PULSE  —  Barista Waste Tracking Module
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ─── Drink-to-bean mapping (grams per shot/drink) ────────────────────────────
+// Used to compute theoretical consumption from Foodics POS sales data.
+export const PULSE_BEAN_MAP: Record<string, number> = {
+  'Espresso'              : 18,
+  'Double Espresso'       : 36,
+  'Americano'             : 18,
+  'Long Black'            : 18,
+  'Cappuccino'            : 18,
+  'Flat White'            : 18,
+  'Cortado'               : 18,
+  'Latte'                 : 18,
+  'Double Latte'          : 36,
+  'Macchiato'             : 18,
+  'Double Macchiato'      : 36,
+  'Ristretto'             : 14,
+  'Double Ristretto'      : 28,
+  'Cold Brew'             : 50,
+  'Pour Over'             : 20,
+  'Filter Coffee'         : 20,
+  'Batch Brew'            : 20,
+  // Generic fallback
+  'default'               : 18,
+}
+
+// ─── WasteLog — single Acaia scale reading logged by Dial-in Mode ─────────────
+export interface WasteLog {
+  id          : string    // UUID e.g. "WL-1717000000000-abc3"
+  sessionId   : string    // Dial-in session e.g. "DI-1717000000000"
+  branchId    : string    // e.g. "BR-001"
+  weightGrams : number    // raw scale reading (grams)
+  stable      : boolean   // was reading stable at capture?
+  loggedAt    : string    // ISO datetime
+}
+
+// ─── PulseReconciliation — result of one sync cycle ──────────────────────────
+export interface PulseReconciliation {
+  id                  : string    // UUID e.g. "PR-1717000000000"
+  branchId            : string    // e.g. "BR-001"
+  periodDate          : string    // ISO date "YYYY-MM-DD"
+  theoreticalUsage    : number    // grams — derived from Foodics POS sales
+  actualUsageIot      : number    // grams — sum of Dial-in scale readings
+  variance            : number    // grams — actualUsageIot - theoreticalUsage (+ = over-use)
+  financialLossSar    : number    // SAR — variance * costPerKg / 1000
+  costPerKgSar        : number    // SAR/kg used for this calculation
+  foodicsOrderCount   : number    // how many Foodics orders were pulled
+  adjustmentPushed    : boolean   // true if Foodics inventory adjustment was sent
+  adjustmentId        : string    // Foodics adjustment reference ID (or 'N/A')
+  createdAt           : string    // ISO datetime of reconciliation run
+}
+
+// ─── In-memory store (mirrors what D1 / KV would hold in production) ─────────
+export const wasteLogs       : WasteLog[]            = []
+export const pulseRecons     : PulseReconciliation[] = []
+
+// ─── Helper: generate a compact unique ID ────────────────────────────────────
+export function pulseId(prefix: string): string {
+  const ts  = Date.now()
+  const rnd = Math.random().toString(36).slice(2, 6)
+  return `${prefix}-${ts}-${rnd}`
+}
+
+// ─── Helper: map Foodics order line items → theoretical bean usage (grams) ───
+export function calcTheoreticalUsage(
+  orders: { productName: string; quantity: number }[]
+): number {
+  return orders.reduce((total, item) => {
+    const gPerShot = PULSE_BEAN_MAP[item.productName] ?? PULSE_BEAN_MAP['default']
+    return total + gPerShot * item.quantity
+  }, 0)
+}
+
+// ─── Helper: calculate financial loss from variance ───────────────────────────
+// varianceGrams: positive means over-use (waste), negative means under-use
+export function calcFinancialLoss(varianceGrams: number, costPerKgSar: number): number {
+  if (varianceGrams <= 0) return 0
+  return Math.round((varianceGrams / 1000) * costPerKgSar * 100) / 100
+}
