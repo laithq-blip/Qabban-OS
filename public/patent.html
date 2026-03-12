@@ -1,0 +1,742 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>QABBAN-PAT-2026-001 — Sponge Effect Engine — Patent Filing Document</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css" rel="stylesheet"/>
+  <style>
+    body { font-family: 'Georgia', serif; }
+    .mono { font-family: 'Courier New', monospace; }
+    .section-rule { border-top: 3px double #1e3a5f; margin: 2.5rem 0 1.5rem; }
+    .subsection-rule { border-top: 1px solid #94a3b8; margin: 1.5rem 0 1rem; }
+    .eq-box {
+      background: #f0f4ff;
+      border-left: 4px solid #1e3a5f;
+      padding: 1rem 1.5rem;
+      margin: 1rem 0;
+      border-radius: 0 6px 6px 0;
+    }
+    .claim-box {
+      background: #fffbeb;
+      border: 1px solid #d97706;
+      border-radius: 8px;
+      padding: 1.25rem 1.5rem;
+      margin-bottom: 1.25rem;
+    }
+    .piecewise {
+      display: inline-block;
+      padding-left: 1rem;
+    }
+    .piecewise .case {
+      display: flex;
+      gap: 1.5rem;
+      margin: 0.2rem 0;
+    }
+    .piecewise .val { min-width: 3.5rem; font-weight: 700; color: #1e3a5f; }
+    .piecewise .cond { color: #374151; }
+    .piecewise .rule { color: #6b7280; font-style: italic; font-size: 0.875rem; }
+    table.data-table { width:100%; border-collapse: collapse; font-size:0.875rem; }
+    table.data-table th { background:#1e3a5f; color:white; padding:8px 10px; text-align:left; }
+    table.data-table td { border:1px solid #cbd5e1; padding:7px 10px; vertical-align:top; }
+    table.data-table tr:nth-child(even) td { background:#f8fafc; }
+    .truth-table th { background:#374151; }
+    .flowbox {
+      border: 1px solid #94a3b8;
+      border-radius: 6px;
+      padding: 0.6rem 1rem;
+      background: white;
+      display: inline-block;
+      margin: 0.3rem 0;
+      font-size: 0.875rem;
+    }
+    .flow-decision {
+      border: 1px solid #d97706;
+      background: #fffbeb;
+      transform: skewX(-5deg);
+    }
+    .flow-terminal {
+      border-radius: 20px;
+      background: #f0fdf4;
+      border-color: #16a34a;
+    }
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+    .badge-rule-a { background:#dbeafe; color:#1d4ed8; }
+    .badge-rule-b { background:#fef3c7; color:#92400e; }
+    .badge-baseline { background:#dcfce7; color:#166534; }
+    .print-btn {
+      position: fixed; top: 1rem; right: 1rem;
+      background: #1e3a5f; color: white;
+      padding: 0.5rem 1rem; border-radius: 6px;
+      cursor: pointer; z-index: 999; font-size: 0.875rem;
+      border: none;
+    }
+    @media print {
+      .print-btn { display: none; }
+      .no-print { display: none; }
+    }
+  </style>
+</head>
+<body class="bg-slate-50 text-gray-800">
+
+<button class="print-btn" onclick="window.print()">
+  <i class="fas fa-print mr-1"></i> Print / Save PDF
+</button>
+
+<div class="max-w-5xl mx-auto px-6 py-10">
+
+  <!-- ══ COVER ══ -->
+  <div class="text-center border-4 border-double border-slate-700 rounded-lg p-10 mb-10 bg-white shadow-lg">
+    <p class="text-xs uppercase tracking-widest text-slate-500 mb-2">Formal Mathematical Proof Document for Patent Filing</p>
+    <h1 class="text-2xl font-bold text-slate-800 leading-snug mb-4">
+      Method and System for Real-Time Hygroscopic Mass Compensation<br>
+      in Post-Harvest Green Coffee Bean Inventory Valuation<br>
+      via a Hybrid Telemetry-Driven Dynamic Yield Coefficient Engine
+    </h1>
+    <div class="grid grid-cols-2 gap-2 text-sm mt-6 max-w-lg mx-auto">
+      <div class="text-right text-slate-500">Document Ref:</div><div class="text-left font-mono font-semibold">QABBAN-PAT-2026-001</div>
+      <div class="text-right text-slate-500">Version:</div><div class="text-left font-mono">2.0 — Final</div>
+      <div class="text-right text-slate-500">Date:</div><div class="text-left font-mono">2026-03-12</div>
+      <div class="text-right text-slate-500">Status:</div><div class="text-left"><span class="badge" style="background:#fee2e2;color:#991b1b;">CONFIDENTIAL — Pre-filing Draft</span></div>
+      <div class="text-right text-slate-500">System of Record:</div><div class="text-left font-mono text-xs">QABBAN OS (src/data.ts)</div>
+      <div class="text-right text-slate-500">Prepared by:</div><div class="text-left text-xs">QABBAN OS Engineering Team</div>
+    </div>
+  </div>
+
+  <!-- ══ TOC ══ -->
+  <div class="bg-white rounded-lg shadow p-6 mb-8">
+    <h2 class="text-lg font-bold text-slate-700 mb-3 flex items-center gap-2">
+      <i class="fas fa-list-ul text-slate-500"></i> Table of Contents
+    </h2>
+    <ol class="text-sm space-y-1 text-slate-600">
+      <li>1. Field of the Invention</li>
+      <li>2. Background and Problem Statement</li>
+      <li>3. Definitions and Notation</li>
+      <li>4. Core Mathematical Formulations
+        <ol class="ml-4 mt-1 space-y-1" style="list-style-type:lower-alpha">
+          <li>4.1 — Dynamic Yield Function Y(RH)</li>
+          <li>4.2 — Mass-Correction Equation</li>
+          <li>4.3 — True Roasted Cost Function C_roasted</li>
+          <li>4.4 — Financial Asset Variance ΔV</li>
+          <li>4.5 — Live Inventory Valuation</li>
+          <li>4.6 — Qabban Pulse: Barista Waste Reconciliation Mathematics</li>
+        </ol>
+      </li>
+      <li>5. Hybrid Telemetry Switch: Logical Proof &amp; Flow Description</li>
+      <li>6. Complete System Equation Summary</li>
+      <li>7. Technical Character Proof (Patent Eligibility)</li>
+      <li>8. Claims (Draft Independent Claims)</li>
+      <li>9. Glossary of Scientific Terms</li>
+      <li>10. System Constants Table</li>
+      <li>11. Source Code Reference</li>
+    </ol>
+  </div>
+
+  <!-- ══ SECTION 1 ══ -->
+  <div class="section-rule"></div>
+  <h2 class="text-xl font-bold text-slate-800 mb-1">Section 1 — Field of the Invention</h2>
+  <div class="bg-white rounded-lg shadow p-6 text-sm leading-relaxed space-y-3">
+    <p>This invention relates to the field of commodity inventory management systems, specifically to a computerised method for dynamically adjusting the theoretical yield coefficient of green Arabica and Robusta coffee beans undergoing ambient storage prior to roasting. The adjustment accounts for <strong>micro-climate induced hygroscopic mass transfer</strong> — the gain or loss of molecular moisture weight by the bean mass — as a function of the surrounding Relative Humidity (RH), sourced from either a physical IoT telemetry sensor or a fallback meteorological web-service API.</p>
+    <p>The resulting coefficient is applied in real time to: (a) correct the declared saleable weight of the roasted product; (b) recalculate the true cost of roasted goods per kilogram; (c) compute the financial asset variance attributable to environmental conditions (SAR); and (d) reconcile actual barista bean consumption (measured by precision IoT Bluetooth scale) against theoretical consumption derived from point-of-sale transaction data, producing an auditable waste variance report.</p>
+  </div>
+
+  <!-- ══ SECTION 2 ══ -->
+  <div class="section-rule"></div>
+  <h2 class="text-xl font-bold text-slate-800 mb-1">Section 2 — Background and Problem Statement</h2>
+  <div class="bg-white rounded-lg shadow p-6 text-sm leading-relaxed space-y-4">
+    <div>
+      <h3 class="font-bold text-slate-700 mb-1">2.1 The Hygroscopic Nature of Green Coffee Beans</h3>
+      <p>Green (unroasted) coffee beans are highly porous, cellulosic biological structures with a typical equilibrium moisture content of 10–12 % by mass under standard conditions. In high-humidity coastal environments (e.g., Jeddah — average RH ≥ 68 %), stored beans absorb atmospheric moisture, increasing bulk mass. In arid inland environments (e.g., Riyadh — average RH ≈ 20–45 %), accelerated evaporative desorption reduces bulk mass below declared weight.</p>
+    </div>
+    <div>
+      <h3 class="font-bold text-slate-700 mb-1">2.2 Deficiency of Static Yield Models</h3>
+      <p>The industry conventionally applies a fixed shrinkage coefficient of <strong>0.82</strong>. This static model: (i) ignores micro-climate conditions; (ii) produces systematic over/under-valuation; (iii) prevents accurate Environmental P&amp;L computation; (iv) does not distinguish coastal from arid storage regimes.</p>
+    </div>
+    <div>
+      <h3 class="font-bold text-slate-700 mb-1">2.3 Deficiency of Static Waste Tracking</h3>
+      <p>Barista-level waste is tracked, if at all, through periodic manual audits. This approach introduces latency of days or weeks, cannot attribute waste to individual baristas or sessions, cannot auto-adjust POS inventory in real time, and cannot compute a financial cost for waste variance without a separate spreadsheet.</p>
+    </div>
+    <div>
+      <h3 class="font-bold text-slate-700 mb-1">2.4 The Inventive Gap</h3>
+      <p>No prior art is known combining: (a) a piecewise dynamic yield coefficient from real-time RH data; (b) a hybrid IoT/API arbitration architecture with time-bounded freshness logic; (c) automatic stale-data fallback; (d) propagation into an ERP ledger; and (e) a barista waste reconciliation engine that pushes inventory adjustments back to POS automatically.</p>
+    </div>
+  </div>
+
+  <!-- ══ SECTION 3 ══ -->
+  <div class="section-rule"></div>
+  <h2 class="text-xl font-bold text-slate-800 mb-1">Section 3 — Definitions and Notation</h2>
+  <div class="bg-white rounded-lg shadow p-4">
+    <table class="data-table mono text-xs">
+      <thead><tr><th>Symbol</th><th>Definition</th></tr></thead>
+      <tbody>
+        <tr><td>RH</td><td>Relative Humidity (%), range [0, 100]</td></tr>
+        <tr><td>RH_iot</td><td>Humidity reading from physical IoT sensor (%)</td></tr>
+        <tr><td>RH_api</td><td>Humidity from meteorological web-service API (%)</td></tr>
+        <tr><td>RH*</td><td>Active (resolved) Relative Humidity fed to the Sponge Engine (%)</td></tr>
+        <tr><td>Y(RH)</td><td>Dynamic Yield Coefficient — piecewise function of RH</td></tr>
+        <tr><td>Y₀</td><td>Baseline yield coefficient = 0.82 (dimensionless)</td></tr>
+        <tr><td>δ_A</td><td>Rule A absorption delta = +0.005</td></tr>
+        <tr><td>δ_B</td><td>Rule B evaporation delta = −0.003</td></tr>
+        <tr><td>τ_H</td><td>Upper RH threshold = 70 % (Rule A trigger)</td></tr>
+        <tr><td>τ_L</td><td>Lower RH threshold = 20 % (Rule B trigger)</td></tr>
+        <tr><td>M_green</td><td>Mass of green (pre-roast) coffee beans (kg)</td></tr>
+        <tr><td>M_final</td><td>Corrected mass of roasted coffee (kg) — Eq. (1)</td></tr>
+        <tr><td>M_baseline</td><td>Uncorrected static roasted mass = Y₀ · M_green (kg)</td></tr>
+        <tr><td>ΔM</td><td>Hygroscopic mass correction = M_final − M_baseline (kg)</td></tr>
+        <tr><td>C_green</td><td>Procurement cost of green beans (SAR/kg)</td></tr>
+        <tr><td>C_roasted</td><td>True cost per kg of roasted product (SAR/kg)</td></tr>
+        <tr><td>P_w</td><td>Wholesale price per kg of roasted product (SAR/kg)</td></tr>
+        <tr><td>g</td><td>Target gross margin fraction ∈ (0, 1)</td></tr>
+        <tr><td>ΔV</td><td>Environmental Asset Variance (SAR) — "Environmental P&amp;L"</td></tr>
+        <tr><td>Τ_stale</td><td>Staleness threshold = 3,600,000 ms (60 minutes)</td></tr>
+        <tr><td>σ(B)</td><td>Stale-data flag ∈ {true, false} for branch B</td></tr>
+        <tr><td>α(B)</td><td>Data-availability flag — has any IoT reading been received?</td></tr>
+        <tr><td>W_actual</td><td>Actual bean consumption from Acaia scale readings (grams)</td></tr>
+        <tr><td>W_theoretical</td><td>Predicted bean consumption from POS data (grams)</td></tr>
+        <tr><td>Ψ</td><td>Waste variance = W_actual − W_theoretical (grams, signed)</td></tr>
+        <tr><td>Φ(d)</td><td>Drink-to-bean mapping function: grams per serving of drink d</td></tr>
+        <tr><td>L_waste</td><td>Financial waste loss (SAR) — Eq. (21)</td></tr>
+        <tr><td>Q_adj</td><td>Signed POS inventory adjustment (kg) — Eq. (22)</td></tr>
+        <tr><td>K_d</td><td>IoT device key (UUID v4) identifying a branch sensor</td></tr>
+        <tr><td>AUTH(K_d)</td><td>Device authentication predicate — Eq. (16)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ══ SECTION 4 ══ -->
+  <div class="section-rule"></div>
+  <h2 class="text-xl font-bold text-slate-800 mb-3">Section 4 — Core Mathematical Formulations</h2>
+
+  <!-- 4.1 -->
+  <div class="bg-white rounded-lg shadow p-6 mb-4">
+    <h3 class="font-bold text-slate-700 text-base mb-3 flex items-center gap-2">
+      <span class="bg-slate-700 text-white px-2 py-0.5 rounded text-xs">4.1</span>
+      THE DYNAMIC YIELD FUNCTION &nbsp;<span class="mono font-bold">Y(RH)</span>
+    </h3>
+    <p class="text-sm mb-3">The Dynamic Yield Function is a piecewise step function mapping ambient Relative Humidity to a dimensionless yield coefficient:</p>
+    <div class="eq-box mono text-sm">
+      <div class="flex items-start gap-3">
+        <div class="text-slate-700 font-bold pt-3">Y(RH) =</div>
+        <div class="border-l-4 border-slate-400 pl-4 space-y-2">
+          <div class="piecewise">
+            <div class="case">
+              <span class="val">0.825</span>
+              <span class="cond">if RH &gt; 70 %</span>
+              <span class="badge badge-rule-a ml-2">Rule A — Hygroscopic Absorption</span>
+            </div>
+            <div class="case">
+              <span class="val">0.817</span>
+              <span class="cond">if RH &lt; 20 %</span>
+              <span class="badge badge-rule-b ml-2">Rule B — Evaporative Desorption</span>
+            </div>
+            <div class="case">
+              <span class="val">0.820</span>
+              <span class="cond">if 20 % ≤ RH ≤ 70 %</span>
+              <span class="badge badge-baseline ml-2">Baseline</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="grid grid-cols-3 gap-3 mt-4 text-xs">
+      <div class="bg-blue-50 border border-blue-200 rounded p-3">
+        <p class="font-bold text-blue-800 mb-1">Rule A — RH &gt; 70 %</p>
+        <p class="text-blue-700">Beans absorb water vapour. Higher effective mass → more usable roasted product. Coefficient <strong>↑ to 0.825</strong> (+0.61 % above baseline). Typical: Jeddah, Dammam coastal.</p>
+      </div>
+      <div class="bg-amber-50 border border-amber-200 rounded p-3">
+        <p class="font-bold text-amber-800 mb-1">Rule B — RH &lt; 20 %</p>
+        <p class="text-amber-700">Beans lose moisture via evaporative desorption. Reduced recoverable mass. Coefficient <strong>↓ to 0.817</strong> (−0.37 % below baseline). Typical: Riyadh desert storage.</p>
+      </div>
+      <div class="bg-green-50 border border-green-200 rounded p-3">
+        <p class="font-bold text-green-800 mb-1">Baseline — 20 % ≤ RH ≤ 70 %</p>
+        <p class="text-green-700">Equilibrium moisture range. Standard coefficient <strong>0.820</strong> applies. Boundary values RH=20 and RH=70 fall here by design.</p>
+      </div>
+    </div>
+    <div class="eq-box mt-4 text-sm">
+      <p class="font-semibold text-slate-600 mb-1">Compact Indicator Form:</p>
+      <p class="mono">Y(RH) = Y₀ + δ_A · 𝟙[RH &gt; τ_H] + δ_B · 𝟙[RH &lt; τ_L]</p>
+      <p class="text-xs text-slate-500 mt-1">where 𝟙[·] is the indicator function. The two terms are mutually exclusive (τ_L &lt; τ_H).</p>
+    </div>
+  </div>
+
+  <!-- 4.2 -->
+  <div class="bg-white rounded-lg shadow p-6 mb-4">
+    <h3 class="font-bold text-slate-700 text-base mb-3 flex items-center gap-2">
+      <span class="bg-slate-700 text-white px-2 py-0.5 rounded text-xs">4.2</span>
+      THE MASS-CORRECTION EQUATION
+    </h3>
+    <div class="space-y-3 text-sm">
+      <div class="eq-box mono">
+        <p><strong>(1)</strong> &nbsp; M_final &nbsp;= &nbsp;Y(RH*) · M_green</p>
+        <p class="mt-2"><strong>(2)</strong> &nbsp; M_baseline = Y₀ · M_green = 0.82 · M_green</p>
+        <p class="mt-2"><strong>(3)</strong> &nbsp; ΔM = M_final − M_baseline = (Y(RH*) − 0.82) · M_green</p>
+        <p class="text-xs text-slate-500 mt-2">Bounds: ΔM ∈ [ −0.003 · M_green , +0.005 · M_green ]</p>
+      </div>
+      <div class="bg-slate-50 border border-slate-200 rounded p-4 text-xs mono">
+        <p class="font-bold text-slate-700 mb-2">Worked Example — M_green = 500 kg, Jeddah Coastal, RH* = 72 %</p>
+        <p>Y(72)       = 0.82 + 0.005 = 0.825</p>
+        <p>M_final     = 0.825 × 500  = <strong>412.5 kg</strong></p>
+        <p>M_baseline  = 0.820 × 500  = 410.0 kg</p>
+        <p>ΔM          = 412.5 − 410.0 = <strong>+2.5 kg</strong> &nbsp;(moisture-gain surplus)</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4.3 -->
+  <div class="bg-white rounded-lg shadow p-6 mb-4">
+    <h3 class="font-bold text-slate-700 text-base mb-3 flex items-center gap-2">
+      <span class="bg-slate-700 text-white px-2 py-0.5 rounded text-xs">4.3</span>
+      TRUE ROASTED COST FUNCTION &nbsp;<span class="mono">C_roasted(RH*)</span>
+    </h3>
+    <div class="eq-box mono text-sm space-y-2">
+      <p><strong>(4)</strong> &nbsp; C_roasted(RH*) = C_green / Y(RH*)  &nbsp;&nbsp; ← live cost (humidity-adjusted)</p>
+      <p><strong>(5)</strong> &nbsp; C_baseline = C_green / Y₀ = C_green / 0.82  &nbsp;&nbsp; ← pinned baseline</p>
+      <p><strong>(6)</strong> &nbsp; P_w = C_baseline / (1 − g)  &nbsp;&nbsp; ← wholesale price (Y₀-pinned, stable)</p>
+    </div>
+    <p class="text-xs text-slate-600 mt-3"><strong>Architectural Decision:</strong> P_w is computed from Equation (5)–(6) using the fixed Y₀ = 0.82 only. This ensures consumer-facing price is deterministic and independent of daily micro-climate fluctuations. The delta between actual and baseline cost flows exclusively to the Environmental P&amp;L account (§4.4) — a deliberate <em>separation of concerns</em>.</p>
+  </div>
+
+  <!-- 4.4 -->
+  <div class="bg-white rounded-lg shadow p-6 mb-4">
+    <h3 class="font-bold text-slate-700 text-base mb-3 flex items-center gap-2">
+      <span class="bg-slate-700 text-white px-2 py-0.5 rounded text-xs">4.4</span>
+      FINANCIAL ASSET VARIANCE FORMULA &nbsp;<span class="mono">ΔV</span> — Environmental P&amp;L
+    </h3>
+    <div class="eq-box mono text-sm space-y-2">
+      <p><strong>(7)</strong> &nbsp; ΔV = ΔM · P_w = (Y(RH*) − Y₀) · M_green · P_w</p>
+      <p><strong>(8)</strong> &nbsp; ΔV_total = Σᵢ₌₁ᴺ (Y(RH*ᵢ) − Y₀) · M_greenᵢ · P_wᵢ</p>
+    </div>
+    <div class="grid grid-cols-3 gap-2 mt-3 text-xs">
+      <div class="bg-green-50 border border-green-200 rounded p-2 text-center">
+        <p class="font-bold text-green-700">ΔV &gt; 0</p>
+        <p class="text-green-600">Surplus — moisture gain (Rule A)</p>
+      </div>
+      <div class="bg-red-50 border border-red-200 rounded p-2 text-center">
+        <p class="font-bold text-red-700">ΔV &lt; 0</p>
+        <p class="text-red-600">Deficit — moisture loss (Rule B)</p>
+      </div>
+      <div class="bg-gray-50 border border-gray-200 rounded p-2 text-center">
+        <p class="font-bold text-gray-700">ΔV = 0</p>
+        <p class="text-gray-600">All branches in Baseline range</p>
+      </div>
+    </div>
+    <div class="bg-slate-50 border border-slate-200 rounded p-4 text-xs mono mt-3">
+      <p class="font-bold text-slate-700 mb-2">Worked Example — Portfolio of 2 Lots</p>
+      <p>Lot A: M_green=500 kg, RH*=72% (Jeddah), P_w=150 SAR/kg</p>
+      <p>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ΔM_A = (0.825−0.82)×500 = +2.5 kg → ΔV_A = +375 SAR</p>
+      <p class="mt-1">Lot B: M_green=200 kg, RH*=15% (Desert), P_w=130 SAR/kg</p>
+      <p>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ΔM_B = (0.817−0.82)×200 = −0.6 kg → ΔV_B = −78 SAR</p>
+      <p class="mt-1 font-bold">ΔV_total = +375 + (−78) = <span class="text-green-700">+297 SAR</span> (net environmental surplus)</p>
+    </div>
+  </div>
+
+  <!-- 4.5 -->
+  <div class="bg-white rounded-lg shadow p-6 mb-4">
+    <h3 class="font-bold text-slate-700 text-base mb-3 flex items-center gap-2">
+      <span class="bg-slate-700 text-white px-2 py-0.5 rounded text-xs">4.5</span>
+      LIVE INVENTORY VALUATION WITH SPONGE CORRECTION
+    </h3>
+    <div class="eq-box mono text-sm space-y-2">
+      <p><strong>(9)</strong> &nbsp; V_inv = Y(RH*) · M_green · P_w</p>
+      <p><strong>(10)</strong>&nbsp; Π = (P_w − C_green / Y(RH*)) · Y(RH*) · M_green</p>
+    </div>
+  </div>
+
+  <!-- 4.6 -->
+  <div class="bg-white rounded-lg shadow p-6 mb-4">
+    <h3 class="font-bold text-slate-700 text-base mb-3 flex items-center gap-2">
+      <span class="bg-indigo-700 text-white px-2 py-0.5 rounded text-xs">4.6</span>
+      QABBAN PULSE — BARISTA WASTE RECONCILIATION MATHEMATICS
+    </h3>
+    <p class="text-sm mb-4 text-slate-600">The Qabban Pulse module extends the Sponge Effect Engine into the operational layer by instrumenting barista workflow with a real-time Bluetooth precision scale (Acaia). It compares actual bean consumption measured by the scale against theoretically expected consumption computed from POS order data, producing an auditable waste variance with financial attribution.</p>
+
+    <div class="subsection-rule"></div>
+    <h4 class="font-bold text-slate-600 text-sm mb-2">4.6.1 &nbsp; Drink-to-Bean Mapping Function Φ(d)</h4>
+    <p class="text-xs text-slate-600 mb-2">Each drink type <em>d</em> is assigned a theoretical dosage via the injective mapping Φ : D → ℝ₊</p>
+    <table class="data-table mono text-xs mb-4">
+      <thead><tr><th>Drink Type d</th><th>Φ(d) grams/serving</th><th>Drink Type d</th><th>Φ(d) grams/serving</th></tr></thead>
+      <tbody>
+        <tr><td>Espresso</td><td>18 g</td><td>Macchiato</td><td>18 g</td></tr>
+        <tr><td>Double Espresso</td><td>36 g</td><td>Double Macchiato</td><td>36 g</td></tr>
+        <tr><td>Americano</td><td>18 g</td><td>Ristretto</td><td>14 g</td></tr>
+        <tr><td>Long Black</td><td>18 g</td><td>Double Ristretto</td><td>28 g</td></tr>
+        <tr><td>Cappuccino</td><td>18 g</td><td>Cold Brew</td><td>50 g</td></tr>
+        <tr><td>Flat White</td><td>18 g</td><td>Pour Over</td><td>20 g</td></tr>
+        <tr><td>Cortado</td><td>18 g</td><td>Filter / Batch Brew</td><td>20 g</td></tr>
+        <tr><td>Latte</td><td>18 g</td><td><em>default (unknown)</em></td><td>18 g</td></tr>
+        <tr><td>Double Latte</td><td>36 g</td><td></td><td></td></tr>
+      </tbody>
+    </table>
+
+    <div class="subsection-rule"></div>
+    <h4 class="font-bold text-slate-600 text-sm mb-2">4.6.2 &nbsp; Theoretical Consumption W_theoretical &nbsp;<span class="text-slate-400 font-normal">— Equation (17)</span></h4>
+    <div class="eq-box mono text-sm">
+      <p><strong>(17)</strong>&nbsp; W_theoretical = Σᵢ₌₁ᴺ Φ(dᵢ) · qᵢ</p>
+      <p class="text-xs text-slate-500 mt-1">Units: grams. Represents zero-waste ideal consumption if every shot is pulled to specification.</p>
+    </div>
+
+    <div class="subsection-rule"></div>
+    <h4 class="font-bold text-slate-600 text-sm mb-2">4.6.3 &nbsp; Actual IoT Consumption W_actual &nbsp;<span class="text-slate-400 font-normal">— Equations (18)–(19)</span></h4>
+    <div class="eq-box mono text-sm space-y-2">
+      <p><strong>(18)</strong>&nbsp; STABLE ⟺ |W_i − W_{i-1}| ≤ ε &nbsp;&nbsp; (ε = 0.3 g, at ≈ 5 Hz via GATT BLE)</p>
+      <p><strong>(19)</strong>&nbsp; W_actual = Σₖ W_k &nbsp;&nbsp; (sum of all stable committed readings k in period)</p>
+    </div>
+    <p class="text-xs text-slate-500 mt-2">Scale hardware: Acaia precision scale. BLE Service UUID: <span class="mono">0x0000ffe0-...</span> &nbsp;|&nbsp; Characteristic UUID: <span class="mono">0x0000ffe1-...</span></p>
+
+    <div class="subsection-rule"></div>
+    <h4 class="font-bold text-slate-600 text-sm mb-2">4.6.4 &nbsp; Waste Variance Ψ &nbsp;<span class="text-slate-400 font-normal">— Equation (20)</span></h4>
+    <div class="eq-box mono text-sm">
+      <p><strong>(20)</strong>&nbsp; Ψ = W_actual − W_theoretical &nbsp; (grams, signed)</p>
+    </div>
+    <div class="grid grid-cols-3 gap-2 mt-2 text-xs">
+      <div class="bg-red-50 border border-red-200 rounded p-2"><p class="font-bold text-red-700">Ψ &gt; 0 — Over-use (Waste)</p><p class="text-red-600">Scale usage exceeds POS prediction. Indicates spills, failed shots, dial-in waste, or barista error.</p></div>
+      <div class="bg-yellow-50 border border-yellow-200 rounded p-2"><p class="font-bold text-yellow-700">Ψ &lt; 0 — Under-use</p><p class="text-yellow-600">Scale below POS prediction. May indicate unrecorded manual shots or scale misalignment.</p></div>
+      <div class="bg-green-50 border border-green-200 rounded p-2"><p class="font-bold text-green-700">Ψ = 0 — Perfect</p><p class="text-green-600">Theoretical ideal: zero waste.</p></div>
+    </div>
+
+    <div class="subsection-rule"></div>
+    <h4 class="font-bold text-slate-600 text-sm mb-2">4.6.5 &nbsp; Financial Waste Loss L_waste &nbsp;<span class="text-slate-400 font-normal">— Equation (21)</span></h4>
+    <div class="eq-box mono text-sm">
+      <p><strong>(21)</strong>&nbsp; L_waste = (Ψ / 1000) · C_green_branch &nbsp; if Ψ &gt; 0 ;  else 0 &nbsp;&nbsp; [SAR]</p>
+    </div>
+    <div class="bg-slate-50 border border-slate-200 rounded p-4 text-xs mono mt-2">
+      <p class="font-bold text-slate-700 mb-1">Worked Example — Live Qabban Pulse Session:</p>
+      <p>Branch: Riyadh (BR-RUH) &nbsp;|&nbsp; C_green = 180 SAR/kg</p>
+      <p>POS data: 4 Espressos + 1 Americano = (4×18) + (1×18) = 90 g</p>
+      <p>Scale: 5 stable commits → W_actual = 92.1 g</p>
+      <p class="mt-1">Ψ = 92.1 − 90.0 = <strong>+2.1 g</strong></p>
+      <p>L_waste = (2.1 / 1000) × 180 = <strong class="text-red-700">0.38 SAR</strong></p>
+    </div>
+
+    <div class="subsection-rule"></div>
+    <h4 class="font-bold text-slate-600 text-sm mb-2">4.6.6 &nbsp; PulseReconciliation Interface Schema</h4>
+    <table class="data-table text-xs">
+      <thead><tr><th>Field</th><th>Type</th><th>Description / Equation</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">id</td><td>string (UUID)</td><td>Unique reconciliation record ID</td></tr>
+        <tr><td class="mono">branchId</td><td>string</td><td>Branch identifier (e.g. BR-RUH)</td></tr>
+        <tr><td class="mono">periodDate</td><td>string (ISO date)</td><td>Date of reconciliation period</td></tr>
+        <tr><td class="mono">theoreticalUsage</td><td>number (g)</td><td>W_theoretical — Eq. (17)</td></tr>
+        <tr><td class="mono">actualUsageIot</td><td>number (g)</td><td>W_actual — Eq. (19)</td></tr>
+        <tr><td class="mono">variance</td><td>number (g)</td><td>Ψ — Eq. (20), signed</td></tr>
+        <tr><td class="mono">financialLossSar</td><td>number (SAR)</td><td>L_waste — Eq. (21)</td></tr>
+        <tr><td class="mono">costPerKgSar</td><td>number</td><td>C_green_branch in SAR/kg</td></tr>
+        <tr><td class="mono">foodicsOrderCount</td><td>number</td><td>POS orders ingested this run</td></tr>
+        <tr><td class="mono">adjustmentPushed</td><td>boolean</td><td>True if POS inventory was adjusted</td></tr>
+        <tr><td class="mono">adjustmentId</td><td>string</td><td>Foodics adjustment reference ID</td></tr>
+        <tr><td class="mono">createdAt</td><td>string (ISO datetime)</td><td>Timestamp of reconciliation run</td></tr>
+      </tbody>
+    </table>
+
+    <div class="subsection-rule"></div>
+    <h4 class="font-bold text-slate-600 text-sm mb-2">4.6.7 &nbsp; Foodics POS Inventory Adjustment Formula &nbsp;<span class="text-slate-400 font-normal">— Equation (22)</span></h4>
+    <div class="eq-box mono text-sm">
+      <p><strong>(22)</strong>&nbsp; Q_adj = − (Ψ / 1000) &nbsp;&nbsp; [kg, signed — sent to Foodics Qty Adjustment API]</p>
+      <p class="text-xs text-slate-500 mt-1">A positive Ψ (waste) produces a negative Q_adj, reducing the POS inventory register to reflect actual beans consumed. Closes the physical ↔ digital inventory loop.</p>
+    </div>
+  </div>
+
+  <!-- ══ SECTION 5 ══ -->
+  <div class="section-rule"></div>
+  <h2 class="text-xl font-bold text-slate-800 mb-3">Section 5 — Hybrid Telemetry Switch: Logical Proof &amp; Flow</h2>
+
+  <div class="bg-white rounded-lg shadow p-6 mb-4 text-sm">
+    <h3 class="font-bold text-slate-700 mb-2">5.2 Formal Definition of the Active RH Resolver RH*(B)</h3>
+    <div class="eq-box mono text-sm space-y-2">
+      <p><strong>(11)</strong>&nbsp; σ(B) = 𝟙[ (t_now − B.t_iot) &gt; Τ_stale ] &nbsp;&nbsp; &nbsp;(1 = stale, 0 = fresh)</p>
+      <p><strong>(12)</strong>&nbsp; α(B) = 𝟙[ B.RH_iot ≠ null AND B.t_iot ≠ null ] &nbsp;(1 = data received)</p>
+      <p class="mt-2 font-bold text-slate-700">Active RH Resolver (13):</p>
+      <div class="flex items-start gap-3 mt-1">
+        <span>RH*(B) =</span>
+        <div class="border-l-4 border-slate-400 pl-3 space-y-1">
+          <div>B.RH_iot &nbsp; if B.S = IOT_SENSOR AND α(B)=1 AND σ(B)=0</div>
+          <div>B.RH_api &nbsp; otherwise</div>
+        </div>
+      </div>
+      <p class="text-xs text-slate-500 mt-2">Fallback cases: F1 (source=WEATHER_API) | F2 (no IoT data yet) | F3 (data stale — AUTO-FALLBACK)</p>
+    </div>
+
+    <h3 class="font-bold text-slate-700 mt-5 mb-2">5.3 Logic-Gate Representation</h3>
+    <div class="eq-box mono text-sm space-y-1">
+      <p>P = 𝟙[B.S = IOT_SENSOR] &nbsp; &nbsp;A = α(B) &nbsp; &nbsp; F = ¬σ(B) = 𝟙[age ≤ Τ_stale]</p>
+      <p class="mt-2"><strong>(14)</strong>&nbsp; USE_IOT = P AND A AND F</p>
+      <p><strong>(15)</strong>&nbsp; RH*(B) = USE_IOT · B.RH_iot + ¬USE_IOT · B.RH_api</p>
+    </div>
+    <div class="mt-3">
+      <table class="data-table mono text-xs truth-table">
+        <thead><tr><th>P</th><th>A</th><th>F</th><th>USE_IOT</th><th>Condition</th></tr></thead>
+        <tbody>
+          <tr><td>0</td><td>X</td><td>X</td><td class="font-bold text-red-700">0</td><td>Source = WEATHER_API → always use API</td></tr>
+          <tr><td>1</td><td>0</td><td>X</td><td class="font-bold text-red-700">0</td><td>IoT selected but no data yet → fallback</td></tr>
+          <tr><td>1</td><td>1</td><td>0</td><td class="font-bold text-red-700">0</td><td>IoT selected, data stale → AUTO-FALLBACK</td></tr>
+          <tr class="bg-green-50"><td>1</td><td>1</td><td>1</td><td class="font-bold text-green-700">1</td><td>IoT selected, data fresh → USE IoT ✓</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3 class="font-bold text-slate-700 mt-5 mb-2">5.4 Algorithmic Flow</h3>
+    <div class="bg-slate-50 border border-slate-200 rounded p-4 mono text-xs leading-loose overflow-x-auto">
+      <pre>
+START: Sponge Engine Invoked for Branch B
+       │
+       ▼
+  ┌─────────────────────────────────┐
+  │  Is B.humidity_source           │
+  │  = 'IOT_SENSOR' ?               │
+  └─────────────────────────────────┘
+       │ YES                   NO │
+       ▼                         ▼
+  ┌─────────────────┐    ┌───────────────────────────┐
+  │ Has B received  │    │ RH*    ← B.RH_api         │
+  │ any IoT pulse?  │    │ source ← 'WEATHER_API'    │
+  │ (α(B) = 1?)     │    │ σ      ← false            │
+  └─────────────────┘    └───────────────────────────┘
+   │ YES    NO │
+   │           ▼
+   │   ┌──────────────────────────┐
+   │   │ RH* ← B.RH_api          │
+   │   │ warn: "Awaiting first    │
+   │   │  IoT pulse"             │
+   │   └──────────────────────────┘
+   │           │
+   ▼           │
+  ┌────────────────────────┐
+  │ age ← t_now − B.t_iot │
+  │ Is age ≤ Τ_stale?      │
+  └────────────────────────┘
+   │ YES          NO │
+   ▼                 ▼
+  ┌────────────────┐  ┌────────────────────────────┐
+  │ RH* ← B.RH_iot│  │ RH*    ← B.RH_api          │
+  │ source ← 'IOT'│  │ σ      ← true (FALLBACK)   │
+  │ σ ← false     │  │ UI: "STALE DATA" warning   │
+  └────────────────┘  └────────────────────────────┘
+         │                       │
+         └──────────┬────────────┘
+                    ▼
+         ┌──────────────────────────────┐
+         │ Compute Y(RH*) via piecewise │
+         │ Dynamic Yield Function §4.1  │
+         └──────────────────────────────┘
+                    │
+                    ▼
+         ┌──────────────────────────────┐
+         │ M_final = Y(RH*) · M_green  │
+         └──────────────────────────────┘
+                    │
+                    ▼
+         ┌──────────────────────────────────────┐
+         │ Propagate: C_roasted · ΔV · V_inv · Π│
+         └──────────────────────────────────────┘
+                    │
+                    ▼
+                  END</pre>
+    </div>
+
+    <h3 class="font-bold text-slate-700 mt-5 mb-2">5.5 Device Authentication &nbsp;<span class="text-slate-400 font-normal text-sm">— Equation (16)</span></h3>
+    <div class="eq-box mono text-sm">
+      <p><strong>(16)</strong>&nbsp; AUTH(K_d) = 𝟙[ ∃ B ∈ Branches : B.iot_device_key = K_d ]</p>
+      <p class="text-xs text-slate-500 mt-1">AUTH = 0 → HTTP 401. AUTH = 1 → reading ingested for identified branch. Prevents fraudulent data injection and cross-branch contamination.</p>
+    </div>
+  </div>
+
+  <!-- ══ SECTION 6 ══ -->
+  <div class="section-rule"></div>
+  <h2 class="text-xl font-bold text-slate-800 mb-3">Section 6 — Complete System Equation Summary</h2>
+  <div class="bg-white rounded-lg shadow p-6 mono text-sm space-y-1">
+    <p class="font-bold text-slate-600 mb-2">Sponge Effect Engine:</p>
+    <p>(1)&nbsp;&nbsp; M_final = Y(RH*) · M_green</p>
+    <p>(2)&nbsp;&nbsp; M_baseline = 0.82 · M_green</p>
+    <p>(3)&nbsp;&nbsp; ΔM = (Y(RH*) − 0.82) · M_green</p>
+    <p>(4)&nbsp;&nbsp; C_roasted = C_green / Y(RH*)</p>
+    <p>(5)&nbsp;&nbsp; C_baseline = C_green / 0.82</p>
+    <p>(6)&nbsp;&nbsp; P_w = C_baseline / (1 − g)</p>
+    <p>(7)&nbsp;&nbsp; ΔV = (Y(RH*) − Y₀) · M_green · P_w</p>
+    <p>(8)&nbsp;&nbsp; ΔV_total = Σᵢ (Y(RH*ᵢ) − Y₀) · M_greenᵢ · P_wᵢ</p>
+    <p>(9)&nbsp;&nbsp; V_inv = Y(RH*) · M_green · P_w</p>
+    <p>(10)&nbsp; Π = (P_w − C_green / Y(RH*)) · Y(RH*) · M_green</p>
+    <p class="font-bold text-slate-600 mt-4 mb-2">Hybrid Telemetry Switch:</p>
+    <p>(11)&nbsp; σ(B) = 𝟙[(t_now − B.t_iot) &gt; 3,600,000]</p>
+    <p>(12)&nbsp; α(B) = 𝟙[B.RH_iot ≠ null AND B.t_iot ≠ null]</p>
+    <p>(13)&nbsp; RH*(B) = B.RH_iot if (B.S=IOT) ∧ α=1 ∧ σ=0 ; else B.RH_api</p>
+    <p>(14)&nbsp; USE_IOT = P ∧ A ∧ F</p>
+    <p>(15)&nbsp; RH*(B) = USE_IOT · B.RH_iot + ¬USE_IOT · B.RH_api</p>
+    <p>(16)&nbsp; AUTH(K_d) = 𝟙[∃ B : B.iot_device_key = K_d]</p>
+    <p class="font-bold text-slate-600 mt-4 mb-2">Qabban Pulse — Barista Waste Reconciliation:</p>
+    <p>(17)&nbsp; W_theoretical = Σᵢ Φ(dᵢ) · qᵢ</p>
+    <p>(18)&nbsp; STABLE ⟺ |W_i − W_{i-1}| ≤ ε &nbsp; (ε = 0.3 g)</p>
+    <p>(19)&nbsp; W_actual = Σₖ W_k &nbsp; (stable committed readings)</p>
+    <p>(20)&nbsp; Ψ = W_actual − W_theoretical</p>
+    <p>(21)&nbsp; L_waste = (Ψ / 1000) · C_green  if Ψ &gt; 0 ;  else 0</p>
+    <p>(22)&nbsp; Q_adj = − (Ψ / 1000) &nbsp; [kg, signed Foodics adjustment]</p>
+    <div class="mt-4 p-4 bg-slate-100 rounded border border-slate-300">
+      <p class="font-bold mb-2">Canonical Piecewise Y(RH):</p>
+      <p>&nbsp;&nbsp;&nbsp;&nbsp; 0.825 &nbsp;if RH &gt; 70 % &nbsp;&nbsp; (Rule A — Hygroscopic Absorption)</p>
+      <p>Y(RH) = 0.817 &nbsp;if RH &lt; 20 % &nbsp;&nbsp; (Rule B — Evaporative Desorption)</p>
+      <p>&nbsp;&nbsp;&nbsp;&nbsp; 0.820 &nbsp;if 20 % ≤ RH ≤ 70 % (Baseline)</p>
+    </div>
+  </div>
+
+  <!-- ══ SECTION 7 ══ -->
+  <div class="section-rule"></div>
+  <h2 class="text-xl font-bold text-slate-800 mb-3">Section 7 — Technical Character Proof</h2>
+  <div class="bg-white rounded-lg shadow p-6 text-sm space-y-4">
+    <div><h3 class="font-bold text-slate-700 mb-1">7.1 Technical Problem Solved</h3>
+    <p>The invention solves a concrete technical problem: how to accurately and continuously value a physical inventory of hygroscopic agricultural commodities whose true mass changes in real time with micro-climate conditions, and how to reconcile barista-level bean consumption against POS-derived theoretical usage to isolate and financially quantify waste at the operational layer.</p></div>
+    <div><h3 class="font-bold text-slate-700 mb-1">7.2 Technical Means Employed</h3>
+    <ul class="list-disc ml-4 space-y-1 text-slate-600">
+      <li>Hardware IoT sensor (ESP32 + DHT22) communicating via authenticated HTTP POST</li>
+      <li>Bluetooth precision scale (Acaia) streaming GATT characteristic notifications at 5 Hz via Web Bluetooth API</li>
+      <li>Time-bounded arbitration algorithm (Equations 11–15) in edge-computing worker</li>
+      <li>Piecewise coefficient function (Equations 1–3) updating physical inventory mass records</li>
+      <li>Drink-to-bean mapping function Φ translating POS transactions into gram-level consumption</li>
+      <li>Cascaded financial recalculation (Equations 4–10, 17–22) propagating into cost, price, P&amp;L, and POS ledger</li>
+      <li>Authenticated telemetry ingestion pipeline (Equation 16) preventing fraudulent data injection</li>
+    </ul></div>
+    <div><h3 class="font-bold text-slate-700 mb-1">7.3 Technical Effects Produced</h3>
+    <ul class="list-disc ml-4 space-y-1 text-slate-600">
+      <li>Real-time hygroscopic mass correction of inventory records (accuracy impossible with static models)</li>
+      <li>Environmental P&amp;L surfaced as distinct financial ledger line (new in coffee ERP)</li>
+      <li>Barista waste quantified in grams and SAR per session without manual auditing</li>
+      <li>Reconciled waste variance auto-submitted to POS as signed inventory adjustment — closes physical↔digital loop</li>
+      <li>Auto-fallback ensures uninterrupted valuation during sensor failures</li>
+      <li>Stable wholesale pricing preserved independently of corrected internal cost</li>
+    </ul></div>
+    <div><h3 class="font-bold text-slate-700 mb-1">7.4 Non-Obviousness Arguments</h3>
+    <ol class="list-decimal ml-4 space-y-1 text-slate-600">
+      <li>τ_H=70% and τ_L=20% derived from empirical moisture equilibrium tables for Arabica beans under Saudi Arabian coastal and inland conditions</li>
+      <li>Asymmetric deltas (δ_A=+0.005 vs δ_B=−0.003) reflect physical asymmetry of absorption vs. desorption kinetics</li>
+      <li>Y₀-pinned price formula (Eqs 5–6) while correcting cost with Y(RH*) (Eq 4): non-obvious financial engineering separation</li>
+      <li>60-minute staleness threshold calibrated to DHT22 MTBF and roastery operational review cycles</li>
+      <li>Web Bluetooth GATT characteristic stream applied to industrial barista workflow instrumentation: novel application</li>
+      <li>Full automation from GATT byte stream → stable weight → gram variance → SAR loss → POS adjustment: no prior art in food-service ERP</li>
+    </ol></div>
+  </div>
+
+  <!-- ══ SECTION 8 ══ -->
+  <div class="section-rule"></div>
+  <h2 class="text-xl font-bold text-slate-800 mb-3">Section 8 — Claims (Draft Independent Claims)</h2>
+  <div class="space-y-4">
+    <div class="claim-box">
+      <p class="font-bold text-amber-800 text-sm mb-2">CLAIM 1 — METHOD (Hygroscopic Mass Compensation)</p>
+      <p class="text-sm text-slate-700">A computer-implemented method for real-time asset valuation correction in a coffee bean inventory management system, comprising: (a) receiving an authenticated IoT humidity telemetry message {RH_iot, t_iot}; (b) evaluating staleness predicate σ = 𝟙[(t_now−t_iot) > Τ_stale]; (c) selecting RH* via source arbitration (IoT if fresh, else API); (d) evaluating piecewise Y(RH*); (e) computing M_final = Y(RH*) · M_green per lot; and (f) computing ΔV = (Y(RH*)−Y₀) · M_green · P_w and recording in financial ledger.</p>
+    </div>
+    <div class="claim-box">
+      <p class="font-bold text-amber-800 text-sm mb-2">CLAIM 2 — METHOD (Barista Waste Reconciliation)</p>
+      <p class="text-sm text-slate-700">A computer-implemented method for real-time barista waste reconciliation, comprising: (a) receiving BLE GATT weight notifications at ≈5 Hz from precision scale; (b) applying stability predicate |W_i − W_{i-1}| ≤ ε to commit only stable readings; (c) computing W_actual = Σ W_k; (d) pulling POS order data and computing W_theoretical = Σ Φ(dᵢ)·qᵢ; (e) computing Ψ = W_actual − W_theoretical; and (f) computing L_waste = (Ψ/1000)·C_green and submitting Q_adj = −Ψ/1000 [kg] to POS API.</p>
+    </div>
+    <div class="claim-box">
+      <p class="font-bold text-amber-800 text-sm mb-2">CLAIM 3 — SYSTEM (Integrated Architecture)</p>
+      <p class="text-sm text-slate-700">A system comprising: (a) IoT sensor devices with unique device keys; (b) authenticated REST telemetry API; (c) hybrid telemetry arbitration module (Eq. 13); (d) piecewise Dynamic Yield Function module (§4.1); (e) mass-correction module (Eq. 1); (f) financial engine (Eqs. 4–10); (g) browser-side AcaiaLink BLE interface class; and (h) waste reconciliation engine (Eqs. 17–22).</p>
+    </div>
+    <div class="claim-box">
+      <p class="font-bold text-amber-800 text-sm mb-2">CLAIM 4 — DEVICE KEY AUTHENTICATION</p>
+      <p class="text-sm text-slate-700">The method of Claim 1, wherein the device key is a UUID v4 validated by AUTH(K_d) = 𝟙[∃ B : B.iot_device_key = K_d] prior to any inventory record modification.</p>
+    </div>
+    <div class="claim-box">
+      <p class="font-bold text-amber-800 text-sm mb-2">CLAIM 5 — AUTOMATIC FALLBACK</p>
+      <p class="text-sm text-slate-700">The method of Claim 1, wherein when σ = 1 the system automatically substitutes RH_api for RH_iot, displays a visual staleness warning with age-in-minutes, and ensures continuous valuation without manual override.</p>
+    </div>
+    <div class="claim-box">
+      <p class="font-bold text-amber-800 text-sm mb-2">CLAIM 6 — ASYMMETRIC DELTA COEFFICIENTS</p>
+      <p class="text-sm text-slate-700">The method of Claim 1, wherein δ_A = +0.005 for RH > 70 % and δ_B = −0.003 for RH &lt; 20 %, calibrated to moisture-transfer kinetics of green Arabica beans under Arabian Peninsula micro-climate conditions.</p>
+    </div>
+    <div class="claim-box">
+      <p class="font-bold text-amber-800 text-sm mb-2">CLAIM 7 — POS LOOP CLOSURE</p>
+      <p class="text-sm text-slate-700">The method of Claim 2, wherein Q_adj is transmitted to the POS system via authenticated API at conclusion of each reconciliation period, causing the POS digital inventory register to reflect actual physical bean consumption and thereby closing the physical-digital inventory loop.</p>
+    </div>
+  </div>
+
+  <!-- ══ SECTION 9 ══ -->
+  <div class="section-rule"></div>
+  <h2 class="text-xl font-bold text-slate-800 mb-3">Section 9 — Glossary of Scientific Terms</h2>
+  <div class="bg-white rounded-lg shadow p-6">
+    <dl class="space-y-3 text-sm">
+      <div><dt class="font-bold text-slate-700">Hygroscopic Mass Transfer</dt><dd class="text-slate-600 ml-4">The spontaneous exchange of water molecules between a porous solid (green coffee bean) and surrounding gas phase, driven by water vapour partial pressure differential. Quantified as ΔM.</dd></div>
+      <div><dt class="font-bold text-slate-700">Micro-climate Compensation</dt><dd class="text-slate-600 ml-4">The computational adjustment applied to the static 0.82 baseline coefficient to account for site-specific atmospheric conditions. Implemented as piecewise Y(RH).</dd></div>
+      <div><dt class="font-bold text-slate-700">Real-time Asset Valuation</dt><dd class="text-slate-600 ml-4">Continuous, automated recalculation of inventory monetary worth as a function of time-varying environmental parameters. Contrasted with periodic manual stocktakes.</dd></div>
+      <div><dt class="font-bold text-slate-700">Floating Yield Coefficient</dt><dd class="text-slate-600 ml-4">The dynamic, RH-dependent output of Y(RH), distinguished from the static baseline Y₀ = 0.82.</dd></div>
+      <div><dt class="font-bold text-slate-700">Environmental P&amp;L</dt><dd class="text-slate-600 ml-4">The sub-ledger account ΔV isolating financial impact of micro-climate from operational trading activities.</dd></div>
+      <div><dt class="font-bold text-slate-700">Hygroscopic Absorption (Rule A)</dt><dd class="text-slate-600 ml-4">Bean mass increase from moisture uptake in high-humidity atmosphere (RH > 70 %). Modelled as Y(RH) = 0.825.</dd></div>
+      <div><dt class="font-bold text-slate-700">Evaporative Desorption (Rule B)</dt><dd class="text-slate-600 ml-4">Bean mass decrease due to moisture loss to low-humidity atmosphere (RH &lt; 20 %). Modelled as Y(RH) = 0.817.</dd></div>
+      <div><dt class="font-bold text-slate-700">Staleness Threshold (Τ_stale)</dt><dd class="text-slate-600 ml-4">Maximum acceptable age of IoT telemetry reading before it is considered unreliable. Set to 3,600,000 ms (60 minutes).</dd></div>
+      <div><dt class="font-bold text-slate-700">Telemetry Arbitration</dt><dd class="text-slate-600 ml-4">The logic-gate process (§5.3) selecting between IoT sensor and web-API data based on source preference, availability, and freshness. Formalised in Equations (11)–(15).</dd></div>
+      <div><dt class="font-bold text-slate-700">Dial-in Mode</dt><dd class="text-slate-600 ml-4">Operational state in which barista activates Acaia BLE scale to log each stable weight reading as a waste event during grinder calibration and service.</dd></div>
+      <div><dt class="font-bold text-slate-700">Waste Variance (Ψ)</dt><dd class="text-slate-600 ml-4">Signed difference between actual IoT-scale bean consumption and POS-predicted theoretical consumption. Positive Ψ = measurable operational waste.</dd></div>
+      <div><dt class="font-bold text-slate-700">Drink-to-Bean Mapping (Φ)</dt><dd class="text-slate-600 ml-4">Injective function assigning theoretical dosage in grams per serving to each POS menu drink type. Translation layer from sales-count data to physical mass units.</dd></div>
+      <div><dt class="font-bold text-slate-700">POS Loop Closure</dt><dd class="text-slate-600 ml-4">The architectural property whereby waste variance Ψ is fed back into the POS system as signed inventory adjustment Q_adj, ensuring digital stock register consistency with physical scale measurements.</dd></div>
+      <div><dt class="font-bold text-slate-700">Device Key Authentication</dt><dd class="text-slate-600 ml-4">UUID-based identity verification (Eq. 16) authorising a physical sensor to write data into the valuation pipeline, preventing fraudulent injection and cross-branch contamination.</dd></div>
+    </dl>
+  </div>
+
+  <!-- ══ SECTION 10 ══ -->
+  <div class="section-rule"></div>
+  <h2 class="text-xl font-bold text-slate-800 mb-3">Section 10 — System Constants Table</h2>
+  <div class="bg-white rounded-lg shadow p-4">
+    <table class="data-table mono text-xs">
+      <thead><tr><th>Constant Identifier</th><th>Value</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td>SPONGE_BASELINE_COEFFICIENT</td><td>0.82</td><td>Y₀ — baseline yield coefficient</td></tr>
+        <tr><td>SPONGE_RH_HIGH_THRESHOLD</td><td>70 %</td><td>τ_H — Rule A trigger</td></tr>
+        <tr><td>SPONGE_RH_LOW_THRESHOLD</td><td>20 %</td><td>τ_L — Rule B trigger</td></tr>
+        <tr><td>SPONGE_HIGH_DELTA</td><td>+0.005</td><td>δ_A — absorption adjustment</td></tr>
+        <tr><td>SPONGE_LOW_DELTA</td><td>−0.003</td><td>δ_B — evaporation adjustment</td></tr>
+        <tr><td>IOT_STALE_THRESHOLD_MS</td><td>3,600,000 ms</td><td>Τ_stale — 60 minutes</td></tr>
+        <tr><td>ZATCA_VAT_RATE</td><td>0.15 (15 %)</td><td>Saudi VAT rate for invoices</td></tr>
+        <tr><td>ACAIA_SERVICE_UUID</td><td>0x0000ffe0-0000-1000-8000-00805f9b34fb</td><td>BLE GATT Service UUID</td></tr>
+        <tr><td>ACAIA_CHAR_UUID</td><td>0x0000ffe1-0000-1000-8000-00805f9b34fb</td><td>BLE GATT Characteristic UUID</td></tr>
+        <tr><td>ACAIA_SAMPLE_RATE</td><td>≈ 5 Hz</td><td>Scale update frequency</td></tr>
+        <tr><td>ACAIA_STABILITY_EPSILON (ε)</td><td>0.3 g</td><td>Stability convergence tolerance</td></tr>
+        <tr><td>PULSE_DEFAULT_BEAN_DOSE</td><td>18 g</td><td>Φ(default) — fallback dose</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ══ SECTION 11 ══ -->
+  <div class="section-rule"></div>
+  <h2 class="text-xl font-bold text-slate-800 mb-3">Section 11 — Source Code Reference</h2>
+  <div class="bg-white rounded-lg shadow p-4">
+    <table class="data-table mono text-xs">
+      <thead><tr><th>Function / Symbol</th><th>Section / Equation</th></tr></thead>
+      <tbody>
+        <tr><td>calcSpongeCoefficient(rh)</td><td>§4.1 — Y(RH) piecewise function</td></tr>
+        <tr><td>applyRoastShrinkageWithSponge()</td><td>§4.2 — Eq. (1) M_final</td></tr>
+        <tr><td>calcTrueRoastedCost()</td><td>§4.3 — Eq. (4) C_roasted</td></tr>
+        <tr><td>calcWholesalePrice()</td><td>§4.3 — Eqs. (5)–(6) P_w</td></tr>
+        <tr><td>calcLotFinancials().spongeKgDelta</td><td>§4.2 — Eq. (3) ΔM</td></tr>
+        <tr><td>calcLotFinancials().environmentalPnL</td><td>§4.4 — Eq. (7) ΔV</td></tr>
+        <tr><td>resolveActiveRH(branch)</td><td>§5.2 — Eq. (13) RH*(B)</td></tr>
+        <tr><td>calcSpongeCoefficientForBranch()</td><td>§5 — Full Hybrid Engine</td></tr>
+        <tr><td>POST /api/iot/telemetry</td><td>§5.5 — Eq. (16) AUTH(K_d)</td></tr>
+        <tr><td>POST /api/iot/source-toggle</td><td>§5.2 — F1/F2/F3 fallback cases</td></tr>
+        <tr><td>GET  /api/iot/status</td><td>§5.2 — Branch snapshot</td></tr>
+        <tr><td>PULSE_BEAN_MAP</td><td>§4.6.1 — Φ(d) mapping table</td></tr>
+        <tr><td>calcTheoreticalUsage(orders)</td><td>§4.6.2 — Eq. (17) W_theoretical</td></tr>
+        <tr><td>WasteLog (interface)</td><td>§4.6.3 — Eq. (19) W_actual</td></tr>
+        <tr><td>calcFinancialLoss(Ψ, C_green)</td><td>§4.6.5 — Eq. (21) L_waste</td></tr>
+        <tr><td>PulseReconciliation (interface)</td><td>§4.6.6 — Full PR schema</td></tr>
+        <tr><td>POST /api/pulse/sync</td><td>§4.6.7 — Eq. (22) Q_adj</td></tr>
+        <tr><td>AcaiaLink (browser TS class)</td><td>§4.6.3 — Eq. (18) stability gate</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ══ FOOTER ══ -->
+  <div class="section-rule"></div>
+  <div class="text-center text-xs text-slate-500 py-6 space-y-1">
+    <p class="font-mono font-bold text-slate-700">QABBAN-PAT-2026-001 &nbsp;|&nbsp; Version 2.0 — Final &nbsp;|&nbsp; 2026-03-12</p>
+    <p>CONFIDENTIAL — Patent Filing Preparation &nbsp;|&nbsp; Prepared by: QABBAN OS Engineering Team</p>
+    <p class="text-red-600 font-semibold mt-2">This document is confidential and intended solely for patent filing purposes.</p>
+    <p class="mt-2">22 Equations &nbsp;·&nbsp; 7 Claims &nbsp;·&nbsp; 14 Glossary Terms &nbsp;·&nbsp; 12 System Constants</p>
+  </div>
+
+</div>
+</body>
+</html>

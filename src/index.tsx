@@ -10135,6 +10135,9 @@ app.get('/api/exchange/analytics', (c) => {
 // wrangler pages dev serves public/static/manual.html at /static/manual
 app.get('/manual', (c) => c.redirect('/static/manual', 301))
 
+// ── GET /patent — Patent Filing Document ────────────────────────────
+app.get('/patent', (c) => c.redirect('/static/patent', 301))
+
 // ══════════════════════════════════════════════════════════════════
 //  QABBAN PULSE — Barista Waste Tracking Module
 //  Routes:
