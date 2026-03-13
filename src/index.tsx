@@ -584,15 +584,57 @@ const shell = (title: string, body: string) => `<!DOCTYPE html>
 
     /* ── LOGIN PAGE ── */
     .login-page {
-      min-height:100vh; display:flex; align-items:center; justify-content:center;
-      background:var(--bg-0);
-      background-image:
-        repeating-linear-gradient(0deg,transparent,transparent 39px,var(--bg-2) 39px,var(--bg-2) 40px),
-        repeating-linear-gradient(90deg,transparent,transparent 39px,var(--bg-2) 39px,var(--bg-2) 40px);
+      min-height:100vh;
+      display:flex; align-items:center; justify-content:center;
+      position:relative; overflow:hidden;
+      /* HD specialty coffee beans background */
+      background-image: url('/static/coffee-bg.webp');
+      background-size: cover;
+      background-position: center center;
+      background-repeat: no-repeat;
+      background-attachment: fixed;
     }
+    /* Dark overlay — ensures login fields remain readable at all times */
+    .login-page::before {
+      content:'';
+      position:absolute; inset:0;
+      background: linear-gradient(
+        135deg,
+        rgba(10, 6, 2, 0.72) 0%,
+        rgba(20, 10, 2, 0.65) 40%,
+        rgba(30, 15, 2, 0.72) 100%
+      );
+      z-index:0;
+    }
+    /* Ambient amber vignette — pulls the eye to the centre login box */
+    .login-page::after {
+      content:'';
+      position:absolute; inset:0;
+      background: radial-gradient(
+        ellipse 70% 70% at 50% 48%,
+        rgba(245,158,11,0.08) 0%,
+        rgba(245,158,11,0.04) 35%,
+        transparent 70%
+      );
+      z-index:0;
+      pointer-events:none;
+    }
+    /* All login children sit above the overlay */
+    .login-page > * { position:relative; z-index:1; }
     .login-box {
-      background:var(--bg-1); border:1px solid var(--border);
-      border-radius:var(--radius-lg); padding:40px 36px; width:400px; max-width:95vw;
+      /* Frosted glass card sitting above the coffee background */
+      background: rgba(15, 10, 5, 0.82);
+      backdrop-filter: blur(18px) saturate(1.4);
+      -webkit-backdrop-filter: blur(18px) saturate(1.4);
+      border: 1px solid rgba(245,158,11,0.18);
+      border-radius: var(--radius-lg);
+      padding: 40px 36px;
+      width: 420px; max-width: 95vw;
+      box-shadow:
+        0 0 0 1px rgba(245,158,11,0.08),
+        0 8px 32px rgba(0,0,0,0.55),
+        0 2px 8px rgba(0,0,0,0.40),
+        inset 0 1px 0 rgba(255,255,255,0.04);
     }
 
     /* ── LOGO HEADER — official Qabban OS brand image ── */
@@ -606,16 +648,22 @@ const shell = (title: string, body: string) => `<!DOCTYPE html>
       display:flex; align-items:center; justify-content:center;
       margin: 0 auto 4px;
     }
-    /* Ambient glow halo behind the logo */
+    /* Ambient glow halo behind the logo — enhanced for coffee bg */
     .login-logo-img-wrap::before {
       content:'';
-      position:absolute; inset:-12px;
+      position:absolute; inset:-18px;
       background: radial-gradient(ellipse at 50% 55%,
-        rgba(245,158,11,0.22) 0%,
-        rgba(245,158,11,0.08) 40%,
-        transparent 70%);
+        rgba(245,158,11,0.32) 0%,
+        rgba(245,158,11,0.14) 42%,
+        rgba(245,158,11,0.04) 65%,
+        transparent 75%);
       border-radius:50%;
       pointer-events:none;
+      animation: glowPulse 4s ease-in-out infinite;
+    }
+    @keyframes glowPulse {
+      0%,100% { opacity:0.85; transform:scale(1.0); }
+      50%      { opacity:1.00; transform:scale(1.06); }
     }
     .login-logo-img {
       width:130px; height:130px;
@@ -651,13 +699,20 @@ const shell = (title: string, body: string) => `<!DOCTYPE html>
       background:linear-gradient(90deg,transparent,var(--border-amber),transparent);
       margin:10px auto 0;
     }
-    .login-tabs { display:flex; margin-bottom:28px; border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; }
+    .login-tabs { display:flex; margin-bottom:28px; border:1px solid rgba(245,158,11,0.18); border-radius:var(--radius); overflow:hidden; }
     .login-tab {
-      flex:1; padding:8px; font-size:12px; font-family:var(--font-mono);
-      text-align:center; cursor:pointer; background:var(--bg-2); color:var(--text-muted);
-      border:none; transition:all .2s; letter-spacing:.5px;
+      flex:1; padding:10px 8px; font-size:12px; font-family:var(--font-mono);
+      text-align:center; cursor:pointer;
+      background: rgba(30,20,8,0.55);
+      color:var(--text-muted);
+      border:none; transition:all .25s; letter-spacing:.5px;
     }
-    .login-tab.active { background:var(--amber-glow); color:var(--amber); }
+    .login-tab:hover:not(.active) { background:rgba(245,158,11,0.06); color:var(--text-sec); }
+    .login-tab.active {
+      background: linear-gradient(135deg, rgba(245,158,11,0.22) 0%, rgba(245,158,11,0.10) 100%);
+      color:var(--amber);
+      box-shadow: inset 0 -2px 0 var(--amber);
+    }
     .btn-primary {
       width:100%; padding:12px;
       font-family:var(--font-mono); font-size:13px; font-weight:700;
@@ -675,10 +730,42 @@ const shell = (title: string, body: string) => `<!DOCTYPE html>
       display:none; align-items:center; gap:8px;
     }
     .login-hint {
-      margin-top:20px; padding-top:16px; border-top:1px solid var(--border);
+      margin-top:20px; padding-top:16px;
+      border-top:1px solid rgba(245,158,11,0.12);
       font-size:11px; color:var(--text-muted); text-align:center;
     }
-    .login-hint code { font-family:var(--font-mono); color:var(--amber); background:var(--amber-glow); padding:2px 5px; border-radius:2px; }
+    .login-hint code { font-family:var(--font-mono); color:var(--amber); background:rgba(245,158,11,0.10); padding:2px 5px; border-radius:2px; }
+    /* Coffee steam particles — decorative micro-animation */
+    .login-steam {
+      position:absolute; top:-40px; left:50%;
+      display:flex; gap:18px; transform:translateX(-50%);
+      pointer-events:none; z-index:0;
+    }
+    .login-steam span {
+      width:2px; border-radius:2px;
+      background: linear-gradient(to top, rgba(245,158,11,0.25), transparent);
+      animation: steamRise 3s ease-in-out infinite;
+    }
+    .login-steam span:nth-child(1){ height:28px; animation-delay:0s;   }
+    .login-steam span:nth-child(2){ height:22px; animation-delay:0.8s; }
+    .login-steam span:nth-child(3){ height:32px; animation-delay:1.4s; }
+    @keyframes steamRise {
+      0%   { transform:translateY(0px)  scaleX(1);   opacity:0; }
+      20%  { opacity:0.7; }
+      80%  { opacity:0.3; }
+      100% { transform:translateY(-24px) scaleX(1.4); opacity:0; }
+    }
+    /* Responsive — mobile tablets (iPad / Android) */
+    @media (max-width: 480px) {
+      .login-page { background-attachment: scroll; }
+      .login-box  { padding:32px 22px; border-radius:14px; }
+      .login-logo-img { width:100px; height:100px; }
+      .login-logo-img-wrap { width:110px; height:110px; }
+      .login-brand-name { font-size:20px; }
+    }
+    @media (min-width:481px) and (max-width:900px) {
+      .login-box { width:380px; padding:36px 28px; }
+    }
 
     /* ── MISC ── */
     .divider { height:1px; background:var(--border); margin:28px 0; }
@@ -1710,18 +1797,38 @@ function resolveCafeClient(cidParam: string | null) {
 
 app.get('/', (c) => {
   const body = `
-  <div class="login-page">
-    <div class="login-box">
+  <!-- ══ LOGIN PAGE — HD Coffee Beans Background ══ -->
+  <div class="login-page" id="loginPage">
 
+    <!-- Decorative bottom strip — roastery stats bar -->
+    <div class="login-bottom-bar">
+      <span><i class="fa fa-location-dot"></i> &nbsp;Kingdom of Saudi Arabia</span>
+      <span class="login-bottom-sep">·</span>
+      <span><i class="fa fa-mug-hot"></i> &nbsp;Specialty Coffee ERP</span>
+      <span class="login-bottom-sep">·</span>
+      <span><i class="fa fa-leaf"></i> &nbsp;Arabica &amp; Robusta Tracking</span>
+      <span class="login-bottom-sep">·</span>
+      <span><i class="fa fa-shield-halved"></i> &nbsp;ZATCA Compliant</span>
+    </div>
+
+    <!-- ══ FROSTED GLASS LOGIN CARD ══ -->
+    <div class="login-box" id="loginBox">
+
+      <!-- Coffee steam micro-animation above the logo -->
+      <div class="login-steam" aria-hidden="true">
+        <span></span><span></span><span></span>
+      </div>
+
+      <!-- ── BRAND HEADER ── -->
       <div class="login-logo-header">
-        <!-- Official Qabban OS logo image -->
         <div class="login-logo-img-wrap">
           <img
             src="/static/qabban-logo-256.png"
             alt="Qabban OS Logo"
             class="login-logo-img"
-            width="130"
-            height="130"
+            width="130" height="130"
+            loading="eager"
+            decoding="sync"
           />
         </div>
         <div class="login-brand-name" data-i18n="brand.name">QABBAN <span>OS</span></div>
@@ -1729,58 +1836,147 @@ app.get('/', (c) => {
         <div class="login-brand-rule"></div>
       </div>
 
-      <div class="login-tabs">
-        <button class="login-tab active" id="tabAdmin" onclick="switchTab('admin')" data-i18n="login.tab.admin">
+      <!-- ── PORTAL SELECTOR TABS ── -->
+      <div class="login-tabs" role="tablist" aria-label="Portal selector">
+        <button class="login-tab active" id="tabAdmin"
+                role="tab" aria-selected="true" aria-controls="loginFields"
+                onclick="switchTab('admin')" data-i18n="login.tab.admin">
           <i class="fa fa-shield-alt"></i> Roaster Admin
         </button>
-        <button class="login-tab" id="tabCafe" onclick="switchTab('cafe')" data-i18n="login.tab.cafe">
+        <button class="login-tab" id="tabCafe"
+                role="tab" aria-selected="false" aria-controls="loginFields"
+                onclick="switchTab('cafe')" data-i18n="login.tab.cafe">
           <i class="fa fa-mug-hot"></i> Cafe Portal
         </button>
       </div>
 
-      <div class="login-error" id="loginError">
+      <!-- ── ERROR BANNER ── -->
+      <div class="login-error" id="loginError" role="alert" aria-live="assertive">
         <i class="fa fa-exclamation-circle"></i>
         <span id="loginErrorMsg">Invalid credentials. Please try again.</span>
       </div>
 
-      <div class="form-group">
-        <label class="form-label" for="username" data-i18n="login.username">Username</label>
-        <input class="form-input" type="text" id="username"
-               placeholder="admin" autocomplete="username" autocapitalize="none"/>
+      <!-- ── FIELDS ── -->
+      <div id="loginFields" role="tabpanel">
+        <div class="form-group">
+          <label class="form-label" for="username" data-i18n="login.username">Username</label>
+          <input class="form-input" type="text" id="username"
+                 placeholder="admin"
+                 autocomplete="username"
+                 autocapitalize="none"
+                 spellcheck="false"/>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="password" data-i18n="login.password">Password</label>
+          <div style="position:relative;">
+            <input class="form-input" type="password" id="password"
+                   placeholder="••••••••"
+                   autocomplete="current-password"
+                   style="padding-left:14px; padding-right:42px;"/>
+            <!-- show/hide password toggle -->
+            <button type="button" id="pwToggle"
+              onclick="togglePw()"
+              aria-label="Show / hide password"
+              style="position:absolute; right:12px; top:50%; transform:translateY(-50%);
+                     background:none; border:none; cursor:pointer;
+                     color:var(--text-muted); font-size:13px; padding:4px;">
+              <i class="fa fa-eye" id="pwEyeIcon"></i>
+            </button>
+          </div>
+        </div>
       </div>
 
-      <div class="form-group">
-        <label class="form-label" for="password" data-i18n="login.password">Password</label>
-        <input class="form-input" type="password" id="password"
-               placeholder="••••••••" autocomplete="current-password"/>
-      </div>
-
-      <button class="btn-primary" id="accessBtn" onclick="handleLogin()" data-i18n="login.btn">
-        <i class="fa fa-arrow-right-to-bracket"></i> &nbsp; ACCESS SYSTEM
+      <!-- ── ACCESS BUTTON ── -->
+      <button class="btn-primary" id="accessBtn" onclick="handleLogin()" data-i18n="login.btn"
+              style="margin-top:16px; position:relative; overflow:hidden;">
+        <span id="accessBtnInner">
+          <i class="fa fa-arrow-right-to-bracket"></i> &nbsp; ACCESS SYSTEM
+        </span>
+        <!-- shimmer sweep on hover -->
+        <span class="btn-shimmer" aria-hidden="true"></span>
       </button>
 
+      <!-- ── CREDENTIAL HINT ── -->
       <div class="login-hint" data-i18n="login.hint">
         Admin: <code>admin</code> / <code>qabban2026</code>
         &nbsp;&mdash;&nbsp;
         Cafe: <code>alnokhba</code> / <code>cafe123</code>
       </div>
 
-    </div>
-  </div>
+    </div><!-- /.login-box -->
+  </div><!-- /.login-page -->
+
+  <style>
+    /* ── LOGIN BOTTOM INFO BAR ── */
+    .login-bottom-bar {
+      position:fixed; bottom:0; left:0; right:0; z-index:10;
+      display:flex; align-items:center; justify-content:center; flex-wrap:wrap;
+      gap:6px 14px;
+      padding:9px 20px;
+      background: rgba(10,6,2,0.72);
+      backdrop-filter: blur(10px);
+      border-top: 1px solid rgba(245,158,11,0.12);
+      font-size:11px; font-family:var(--font-mono);
+      color:rgba(245,158,11,0.55);
+      letter-spacing:.6px;
+    }
+    .login-bottom-bar i { color:rgba(245,158,11,0.45); }
+    .login-bottom-sep { color:rgba(245,158,11,0.2); }
+    /* ── BUTTON SHIMMER ── */
+    .btn-shimmer {
+      position:absolute; top:0; left:-75%;
+      width:50%; height:100%;
+      background:linear-gradient(90deg,transparent,rgba(255,255,255,0.18),transparent);
+      transform:skewX(-20deg);
+      transition:left .55s ease;
+      pointer-events:none;
+    }
+    #accessBtn:hover .btn-shimmer { left:125%; }
+    /* ── FORM INPUT enhanced contrast on coffee bg ── */
+    .login-box .form-input {
+      background: rgba(15,10,5,0.70) !important;
+      border-color: rgba(245,158,11,0.18) !important;
+      color: var(--text-pri) !important;
+    }
+    .login-box .form-input:focus {
+      border-color: var(--amber) !important;
+      background: rgba(20,13,5,0.85) !important;
+      box-shadow: 0 0 0 3px rgba(245,158,11,0.12) !important;
+    }
+    .login-box .form-label {
+      color: rgba(245,158,11,0.75) !important;
+    }
+  </style>
 
   <script>
+    /* ── show/hide password ── */
+    function togglePw() {
+      var inp  = document.getElementById('password');
+      var icon = document.getElementById('pwEyeIcon');
+      if (inp.type === 'password') {
+        inp.type = 'text';
+        icon.className = 'fa fa-eye-slash';
+      } else {
+        inp.type = 'password';
+        icon.className = 'fa fa-eye';
+      }
+    }
+
     /* ── tab switcher ── */
     var currentTab = 'admin';
     function switchTab(tab) {
       currentTab = tab;
       document.getElementById('tabAdmin').classList.toggle('active', tab === 'admin');
-      document.getElementById('tabCafe').classList.toggle('active', tab === 'cafe');
+      document.getElementById('tabAdmin').setAttribute('aria-selected', tab === 'admin');
+      document.getElementById('tabCafe').classList.toggle('active',  tab === 'cafe');
+      document.getElementById('tabCafe').setAttribute('aria-selected',  tab === 'cafe');
       document.getElementById('username').placeholder = tab === 'admin' ? 'admin' : 'alnokhba';
       document.getElementById('username').focus();
       document.getElementById('loginError').style.display = 'none';
     }
 
-    /* ── allow Enter key ── */
+    /* ── Enter key support ── */
     document.getElementById('username').addEventListener('keydown', function(e){ if(e.key==='Enter') handleLogin(); });
     document.getElementById('password').addEventListener('keydown', function(e){ if(e.key==='Enter') handleLogin(); });
 
@@ -1793,35 +1989,55 @@ app.get('/', (c) => {
     };
 
     function handleLogin() {
-      var btn  = document.getElementById('accessBtn');
+      var btn   = document.getElementById('accessBtn');
+      var inner = document.getElementById('accessBtnInner');
       var errEl = document.getElementById('loginError');
-      var user = document.getElementById('username').value.trim();
-      var pass = document.getElementById('password').value;
+      var user  = document.getElementById('username').value.trim();
+      var pass  = document.getElementById('password').value;
 
       /* visual feedback */
       btn.disabled = true;
-      btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> &nbsp; AUTHENTICATING...';
+      inner.innerHTML = '<i class="fa fa-spinner fa-spin"></i> &nbsp; AUTHENTICATING...';
       errEl.style.display = 'none';
 
       /* small artificial delay so the spinner is visible */
       setTimeout(function() {
         var match = CREDS[user];
         if (match && match.pass === pass) {
-          /* correct — navigate immediately */
-          window.location.href = match.dest;
+          /* correct — fade out page then navigate */
+          inner.innerHTML = '<i class="fa fa-check"></i> &nbsp; ACCESS GRANTED';
+          btn.style.background = '#16a34a';
+          document.getElementById('loginPage').style.transition = 'opacity .4s';
+          document.getElementById('loginPage').style.opacity = '0';
+          setTimeout(function(){ window.location.href = match.dest; }, 400);
         } else {
           /* wrong — show error, re-enable button */
-          document.getElementById('loginErrorMsg').textContent =
-            t('login.error');
+          document.getElementById('loginErrorMsg').textContent = t('login.error');
           errEl.style.display = 'flex';
           btn.disabled = false;
-          btn.innerHTML = t('login.btn');
+          inner.innerHTML = t('login.btn');
+          btn.style.background = '';
+          /* shake animation on login box */
+          var box = document.getElementById('loginBox');
+          box.style.animation = 'none';
+          box.offsetHeight; /* reflow */
+          box.style.animation = 'loginShake .4s ease';
           document.getElementById('password').value = '';
           document.getElementById('password').focus();
         }
-      }, 300);
+      }, 350);
     }
-  </script>`
+  </script>
+
+  <style>
+    @keyframes loginShake {
+      0%,100%{ transform:translateX(0); }
+      20%    { transform:translateX(-6px); }
+      40%    { transform:translateX(6px); }
+      60%    { transform:translateX(-4px); }
+      80%    { transform:translateX(4px); }
+    }
+  </style>`
 
   return c.html(shell('Login', body))
 })
