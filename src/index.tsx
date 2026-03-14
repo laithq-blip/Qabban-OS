@@ -11859,27 +11859,6 @@ app.get('/admin/watchdog', (c) => {
     ${cards}
   </div>
 
-  <!-- TypeScript reference box -->
-  <div class="card" style="margin-top:24px;border-color:rgba(96,165,250,.2)">
-    <div class="card-title" style="color:#60a5fa;font-size:11px">
-      <i class="fa fa-code"></i> CRON TRIGGER REFERENCE — wrangler.jsonc
-    </div>
-    <pre style="font-size:11px;color:var(--text-secondary);margin:0;padding:10px;background:rgba(0,0,0,.25);border-radius:4px;overflow-x:auto;line-height:1.6">"triggers": { "crons": ["0 */6 * * *"] }
-
-// Cloudflare scheduled handler (src/index.tsx)
-export const scheduled = async (
-  event : { cron: string; scheduledTime: number },
-  env   : unknown,
-  ctx   : { waitUntil: (p: Promise&lt;unknown&gt;) =&gt; void }
-) =&gt; {
-  // 1. Query climate_logs for RH &gt; 70% sustained ≥ 48h
-  const violations = checkHumidityViolations()
-  // 2. Update lot status → CRITICAL, insert system_notifications, fire WhatsApp
-  const created = persistViolations(violations)
-  ctx.waitUntil(Promise.allSettled(created.map(sendWatchdogWhatsApp)))
-}</pre>
-  </div>
-
   <script>
     async function triggerWatchdog() {
       const btn = document.getElementById('watchdog-run-btn')
