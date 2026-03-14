@@ -418,6 +418,8 @@
   <a class="sidebar-link" href="#foodics"><i class="fa fa-cash-register"></i> Foodics POS Sync</a>
   <a class="sidebar-link" href="#iot-telemetry"><i class="fa fa-microchip"></i> IoT Telemetry Route</a>
   <a class="sidebar-link" href="#iot-toggle"><i class="fa fa-toggle-on"></i> IoT Source Toggle</a>
+  <div class="sidebar-section">Risk Management</div>
+  <a class="sidebar-link" href="#risk-watchdog"><i class="fa fa-triangle-exclamation" style="color:#f87171"></i> Risk Watchdog</a>
   <div class="sidebar-section">Reference</div>
   <a class="sidebar-link" href="#api"><i class="fa fa-plug"></i> API Reference</a>
   <a class="sidebar-link" href="#constants"><i class="fa fa-sliders"></i> Constants & Config</a>
@@ -612,6 +614,14 @@
       <span style="background:rgba(251,191,36,0.15);border:1px solid rgba(251,191,36,0.3);color:#fbbf24;padding:4px 12px;border-radius:4px;font-size:12px;font-weight:700">MONITOR</span>
       <span style="background:rgba(248,113,113,0.15);border:1px solid rgba(248,113,113,0.3);color:#f87171;padding:4px 12px;border-radius:4px;font-size:12px;font-weight:700">CRITICAL</span>
       <span class="status-recalled">RECALLED</span>
+    </div>
+
+    <div class="info-box info-red" style="margin-top:16px">
+      <i class="fa fa-triangle-exclamation"></i>
+      <div>
+        <strong>Risk Watchdog — Automated CRITICAL Escalation:</strong>
+        Any lot whose Climate Passport shows <strong>RH &gt; 70%</strong> continuously for <strong>48+ hours</strong> is automatically escalated to <span style="color:#f87171;font-weight:700">CRITICAL</span> status by the Risk Watchdog engine (see Section 34). A pulsing red <span style="background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.4);color:#f87171;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700">⚠ WATCHDOG ALERT</span> badge appears on the lot row in the Inventory Ledger, linking directly to the Watchdog Dashboard at <code style="color:var(--amber)">/admin/watchdog</code>.
+      </div>
     </div>
   </div>
 
@@ -864,6 +874,7 @@ orderTotal           = discountedPricePerKg × orderKg
       <li><i class="fa fa-table"></i> Log table: timestamp / location / phase / humidity / temp / note</li>
       <li><i class="fa fa-flask"></i> Sponge coefficient calculated at each checkpoint</li>
       <li><i class="fa fa-shield-alt"></i> SFDA customs clearance note included</li>
+      <li><i class="fa fa-triangle-exclamation" style="color:#f87171"></i> <strong>Watchdog Alert Banner:</strong> If the lot has been flagged by the Risk Watchdog, a pulsing red critical-risk banner appears at the top of the Climate Passport, showing the average RH, exposure hours, reading count, SFDA audit flag, and a direct link to the Watchdog Dashboard. This banner is automatically injected whenever <code style="color:var(--amber)">lot.status === 'CRITICAL'</code> and a matching system notification exists.</li>
     </ul>
   </div>
   <div class="section" id="shiptrack">
@@ -1873,6 +1884,155 @@ Dammam : dkey-dmm-2a3b4c5d-6e7f-8901-cdef-ab2345678901
     </div>
   </div>
 
+  <!-- 34. Risk Watchdog -->
+  <div class="section" id="risk-watchdog">
+    <div class="section-title">
+      <span class="section-num">34</span>
+      <i class="fa fa-triangle-exclamation" style="color:#f87171"></i>
+      Risk Watchdog — Sustained Humidity Violation Engine
+    </div>
+    <div class="section-desc">Route: <code style="color:var(--amber)">/admin/watchdog</code> — Automated 6-hour cron engine that scans every lot's Climate Passport for sustained high-humidity exposure. Escalates violations to CRITICAL, notifies the branch manager via WhatsApp, flags the lot in the Inventory tab, and injects an urgent red banner on the Admin Dashboard.</div>
+
+    <div class="sub-title">What the Watchdog Monitors</div>
+    <div class="info-box info-red">
+      <i class="fa fa-circle-exclamation"></i>
+      <strong>Trigger Condition:</strong> A lot is flagged when <em>every</em> Climate Passport reading in the past <strong>48 hours</strong> shows Relative Humidity above <strong>70% RH</strong>. A single below-threshold reading resets the window — spikes are not flagged, only sustained exposure.
+    </div>
+
+    <div class="sub-title">Violation Thresholds</div>
+    <table class="manual-table">
+      <thead><tr><th>Parameter</th><th>Value</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td>Humidity Threshold</td><td>&gt; 70% RH</td><td>All readings in window must exceed this</td></tr>
+        <tr><td>Observation Window</td><td>48 hours</td><td>Lookback period from current time</td></tr>
+        <tr><td>Minimum Readings</td><td>≥ 2</td><td>At least 2 data points required to flag</td></tr>
+        <tr><td>Cron Interval</td><td>Every 6 hours</td><td><code>0 */6 * * *</code> Cloudflare Cron Trigger</td></tr>
+        <tr><td>Safe Storage Target</td><td>&lt; 50% RH</td><td>Action instruction sent to branch manager</td></tr>
+      </tbody>
+    </table>
+
+    <div class="sub-title">Detection Logic — Step by Step</div>
+    <ul class="checklist">
+      <li><i class="fa fa-clock"></i> Every 6 hours the <code>checkHumidityViolations()</code> function runs automatically via Cloudflare Cron Trigger</li>
+      <li><i class="fa fa-filter"></i> For each lot, only Climate Passport log entries within the last 48 hours are considered</li>
+      <li><i class="fa fa-chart-line"></i> If the window has ≥ 2 readings <em>and every single one</em> exceeds 70% RH, the lot is a confirmed violation</li>
+      <li><i class="fa fa-check-double"></i> Lots already flagged CRITICAL with an existing UNREAD system notification are skipped (no duplicate alerts)</li>
+      <li><i class="fa fa-database"></i> Violations are persisted via <code>persistViolations()</code> — lot status updated, notification inserted, WhatsApp queued</li>
+      <li><i class="fa fa-hourglass-half"></i> WhatsApp batch is dispatched asynchronously using <code>ctx.waitUntil()</code> so the cron does not block on delivery</li>
+    </ul>
+
+    <div class="sub-title">Actions Triggered on Violation</div>
+    <table class="manual-table">
+      <thead><tr><th>Action</th><th>Where</th><th>Details</th></tr></thead>
+      <tbody>
+        <tr><td>Status → CRITICAL</td><td>Inventory Ledger</td><td>Lot badge turns red and pulses; affects both roaster and global lot stores</td></tr>
+        <tr><td>System Notification (UNREAD)</td><td>system_notifications</td><td>Type: HUMIDITY_VIOLATION · Severity: CRITICAL · includes avg RH, peak RH, exposure hours, reading count</td></tr>
+        <tr><td>Urgent Red Banner</td><td>Admin Dashboard login</td><td>Dismissible banner listing all violated lots with direct links to their Climate Passports</td></tr>
+        <tr><td>Lot Row Badge</td><td>Inventory Tab table</td><td>A pulsing <span style="background:rgba(239,68,68,0.15);color:#f87171;padding:2px 6px;border-radius:3px;font-size:11px">⚠ WATCHDOG ALERT</span> icon links to <code>/admin/watchdog</code></td></tr>
+        <tr><td>Climate Passport Banner</td><td>/exchange/climate/:id</td><td>Pulsing critical-risk box with condition metrics, action steps, and SFDA audit badge</td></tr>
+        <tr><td>WhatsApp Alert</td><td>Branch Manager's phone</td><td>High-priority message via whatsapp_service (see WhatsApp Message Format below)</td></tr>
+        <tr><td>SFDA Audit Flag</td><td>Lot record</td><td><code>sfdaAuditFlagged: true</code> is set on every violated lot for compliance tracking</td></tr>
+      </tbody>
+    </table>
+
+    <div class="sub-title">WhatsApp Alert Message Format</div>
+    <div class="info-box" style="background:rgba(37,211,102,0.08);border-color:rgba(37,211,102,0.3);font-family:var(--font-mono);font-size:12px;line-height:2">
+      <i class="fa-brands fa-whatsapp" style="color:#25d366;font-size:18px"></i>
+      <div>
+        🚨 <strong>*CRITICAL RISK ALERT: High Humidity Exposure Detected.*</strong><br>
+        *Lot:* &lt;Origin&gt; (&lt;Lot ID&gt;)<br>
+        *Branch:* &lt;Branch Name&gt;<br>
+        *Condition:* Consistent &gt;70% RH for 48+ h → Avg RH: &lt;x&gt;% | Peak: &lt;y&gt;% | &lt;n&gt;h sustained<br>
+        *Action Required:* Move lot to an environment with &lt;50% RH or activate industrial dehumidifiers immediately. Perform a sensory check (Aroma/Visual) for musty notes. DO NOT DISPOSE unless mold or musty odor is confirmed. This lot is now flagged for SFDA Audit compliance.<br>
+        🔗 Climate Passport: /exchange/climate/&lt;lotId&gt;<br>
+        <em>QABBAN OS Risk Watchdog · Detected &lt;timestamp&gt; UTC</em>
+      </div>
+    </div>
+
+    <div class="sub-title">Watchdog Dashboard — <code>/admin/watchdog</code></div>
+    <ul class="checklist">
+      <li><i class="fa fa-gauge"></i> Summary cards: Active Violations · Unread Notifications · WhatsApp Pending · Last Run time</li>
+      <li><i class="fa fa-bell"></i> Notification cards showing lot origin, branch, avg/peak RH, exposure hours, detected timestamp, SFDA badge, passport link</li>
+      <li><i class="fa fa-check"></i> One-click <strong>Acknowledge</strong> per notification (marks as READ) or <strong>Acknowledge All</strong></li>
+      <li><i class="fa fa-play"></i> <strong>Run Watchdog Now</strong> button triggers an immediate manual scan (hits <code>GET /api/watchdog/run</code>)</li>
+      <li><i class="fa fa-clock"></i> Next scheduled run shown live (counts down to next 6-hour cron window)</li>
+    </ul>
+
+    <div class="sub-title">Data Model — SystemNotification</div>
+    <table class="manual-table">
+      <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td>id</td><td>string</td><td>Format: <code>WDG-{timestamp}-{rand4}</code></td></tr>
+        <tr><td>type</td><td>string</td><td>Always <code>HUMIDITY_VIOLATION</code></td></tr>
+        <tr><td>severity</td><td>string</td><td>Always <code>CRITICAL</code></td></tr>
+        <tr><td>status</td><td>string</td><td><code>UNREAD</code> → <code>READ</code> after acknowledgement</td></tr>
+        <tr><td>lotId</td><td>string</td><td>The flagged lot's ID (e.g. <code>LOT-008</code>)</td></tr>
+        <tr><td>lotOrigin</td><td>string</td><td>Human-readable origin (e.g. Indonesia Sumatra)</td></tr>
+        <tr><td>branchId / branchName</td><td>string</td><td>Branch where the lot is stored</td></tr>
+        <tr><td>avgHumidity</td><td>number</td><td>Average RH% across all readings in the window</td></tr>
+        <tr><td>peakHumidity</td><td>number</td><td>Highest single reading in the window</td></tr>
+        <tr><td>exposureHours</td><td>number</td><td>Total hours covered by the flagged window</td></tr>
+        <tr><td>readingCount</td><td>number</td><td>Number of Climate Passport entries evaluated</td></tr>
+        <tr><td>passportUrl</td><td>string</td><td>Deep link to the lot's Climate Passport page</td></tr>
+        <tr><td>sfdaAuditFlagged</td><td>boolean</td><td>Always <code>true</code> for HUMIDITY_VIOLATION</td></tr>
+        <tr><td>whatsappSent</td><td>boolean</td><td><code>true</code> after successful WhatsApp dispatch</td></tr>
+        <tr><td>detectedAt</td><td>ISO string</td><td>UTC timestamp when the Watchdog first detected the violation</td></tr>
+        <tr><td>createdAt</td><td>ISO string</td><td>When the notification record was created</td></tr>
+      </tbody>
+    </table>
+
+    <div class="sub-title">Risk Watchdog API Endpoints</div>
+    <table class="manual-table">
+      <thead><tr><th>Method</th><th>Path</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><span class="method-get">GET</span></td><td class="endpoint-path">/api/watchdog/run</td><td>Manually trigger a full violation scan — same logic as the 6-hour cron</td></tr>
+        <tr><td><span class="method-get">GET</span></td><td class="endpoint-path">/api/watchdog/notifications</td><td>List all system notifications (supports <code>?status=UNREAD</code> filter)</td></tr>
+        <tr><td><span class="method-get">GET</span></td><td class="endpoint-path">/api/watchdog/active-risks</td><td>Returns all CRITICAL lots with live RH, SFDA flag, passport URL, and WhatsApp status</td></tr>
+        <tr><td><span class="method-post">POST</span></td><td class="endpoint-path">/api/watchdog/notifications/:id/ack</td><td>Acknowledge a single notification (marks as READ)</td></tr>
+        <tr><td><span class="method-post">POST</span></td><td class="endpoint-path">/api/watchdog/notifications/ack-all</td><td>Acknowledge all UNREAD notifications at once</td></tr>
+        <tr><td><span class="method-get">GET</span></td><td class="endpoint-path">/admin/watchdog</td><td>Watchdog Dashboard UI — violation cards, manual run button, cron schedule info</td></tr>
+      </tbody>
+    </table>
+
+    <div class="sub-title">Cron Trigger Configuration</div>
+    <div class="code-block">
+<span class="comment">// wrangler.jsonc — Cloudflare Cron Trigger</span>
+{
+  <span class="string">"triggers"</span>: {
+    <span class="string">"crons"</span>: [<span class="string">"0 */6 * * *"</span>]   <span class="comment">// runs at 00:00, 06:00, 12:00, 18:00 UTC daily</span>
+  }
+}
+
+<span class="comment">// Cloudflare Workers scheduled handler (src/index.tsx)</span>
+<span class="keyword">export const</span> scheduled = <span class="keyword">async</span> (
+  event : { cron: string; scheduledTime: number },
+  env   : unknown,
+  ctx   : { waitUntil: (p: Promise&lt;unknown&gt;) =&gt; void }
+) =&gt; {
+  <span class="comment">// 1. Scan Climate Passport logs — RH &gt; 70% sustained for 48+ h</span>
+  <span class="keyword">const</span> violations = checkHumidityViolations()
+  <span class="comment">// 2. Escalate lot status → CRITICAL, insert notifications, build WhatsApp payloads</span>
+  <span class="keyword">const</span> created = persistViolations(violations)
+  <span class="comment">// 3. Dispatch WhatsApp alerts as a non-blocking batch (does not stall the cron)</span>
+  ctx.waitUntil(Promise.allSettled(created.map(sendWatchdogWhatsApp)))
+}
+    </div>
+
+    <div class="info-box" style="background:rgba(251,191,36,0.08);border-color:rgba(251,191,36,0.3)">
+      <i class="fa fa-circle-info" style="color:var(--amber)"></i>
+      <div>
+        <strong>Recommended Response Protocol for Branch Managers:</strong>
+        <ol style="margin:8px 0 0 16px;font-size:13px;line-height:2">
+          <li>Move the flagged lot to a storage area with RH &lt; 50% or activate industrial dehumidifiers immediately.</li>
+          <li>Perform a sensory check: inspect for musty aroma or visible mold on the sack exterior.</li>
+          <li><strong>Do not dispose</strong> of the lot unless mold or confirmed musty odor is detected.</li>
+          <li>Acknowledge the notification in the Watchdog Dashboard after taking action.</li>
+          <li>The lot remains CRITICAL until manually reviewed and re-graded by the roaster admin.</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+
   <!-- Updated API Reference additions -->
   <div class="section" id="api-v3-additions">
     <div class="section-title">
@@ -1914,7 +2074,7 @@ Dammam : dkey-dmm-2a3b4c5d-6e7f-8901-cdef-ab2345678901
   <!-- Footer -->
   <div style="background:#0a0a0f;border-top:1px solid var(--border);padding:32px 60px;text-align:center">
     <div style="color:var(--amber);font-family:var(--font-mono);font-weight:700;letter-spacing:3px;margin-bottom:8px">QABBAN OS</div>
-    <div style="color:var(--text-muted);font-size:12px">User Manual v4.0 · March 2026 · Qabban Global Exchange &amp; Loyalty Engine v6</div>
+    <div style="color:var(--text-muted);font-size:12px">User Manual v5.0 · March 2026 · Qabban Global Exchange &amp; Loyalty Engine v6 · Risk Watchdog v2.0</div>
     <div style="color:var(--text-muted);font-size:11px;margin-top:6px">Hono + TypeScript + Cloudflare Pages · ~12,000 lines · Bilingual EN/AR</div>
   </div>
 
