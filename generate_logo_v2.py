@@ -1,0 +1,183 @@
+#!/usr/bin/env python3
+"""
+Generate Qabban Logo v2 - Enhanced neon amber/gold style
+Precise match to the original: قبان Arabic calligraphy + QABBAN + steelyard with coffee beans
+"""
+
+import cairosvg
+
+# Enhanced SVG with better proportions matching original image
+svg_content = '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 700" width="1024" height="700">
+  <defs>
+    <!-- Neon amber glow filter - soft -->
+    <filter id="neonSoft" x="-15%" y="-15%" width="130%" height="130%">
+      <feGaussianBlur stdDeviation="5" result="blur1"/>
+      <feGaussianBlur stdDeviation="12" result="blur2"/>
+      <feMerge>
+        <feMergeNode in="blur2"/>
+        <feMergeNode in="blur1"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <!-- Strong glow -->
+    <filter id="neonStrong" x="-25%" y="-25%" width="150%" height="150%">
+      <feGaussianBlur stdDeviation="8" result="blur1"/>
+      <feGaussianBlur stdDeviation="18" result="blur2"/>
+      <feMerge>
+        <feMergeNode in="blur2"/>
+        <feMergeNode in="blur2"/>
+        <feMergeNode in="blur1"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <!-- Text glow -->
+    <filter id="textGlow" x="-8%" y="-8%" width="116%" height="116%">
+      <feGaussianBlur stdDeviation="10" result="blur1"/>
+      <feGaussianBlur stdDeviation="20" result="blur2"/>
+      <feMerge>
+        <feMergeNode in="blur2"/>
+        <feMergeNode in="blur1"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  
+  <!-- Black background -->
+  <rect width="1024" height="700" fill="#080808"/>
+  
+  <!-- Subtle amber radial bg glow -->
+  <radialGradient id="bgGlow" cx="50%" cy="48%" r="48%">
+    <stop offset="0%" stop-color="#4A2000" stop-opacity="0.55"/>
+    <stop offset="60%" stop-color="#1A0800" stop-opacity="0.3"/>
+    <stop offset="100%" stop-color="#080808" stop-opacity="0"/>
+  </radialGradient>
+  <ellipse cx="512" cy="340" rx="490" ry="340" fill="url(#bgGlow)"/>
+
+  <!-- ══════════════════════════════════════════ -->
+  <!-- STEELYARD SCALE - top area               -->
+  <!-- ══════════════════════════════════════════ -->
+  
+  <!-- Top hanging ring/circle -->
+  <circle cx="430" cy="108" r="20" fill="none" stroke="#F5A623" stroke-width="3.5" filter="url(#neonSoft)"/>
+  
+  <!-- Center diamond connector below ring -->
+  <polygon points="430,128 445,155 430,182 415,155" fill="none" stroke="#F5A623" stroke-width="3" filter="url(#neonSoft)"/>
+  
+  <!-- Horizontal beam: LEFT end (left pan side) to RIGHT end (counterweight side) -->
+  <!-- Left portion of beam -->
+  <line x1="160" y1="195" x2="430" y2="168" stroke="#F5A623" stroke-width="5" stroke-linecap="round" filter="url(#neonSoft)"/>
+  <!-- Right portion of beam -->
+  <line x1="430" y1="168" x2="820" y2="185" stroke="#F5A623" stroke-width="5" stroke-linecap="round" filter="url(#neonSoft)"/>
+  
+  <!-- Decorative diamond at left end of beam -->
+  <polygon points="160,195 178,208 160,221 142,208" fill="none" stroke="#F5A623" stroke-width="2.5" filter="url(#neonSoft)"/>
+  
+  <!-- Ruler graduation marks on right arm -->
+  <line x1="520" y1="174" x2="520" y2="188" stroke="#F5A623" stroke-width="2.5" filter="url(#neonSoft)"/>
+  <line x1="570" y1="176" x2="570" y2="190" stroke="#F5A623" stroke-width="2" filter="url(#neonSoft)"/>
+  <line x1="620" y1="178" x2="620" y2="192" stroke="#F5A623" stroke-width="2.5" filter="url(#neonSoft)"/>
+  <line x1="670" y1="179" x2="670" y2="193" stroke="#F5A623" stroke-width="2" filter="url(#neonSoft)"/>
+  <line x1="720" y1="181" x2="720" y2="195" stroke="#F5A623" stroke-width="2.5" filter="url(#neonSoft)"/>
+  <line x1="770" y1="183" x2="770" y2="197" stroke="#F5A623" stroke-width="2" filter="url(#neonSoft)"/>
+  
+  <!-- Counterweight block at right end -->
+  <rect x="808" y="175" width="38" height="58" rx="3" fill="none" stroke="#F5A623" stroke-width="4" filter="url(#neonSoft)"/>
+  <rect x="818" y="188" width="18" height="32" rx="2" fill="none" stroke="#F5A623" stroke-width="2.5" filter="url(#neonSoft)"/>
+  
+  <!-- Arrow pointer at far right of counterweight -->
+  <polygon points="846,197 880,204 846,211" fill="#F5A623" filter="url(#neonSoft)"/>
+  
+  <!-- Hanging string from left diamond down to pan hanger -->
+  <line x1="160" y1="221" x2="160" y2="262" stroke="#F5A623" stroke-width="3" filter="url(#neonSoft)"/>
+  
+  <!-- Pan hanger horizontal bar -->
+  <line x1="112" y1="262" x2="208" y2="262" stroke="#F5A623" stroke-width="3" filter="url(#neonSoft)"/>
+  
+  <!-- Left chain to pan -->
+  <line x1="112" y1="262" x2="92" y2="305" stroke="#F5A623" stroke-width="2.5" filter="url(#neonSoft)"/>
+  <!-- Right chain to pan -->
+  <line x1="208" y1="262" x2="228" y2="305" stroke="#F5A623" stroke-width="2.5" filter="url(#neonSoft)"/>
+  
+  <!-- Pan body: diamond/tray shape pointing down -->
+  <polygon points="92,305 228,305 208,398 172,398" fill="none" stroke="#F5A623" stroke-width="3.5" filter="url(#neonSoft)"/>
+  
+  <!-- Pan bottom tip -->
+  <line x1="172" y1="398" x2="160" y2="432" stroke="#F5A623" stroke-width="3.5" filter="url(#neonSoft)"/>
+  <line x1="208" y1="398" x2="160" y2="432" stroke="#F5A623" stroke-width="3.5" filter="url(#neonSoft)"/>
+  
+  <!-- ══════ COFFEE BEANS inside pan ══════ -->
+  <!-- Bean 1: top center -->
+  <g transform="rotate(-10, 160, 330)">
+    <ellipse cx="160" cy="330" rx="18" ry="26" fill="none" stroke="#F5A623" stroke-width="2.5" filter="url(#neonSoft)"/>
+    <path d="M160,304 Q170,317 160,330 Q150,317 160,304" fill="none" stroke="#F5A623" stroke-width="1.5"/>
+    <path d="M160,330 Q170,343 160,356 Q150,343 160,330" fill="none" stroke="#F5A623" stroke-width="1.5"/>
+  </g>
+  <!-- Bean 2: bottom left -->
+  <g transform="rotate(20, 128, 372)">
+    <ellipse cx="128" cy="372" rx="15" ry="22" fill="none" stroke="#F5A623" stroke-width="2.5" filter="url(#neonSoft)"/>
+    <line x1="128" y1="350" x2="128" y2="394" stroke="#F5A623" stroke-width="1.5"/>
+  </g>
+  <!-- Bean 3: bottom right -->
+  <g transform="rotate(-20, 195, 368)">
+    <ellipse cx="195" cy="368" rx="15" ry="22" fill="none" stroke="#F5A623" stroke-width="2.5" filter="url(#neonSoft)"/>
+    <line x1="195" y1="346" x2="195" y2="390" stroke="#F5A623" stroke-width="1.5"/>
+  </g>
+
+  <!-- ══════════════════════════════════════════════════════ -->
+  <!-- ARABIC TEXT: قبان - large calligraphic style          -->
+  <!-- Positioned center-right, large and prominent          -->
+  <!-- ══════════════════════════════════════════════════════ -->
+  <text 
+    x="565" 
+    y="440"
+    font-family="'Amiri', 'Noto Naskh Arabic', 'Scheherazade New', 'Traditional Arabic', 'Arabic Typesetting', 'DejaVu Sans', serif"
+    font-size="260"
+    font-weight="bold"
+    fill="#F5A623"
+    text-anchor="middle"
+    direction="rtl"
+    unicode-bidi="bidi-override"
+    filter="url(#textGlow)"
+    dominant-baseline="auto"
+  >قبان</text>
+
+  <!-- ══════════════════════════════════════════ -->
+  <!-- LATIN TEXT: QABBAN                       -->
+  <!-- ══════════════════════════════════════════ -->
+  <text 
+    x="565" 
+    y="575"
+    font-family="'Cinzel', 'Trajan Pro', 'Optima', 'Georgia', 'Times New Roman', serif"
+    font-size="95"
+    font-weight="bold"
+    fill="#F5A623"
+    text-anchor="middle"
+    letter-spacing="22"
+    filter="url(#textGlow)"
+  >QABBAN</text>
+
+</svg>'''
+
+# Save SVG
+with open('/home/user/webapp/public/static/qabban-logo-v2.svg', 'w', encoding='utf-8') as f:
+    f.write(svg_content)
+print("SVG v2 saved")
+
+# Generate multiple sizes
+sizes = [
+    ('qabban-logo-256-new.png', 256, 256),
+    ('qabban-logo-48-new.png', 48, 48),
+    ('qabban-logo-512.png', 512, 512),
+    ('qabban-logo-1024.png', 1024, 1024),
+]
+
+for filename, w, h in sizes:
+    cairosvg.svg2png(
+        url='/home/user/webapp/public/static/qabban-logo-v2.svg',
+        write_to=f'/home/user/webapp/public/static/{filename}',
+        output_width=w,
+        output_height=h
+    )
+    print(f"Generated {filename} ({w}x{h})")
+
+print("\nAll done!")

@@ -123,6 +123,8 @@ export interface Branch {
   riskStatus:  'LOW' | 'MODERATE' | 'HIGH' | 'CRITICAL'
   activeLots:  number
   totalGreenKg: number
+  /** Branch manager WhatsApp phone number (E.164 format, e.g. +966501234567). */
+  managerPhone?: string
 }
 
 // ─── Helper: resolve the active RH for Sponge calculations ───────────────────
@@ -833,6 +835,7 @@ export const branches: Branch[] = [
     riskStatus:  'LOW',
     activeLots:  coffeeLots.filter(l => l.branch === 'Riyadh').length,
     totalGreenKg: coffeeLots.filter(l => l.branch === 'Riyadh').reduce((s, l) => s + l.greenWeightKg, 0),
+    managerPhone: '+966501110001',
   },
   {
     id:          'BR-JED',
@@ -851,6 +854,7 @@ export const branches: Branch[] = [
     riskStatus:  'CRITICAL',
     activeLots:  coffeeLots.filter(l => l.branch === 'Jeddah').length,
     totalGreenKg: coffeeLots.filter(l => l.branch === 'Jeddah').reduce((s, l) => s + l.greenWeightKg, 0),
+    managerPhone: '+966502220002',
   },
   {
     id:          'BR-DMM',
@@ -869,6 +873,7 @@ export const branches: Branch[] = [
     riskStatus:  'CRITICAL',
     activeLots:  coffeeLots.filter(l => l.branch === 'Dammam').length,
     totalGreenKg: coffeeLots.filter(l => l.branch === 'Dammam').reduce((s, l) => s + l.greenWeightKg, 0),
+    managerPhone: '+966503330003',
   },
 ]
 
@@ -2008,4 +2013,253 @@ export function calcTheoreticalUsage(
 export function calcFinancialLoss(varianceGrams: number, costPerKgSar: number): number {
   if (varianceGrams <= 0) return 0
   return Math.round((varianceGrams / 1000) * costPerKgSar * 100) / 100
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  RISK WATCHDOG  —  System Notifications & Humidity Violation Engine
+//  Cron: every 6 hours  |  Threshold: RH > 70% sustained for ≥ 48 hours
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ─── Watchdog constants ───────────────────────────────────────────────────────
+export const WATCHDOG_RH_CRITICAL         = 70    // % — Rule A threshold
+export const WATCHDOG_DURATION_CRITICAL_H = 48    // hours — sustained window
+export const WATCHDOG_DURATION_CRITICAL_MS = WATCHDOG_DURATION_CRITICAL_H * 60 * 60 * 1000
+
+// ─── SystemNotification ───────────────────────────────────────────────────────
+export type NotificationType = 'HUMIDITY_VIOLATION' | 'SPONGE_ANOMALY' | 'SYSTEM'
+export type NotificationSeverity = 'INFO' | 'WARNING' | 'CRITICAL'
+export type NotificationStatus = 'UNREAD' | 'READ' | 'DISMISSED'
+
+export interface SystemNotification {
+  id: string
+  type: NotificationType
+  severity: NotificationSeverity
+  status: NotificationStatus
+  // Reference
+  lotId: string
+  lotOrigin: string
+  branchName: string
+  branchManagerPhone?: string
+  // Content
+  title: string
+  body: string
+  actionInstruction: string
+  // Watchdog metadata
+  avgHumidity: number           // average RH over the violation window
+  maxHumidity: number           // peak RH reading
+  exposureHours: number         // confirmed sustained exposure in hours
+  readingCount: number          // number of readings that all exceeded threshold
+  firstViolationTs: string      // ISO — oldest reading in window
+  lastViolationTs: string       // ISO — most recent reading
+  // Lifecycle
+  detectedAt: string            // ISO — when watchdog flagged it
+  whatsappSent: boolean
+  whatsappSentAt?: string
+}
+
+// ─── In-memory store (mirrors a DB table in production) ───────────────────────
+export const systemNotifications: SystemNotification[] = []
+
+// ─── Helper: generate notification ID ────────────────────────────────────────
+export function notifId(): string {
+  const ts  = Date.now().toString(36).toUpperCase()
+  const rnd = Math.random().toString(36).slice(2, 5).toUpperCase()
+  return `WDG-${ts}-${rnd}`
+}
+
+// ─── Helper: get all UNREAD notifications (for admin banner injection) ────────
+export function getUnreadNotifications(): SystemNotification[] {
+  return systemNotifications.filter(n => n.status === 'UNREAD')
+}
+
+// ─── Helper: mark a notification read/dismissed ────────────────────────────────
+export function markNotification(
+  id: string,
+  status: 'READ' | 'DISMISSED'
+): SystemNotification | null {
+  const n = systemNotifications.find(n => n.id === id)
+  if (!n) return null
+  n.status = status
+  return n
+}
+
+// ─── Core violation detector ──────────────────────────────────────────────────
+// Scans globalLots climateLog + branches IoT readings.
+// A "sustained violation" = EVERY reading in the last 48h exceeds 70% RH
+// AND the span of readings covers at least 48 continuous hours.
+//
+// Returns an array of violation records (not yet persisted).
+export interface HumidityViolation {
+  lotId: string
+  lotOrigin: string
+  branchName: string
+  branchManagerPhone?: string
+  avgHumidity: number
+  maxHumidity: number
+  exposureHours: number
+  readingCount: number
+  firstViolationTs: string
+  lastViolationTs: string
+}
+
+export function checkHumidityViolations(): HumidityViolation[] {
+  const now       = Date.now()
+  const windowMs  = WATCHDOG_DURATION_CRITICAL_MS
+  const cutoffTs  = new Date(now - windowMs).toISOString()
+  const violations: HumidityViolation[] = []
+
+  // ── 1. Scan GlobalLots climate passport logs ──────────────────────────────
+  for (const lot of globalLots) {
+    if (lot.status === 'RECALLED') continue
+
+    // Filter readings within the last 48 hours
+    const windowReadings = lot.climateLog.filter(e => e.ts >= cutoffTs)
+    if (windowReadings.length === 0) continue
+
+    // All readings must exceed the threshold (sustained = no safe reading)
+    const allViolating = windowReadings.every(e => e.humidity > WATCHDOG_RH_CRITICAL)
+    if (!allViolating) continue
+
+    // The span of readings must cover ≥ 48 h
+    const firstTs  = windowReadings[0].ts
+    const lastTs   = windowReadings[windowReadings.length - 1].ts
+    const spanMs   = new Date(lastTs).getTime() - new Date(firstTs).getTime()
+    const spanHrs  = spanMs / (1000 * 3600)
+    if (spanHrs < WATCHDOG_DURATION_CRITICAL_H) continue
+
+    const humValues = windowReadings.map(e => e.humidity)
+    const avgRH = Math.round(humValues.reduce((s, v) => s + v, 0) / humValues.length)
+    const maxRH = Math.max(...humValues)
+
+    // Resolve branch name from lot location
+    const branchName = lot.shipTracker?.destination ?? lot.climateLog[0]?.location ?? 'Unknown'
+    const branch     = branches.find(b =>
+      b.name.toLowerCase().includes(branchName.toLowerCase().split(' ')[0]) ||
+      branchName.toLowerCase().includes(b.name.toLowerCase())
+    )
+
+    violations.push({
+      lotId             : lot.id,
+      lotOrigin         : lot.origin,
+      branchName        : branch?.name ?? branchName,
+      branchManagerPhone: (branch as any)?.managerPhone,
+      avgHumidity       : avgRH,
+      maxHumidity       : maxRH,
+      exposureHours     : Math.round(spanHrs),
+      readingCount      : windowReadings.length,
+      firstViolationTs  : firstTs,
+      lastViolationTs   : lastTs,
+    })
+  }
+
+  // ── 2. Scan domestic CoffeeLots via branch IoT / Weather API humidity ──────
+  for (const lot of coffeeLots) {
+    if (lot.status === 'RECALLED' || lot.status === 'CRITICAL') continue
+
+    const branch = branches.find(b => b.name === lot.branch)
+    if (!branch) continue
+
+    const { rh } = resolveActiveRH(branch)
+    if (rh <= WATCHDOG_RH_CRITICAL) continue
+
+    // For domestic lots we check if the branch has been above threshold
+    // continuously — use IoT log duration if available, else treat as sustained
+    // (conservative: if live reading is critical, flag immediately for 48h+)
+    const lastIotTs      = branch.last_iot_reading_at
+      ? new Date(branch.last_iot_reading_at).getTime() : null
+    const iotAgeMs       = lastIotTs ? now - lastIotTs : null
+    const exposureHours  = iotAgeMs
+      ? Math.round(iotAgeMs / 3600000)
+      : WATCHDOG_DURATION_CRITICAL_H   // conservative — assume full window
+
+    // Only flag if IoT data is fresh (< 60 min) and exposure ≥ 48h
+    // OR if no IoT — weather API says critical (flag as potential)
+    if (branch.humidity_source === 'IOT_SENSOR') {
+      if (!lastIotTs || iotAgeMs! > IOT_STALE_THRESHOLD_MS) continue
+      if (exposureHours < WATCHDOG_DURATION_CRITICAL_H)     continue
+    }
+
+    violations.push({
+      lotId             : lot.id,
+      lotOrigin         : lot.origin,
+      branchName        : branch.name,
+      branchManagerPhone: (branch as any)?.managerPhone,
+      avgHumidity       : rh,
+      maxHumidity       : rh,
+      exposureHours,
+      readingCount      : 1,
+      firstViolationTs  : new Date(now - exposureHours * 3600000).toISOString(),
+      lastViolationTs   : new Date(now).toISOString(),
+    })
+  }
+
+  return violations
+}
+
+// ─── Persist violations → SystemNotification records ─────────────────────────
+// Called by the cron handler after checkHumidityViolations().
+// Deduplicates: skips lot_id already with an UNREAD notification.
+export function persistViolations(
+  violations: HumidityViolation[]
+): SystemNotification[] {
+  const created: SystemNotification[] = []
+  const existingUnreadIds = new Set(
+    systemNotifications
+      .filter(n => n.status === 'UNREAD' && n.type === 'HUMIDITY_VIOLATION')
+      .map(n => n.lotId)
+  )
+
+  for (const v of violations) {
+    if (existingUnreadIds.has(v.lotId)) continue   // already flagged — skip
+
+    // Escalate lot status to CRITICAL in coffeeLots store
+    const lot = coffeeLots.find(l => l.id === v.lotId)
+    if (lot && lot.status !== 'RECALLED') lot.status = 'CRITICAL'
+
+    // Also escalate globalLots
+    const gLot = globalLots.find(l => l.id === v.lotId)
+    // (globalLotStatus is a separate type — leave unchanged, just notify)
+
+    const body = (
+      `Lot ${v.lotOrigin} has exceeded the ${WATCHDOG_DURATION_CRITICAL_H}h safety window ` +
+      `(avg ${v.avgRH ?? v.avgHumidity}% RH over ${v.exposureHours}h · ${v.readingCount} readings). ` +
+      `Move to <50% RH area immediately. Perform 'Stinker' sensory check before roasting. ` +
+      `Do not dispose unless musty aroma is detected.`
+    ).replace('v.avgRH ?? ', '')    // guard
+
+    const notif: SystemNotification = {
+      id                : notifId(),
+      type              : 'HUMIDITY_VIOLATION',
+      severity          : 'CRITICAL',
+      status            : 'UNREAD',
+      lotId             : v.lotId,
+      lotOrigin         : v.lotOrigin,
+      branchName        : v.branchName,
+      branchManagerPhone: v.branchManagerPhone,
+      title             : 'High-Humidity Spoilage Risk Detected',
+      body              : (
+        `Lot ${v.lotOrigin} has exceeded the ${WATCHDOG_DURATION_CRITICAL_H}h safety window ` +
+        `(avg ${v.avgHumidity}% RH over ${v.exposureHours}h · ${v.readingCount} readings). ` +
+        `Move to <50% RH area immediately. Perform 'Stinker' sensory check before roasting. ` +
+        `Do not dispose unless musty aroma is detected.`
+      ),
+      actionInstruction : (
+        `Move to <50% RH area immediately. Perform 'Stinker' sensory check before roasting. ` +
+        `Do not dispose unless musty aroma is detected.`
+      ),
+      avgHumidity       : v.avgHumidity,
+      maxHumidity       : v.maxHumidity,
+      exposureHours     : v.exposureHours,
+      readingCount      : v.readingCount,
+      firstViolationTs  : v.firstViolationTs,
+      lastViolationTs   : v.lastViolationTs,
+      detectedAt        : new Date().toISOString(),
+      whatsappSent      : false,
+    }
+
+    systemNotifications.push(notif)
+    created.push(notif)
+  }
+
+  return created
 }

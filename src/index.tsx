@@ -95,6 +95,15 @@ import {
   IOT_STALE_THRESHOLD_MS,
   type HumiditySource,
   type HybridSpongeResult,
+  // ── Risk Watchdog ─────────────────────────────────────────────
+  systemNotifications,
+  checkHumidityViolations,
+  persistViolations,
+  getUnreadNotifications,
+  markNotification,
+  WATCHDOG_RH_CRITICAL,
+  WATCHDOG_DURATION_CRITICAL_H,
+  type SystemNotification,
 } from './data'
 
 const app = new Hono()
@@ -109,6 +118,7 @@ const shell = (title: string, body: string) => `<!DOCTYPE html>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>${title} — Qabban OS</title>
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg"/>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet"/>
@@ -252,6 +262,7 @@ const shell = (title: string, body: string) => `<!DOCTYPE html>
     .badge-CONFIRMED  { background:var(--green-dim); color:var(--green); border:1px solid rgba(16,185,129,.3); }
     .badge-CONFIRMED::before { background:var(--green); }
     .badge-CRITICAL::before { background:var(--red); animation:pulse 1.2s infinite; }
+    .badge-CRITICAL { background:var(--red-dim); color:var(--red); border:1px solid rgba(239,68,68,.4); }
     .badge-LOW      { background:var(--green-dim); color:var(--green); border:1px solid rgba(16,185,129,.3); }
     .badge-LOW::before      { background:var(--green); }
     .badge-MODERATE { background:var(--orange-dim); color:var(--orange); border:1px solid rgba(249,115,22,.3); }
@@ -327,6 +338,13 @@ const shell = (title: string, body: string) => `<!DOCTYPE html>
     }
     .tr-recalled:hover td {
       background: rgba(239,68,68,0.09) !important;
+    }
+    /* Watchdog-flagged lot row */
+    .tr-watchdog-alert td {
+      background: rgba(239,68,68,0.03) !important;
+    }
+    .tr-watchdog-alert:hover td {
+      background: rgba(239,68,68,0.08) !important;
     }
     /* Recalled lot card overlay */
     .lot-card.recalled {
@@ -517,6 +535,63 @@ const shell = (title: string, body: string) => `<!DOCTYPE html>
     .alert-warning  { background:rgba(249,115,22,.1); border:1px solid rgba(249,115,22,.3); color:#fb923c; }
     .alert-critical { background:var(--red-dim); border:1px solid rgba(239,68,68,.3); color:var(--red); }
     .alert-success  { background:var(--green-dim); border:1px solid rgba(16,185,129,.3); color:var(--green); }
+    /* ── Risk Watchdog alert banner ── */
+    .alert-watchdog {
+      background: linear-gradient(135deg, rgba(239,68,68,.18), rgba(239,68,68,.08));
+      border: 1px solid rgba(239,68,68,.55);
+      color: #fca5a5;
+      animation: pulseAlert 2s ease-in-out infinite;
+    }
+    @keyframes pulseAlert {
+      0%,100% { box-shadow: 0 0 0 0 rgba(239,68,68,0); }
+      50%      { box-shadow: 0 0 0 4px rgba(239,68,68,.2); }
+    }
+    /* ── Risk Watchdog cards ── */
+    .watchdog-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px 18px;
+      transition: border-color .2s;
+    }
+    .watchdog-card--unread {
+      border-left: 3px solid var(--red);
+      background: rgba(239,68,68,.04);
+    }
+    .watchdog-card-header {
+      display: flex; align-items: center; gap: 10px;
+      margin-bottom: 10px; flex-wrap: wrap;
+    }
+    .watchdog-severity {
+      font-family: var(--font-mono); font-size: 10px; font-weight: 700;
+      padding: 2px 8px; border-radius: 4px; letter-spacing: .4px;
+    }
+    .watchdog-severity--critical { background: var(--red-dim); color: var(--red); }
+    .watchdog-severity--warning  { background: rgba(249,115,22,.15); color: #fb923c; }
+    .watchdog-ts {
+      font-size: 11px; color: var(--text-muted); font-family: var(--font-mono);
+      margin-left: auto;
+    }
+    .watchdog-ack-btn {
+      background: rgba(16,185,129,.12); border: 1px solid rgba(16,185,129,.3);
+      color: var(--green); border-radius: 4px; padding: 2px 10px;
+      cursor: pointer; font-size: 10px; font-family: var(--font-mono); font-weight: 700;
+    }
+    .watchdog-card-title {
+      font-size: 13px; font-weight: 700; margin-bottom: 8px;
+    }
+    .watchdog-card-body {
+      font-size: 12px; color: var(--text-secondary); line-height: 1.6;
+      margin-bottom: 12px;
+    }
+    .watchdog-card-meta {
+      display: flex; flex-wrap: wrap; gap: 12px;
+      font-size: 11px; color: var(--text-muted); font-family: var(--font-mono);
+    }
+    .watchdog-card-meta code {
+      background: rgba(255,255,255,.07); padding: 1px 5px; border-radius: 3px;
+      font-size: 10px;
+    }
 
     /* ── NOTIFICATION BELL ── */
     .notif-btn {
@@ -1857,6 +1932,7 @@ app.get('/', (c) => {
       </div>
 
       <!-- ── FIELDS ── -->
+      <form id="loginForm" onsubmit="handleLogin(); return false;" autocomplete="on">
       <div id="loginFields" role="tabpanel">
         <div class="form-group">
           <label class="form-label" for="username" data-i18n="login.username">Username</label>
@@ -1888,14 +1964,15 @@ app.get('/', (c) => {
       </div>
 
       <!-- ── ACCESS BUTTON ── -->
-      <button class="btn-primary" id="accessBtn" onclick="handleLogin()" data-i18n="login.btn"
+      <button type="submit" class="btn-primary" id="accessBtn"
               style="margin-top:16px; position:relative; overflow:hidden;">
-        <span id="accessBtnInner">
+        <span id="accessBtnInner" data-i18n="login.btn">
           <i class="fa fa-arrow-right-to-bracket"></i> &nbsp; ACCESS SYSTEM
         </span>
         <!-- shimmer sweep on hover -->
         <span class="btn-shimmer" aria-hidden="true"></span>
       </button>
+      </form>
 
       <!-- ── CREDENTIAL HINT ── -->
       <div class="login-hint" data-i18n="login.hint">
@@ -2046,7 +2123,7 @@ app.get('/', (c) => {
 //  SHARED LAYOUT BUILDERS
 // ══════════════════════════════════════════════════════════════════
 
-function adminLayout(pageTitle: string, activeNav: string, content: string, pendingCount = 0) {
+function adminLayout(pageTitle: string, activeNav: string, content: string, pendingCount = 0, watchdogCount = 0) {
   const navLinks = [
     { href: '/admin',           icon: 'fa-gauge',         label: 'Overview',        id: 'overview',   i18n: 'nav.overview'  },
     { href: '/admin/inventory', icon: 'fa-boxes-stacked', label: 'Inventory',       id: 'inventory',  i18n: 'nav.inventory' },
@@ -2055,6 +2132,7 @@ function adminLayout(pageTitle: string, activeNav: string, content: string, pend
     { href: '/admin/requests',  icon: 'fa-bell',          label: 'Bean Requests',   id: 'requests',   i18n: 'nav.requests'  },
     { href: '/exchange',        icon: 'fa-globe',         label: 'Global Exchange', id: 'exchange',   i18n: 'nav.exchange'  },
     { href: '/admin/pulse',     icon: 'fa-wave-square',   label: 'Pulse',           id: 'pulse',      i18n: 'nav.pulse'     },
+    { href: '/admin/watchdog',  icon: 'fa-shield-virus',  label: 'Risk Watchdog',   id: 'watchdog',   i18n: 'nav.watchdog'  },
   ]
   const body = `
   <header class="topbar">
@@ -2069,6 +2147,10 @@ function adminLayout(pageTitle: string, activeNav: string, content: string, pend
         <i class="fa fa-bell"></i>
         ${pendingCount > 0 ? `<span class="notif-count">${pendingCount}</span>` : ''}
       </a>
+      <a href="/admin/watchdog" class="notif-btn" title="Risk Watchdog" style="color:${watchdogCount > 0 ? 'var(--red)' : 'inherit'}">
+        <i class="fa fa-shield-virus"></i>
+        ${watchdogCount > 0 ? `<span class="notif-count" style="background:var(--red)">${watchdogCount}</span>` : ''}
+      </a>
       <span class="topbar-badge badge-admin" data-i18n="badge.admin"><i class="fa fa-shield-alt"></i> Roaster Admin</span>
       <span class="topbar-user"><i class="fa fa-user-circle"></i> <span data-i18n="badge.user">admin</span></span>
       <a href="/"><button class="btn-logout" data-i18n="nav.logout">LOGOUT</button></a>
@@ -2080,9 +2162,12 @@ function adminLayout(pageTitle: string, activeNav: string, content: string, pend
         <div class="sidebar-label" data-i18n="nav.system">Navigation</div>
         ${navLinks.map(l => `
         <a href="${l.href}" class="sidebar-link ${activeNav === l.id ? 'active' : ''}">
-          <i class="fa ${l.icon}"></i> <span data-i18n="${l.i18n}">${l.label}</span>
+          <i class="fa ${l.icon}"${l.id === 'watchdog' && watchdogCount > 0 ? ' style="color:var(--red)"' : ''}></i> <span data-i18n="${l.i18n}">${l.label}</span>
           ${l.id === 'requests' && pendingCount > 0
             ? `<span style="margin-left:auto;background:var(--red);color:white;font-size:9px;padding:1px 5px;border-radius:9px;font-family:var(--font-mono)">${pendingCount}</span>`
+            : ''}
+          ${l.id === 'watchdog' && watchdogCount > 0
+            ? `<span style="margin-left:auto;background:var(--red);color:white;font-size:9px;padding:1px 5px;border-radius:9px;font-family:var(--font-mono)">${watchdogCount}</span>`
             : ''}
         </a>`).join('')}
       </div>
@@ -2097,6 +2182,15 @@ function adminLayout(pageTitle: string, activeNav: string, content: string, pend
       </div>
     </nav>
     <main class="main">
+      ${watchdogCount > 0 && activeNav !== 'watchdog' ? `
+      <div class="alert alert-watchdog" style="cursor:pointer" onclick="location.href='/admin/watchdog'">
+        <i class="fa fa-shield-virus" style="font-size:18px;flex-shrink:0"></i>
+        <div>
+          <strong>⚠ ${watchdogCount} High-Humidity Spoilage Risk${watchdogCount > 1 ? 's' : ''} Detected</strong> —
+          Lot(s) have exceeded the 48h safety window. Immediate action required.
+        </div>
+        <span style="margin-left:auto;font-family:var(--font-mono);font-size:11px;white-space:nowrap">VIEW WATCHDOG →</span>
+      </div>` : ''}
       <div class="page-header">
         <div class="page-title"><span>// </span>${pageTitle}</div>
         <div class="page-sub" data-i18n="sub.overview">Last sync: 2026-02-24 08:30 UTC+3</div>
@@ -2943,7 +3037,7 @@ app.get('/admin', (c) => {
     </div>
   </div>`
 
-  return c.html(adminLayout('Overview Dashboard', 'overview', content, pendingCount))
+  return c.html(adminLayout('Overview Dashboard', 'overview', content, pendingCount, getUnreadNotifications().length))
 })
 
 // ── GET /admin/branches ─────────────────────────────────────────
@@ -3558,7 +3652,7 @@ app.get('/admin/branches', (c) => {
 
   </script>`
 
-  return c.html(adminLayout('Branch Monitor', 'branches', content, pendingCount))
+  return c.html(adminLayout('Branch Monitor', 'branches', content, pendingCount, getUnreadNotifications().length))
 })
 
 // ── POST /admin/branches/add ─────────────────────────────────────
@@ -5402,9 +5496,14 @@ app.get('/admin/inventory', (c) => {
             const lb = bal.byLot.get(l.id)!
             const hasDispatch = lb.dispatchedRoastedKg > 0
             const isRecalled = l.status === 'RECALLED'
+            const hasWatchdogAlert = systemNotifications.some(
+              n => n.lotId === l.id && n.status === 'UNREAD' && n.type === 'HUMIDITY_VIOLATION'
+            )
             return `
-          <tr class="${isRecalled ? 'tr-recalled' : ''}">
-            <td class="mono" style="color:${isRecalled ? 'var(--red)' : 'var(--amber)'}">${l.id}</td>
+          <tr class="${isRecalled ? 'tr-recalled' : ''}${hasWatchdogAlert ? ' tr-watchdog-alert' : ''}">
+            <td class="mono" style="color:${isRecalled ? 'var(--red)' : 'var(--amber)'}">
+              ${l.id}${hasWatchdogAlert ? ` <a href="/admin/watchdog" title="High-Humidity Alert — click to view" style="color:var(--red);font-size:10px;text-decoration:none">⚠</a>` : ''}
+            </td>
             <td>
               <div style="font-weight:500">${l.origin}</div>
               <div class="flavor-tags" style="margin:4px 0 0">
@@ -5429,7 +5528,9 @@ app.get('/admin/inventory', (c) => {
             <td class="mono" style="color:var(--amber)">${lb.liveRoastedKg} kg</td>
             <td class="mono" style="font-size:11px;color:var(--text-muted)">${l.roastDate}</td>
             <td class="mono" style="font-size:11px;color:var(--text-muted)">${l.expiryDate}</td>
-            <td><span class="badge badge-${l.status}">${l.status}</span>
+            <td>
+              <span class="badge badge-${l.status}">${l.status}</span>
+              ${hasWatchdogAlert ? `<a href="/admin/watchdog" style="display:block;font-size:9px;color:var(--red);margin-top:3px;font-family:var(--font-mono);text-decoration:none;font-weight:700">⚠ WATCHDOG</a>` : ''}
               ${isRecalled && l.recallInfo ? `<div style="font-size:10px;color:var(--red);margin-top:3px">${l.recallInfo.initiatedAt}</div>` : ''}
             </td>
             <td>
@@ -5643,7 +5744,7 @@ app.get('/admin/inventory', (c) => {
     }
   </script>`
 
-  return c.html(adminLayout('Inventory Ledger', 'inventory', content, pendingCount))
+  return c.html(adminLayout('Inventory Ledger', 'inventory', content, pendingCount, getUnreadNotifications().length))
 })
 
 // ── GET /admin/finance ──────────────────────────────────────────
@@ -6548,7 +6649,7 @@ app.get('/admin/finance', (c) => {
   }
   </script>`
 
-  return c.html(adminLayout('Financial Intelligence', 'finance', content, pendingCount))
+  return c.html(adminLayout('Financial Intelligence', 'finance', content, pendingCount, getUnreadNotifications().length))
 })
 
 // ── POST /api/finance/set-tier-margins ──────────────────────────
@@ -6936,7 +7037,7 @@ app.get('/admin/requests', (c) => {
     }
   </div>`
 
-  return c.html(adminLayout('Bean Requests', 'requests', content, pendingCount))
+  return c.html(adminLayout('Bean Requests', 'requests', content, pendingCount, getUnreadNotifications().length))
 })
 
 // ── POST /admin/requests/:id/confirm ───────────────────────────
@@ -11151,7 +11252,7 @@ async function pulseFoodicsSync() {
 </script>
 `
   const pendingCountAdmin = beanRequests.filter(r => r.status === 'PENDING').length
-  return c.html(adminLayout('Qabban Pulse — Waste Tracking', 'pulse', content, pendingCountAdmin))
+  return c.html(adminLayout('Qabban Pulse — Waste Tracking', 'pulse', content, pendingCountAdmin, getUnreadNotifications().length))
 })
 
 // ══════════════════════════════════════════════════════════════════
@@ -11340,5 +11441,254 @@ app.get('/api/iot/status', (c) => {
   })
   return c.json({ branches: statuses })
 })
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ── RISK WATCHDOG — Cron Trigger Handler & Notification API ──────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+
+// ── Mock WhatsApp sender (replace with real WhatsApp Business API in prod) ───
+async function sendWatchdogWhatsApp(notif: SystemNotification): Promise<boolean> {
+  // In production: POST to https://graph.facebook.com/v18.0/{PHONE_ID}/messages
+  // with the high-priority template "humidity_spoilage_alert" and the body below.
+  const phone = notif.branchManagerPhone
+  if (!phone) return false
+  const body = (
+    `🚨 *QABBAN OS — High-Humidity Alert*\n\n` +
+    `*${notif.title}*\n\n` +
+    `${notif.body}\n\n` +
+    `📍 Branch: ${notif.branchName}\n` +
+    `💧 Avg RH: ${notif.avgHumidity}% | Max: ${notif.maxHumidity}%\n` +
+    `⏱ Exposure: ${notif.exposureHours}h (${notif.readingCount} readings)\n\n` +
+    `_QABBAN OS Risk Watchdog — auto-generated ${new Date().toISOString()}_`
+  )
+  // Mock: log to console (would call WA API in production)
+  console.log(`[WATCHDOG] WhatsApp to ${phone}:\n${body}`)
+  return true  // mock success
+}
+
+// ── Core watchdog runner ─────────────────────────────────────────────────────
+async function runWatchdog(ctx?: { waitUntil: (p: Promise<unknown>) => void }) {
+  const violations = checkHumidityViolations()
+  if (violations.length === 0) {
+    console.log('[WATCHDOG] No humidity violations detected.')
+    return { checked: new Date().toISOString(), violations: 0, notifications: 0 }
+  }
+
+  const created = persistViolations(violations)
+
+  // Fire WhatsApp alerts — wrap in ctx.waitUntil so the Worker doesn't time out
+  const waPromises = created.map(async (n) => {
+    const sent = await sendWatchdogWhatsApp(n)
+    if (sent) {
+      n.whatsappSent   = true
+      n.whatsappSentAt = new Date().toISOString()
+    }
+  })
+
+  if (ctx) {
+    ctx.waitUntil(Promise.allSettled(waPromises))
+  } else {
+    await Promise.allSettled(waPromises)
+  }
+
+  console.log(`[WATCHDOG] ${violations.length} violation(s) → ${created.length} new notification(s) created.`)
+  return {
+    checked      : new Date().toISOString(),
+    violations   : violations.length,
+    notifications: created.length,
+    details      : created.map(n => ({
+      id        : n.id,
+      lotId     : n.lotId,
+      lotOrigin : n.lotOrigin,
+      branch    : n.branchName,
+      avgRH     : n.avgHumidity,
+      maxRH     : n.maxHumidity,
+      exposureH : n.exposureHours,
+      whatsapp  : n.whatsappSent,
+    })),
+  }
+}
+
+// ── GET /api/watchdog/run — manual trigger (admin only) ──────────────────────
+app.get('/api/watchdog/run', async (c) => {
+  const result = await runWatchdog()
+  return c.json({ ok: true, ...result })
+})
+
+// ── GET /api/watchdog/notifications — list all system notifications ───────────
+app.get('/api/watchdog/notifications', (c) => {
+  const filter = c.req.query('status')   // optional: ?status=UNREAD
+  const list   = filter
+    ? systemNotifications.filter(n => n.status === filter)
+    : systemNotifications
+  return c.json({
+    total   : list.length,
+    unread  : systemNotifications.filter(n => n.status === 'UNREAD').length,
+    notifications: list.slice().reverse(),  // newest first
+  })
+})
+
+// ── POST /api/watchdog/notifications/:id/ack — acknowledge a notification ─────
+app.post('/api/watchdog/notifications/:id/ack', (c) => {
+  const id   = c.req.param('id')
+  const notif = markNotification(id, 'READ')
+  if (!notif) return c.json({ ok: false, error: 'Notification not found' }, 404)
+  return c.json({ ok: true, notification: notif })
+})
+
+// ── POST /api/watchdog/notifications/ack-all — bulk acknowledge ───────────────
+app.post('/api/watchdog/notifications/ack-all', (c) => {
+  const unread = systemNotifications.filter(n => n.status === 'UNREAD')
+  unread.forEach(n => markNotification(n.id, 'READ'))
+  return c.json({ ok: true, acknowledged: unread.length })
+})
+
+// ── GET /admin/watchdog — Risk Watchdog dashboard page ────────────────────────
+app.get('/admin/watchdog', (c) => {
+  const pending = beanRequests.filter(r => r.status === 'PENDING').length
+  const unread  = getUnreadNotifications()
+  const all     = systemNotifications.slice().reverse()
+
+  const cards = all.length === 0
+    ? `<div style="text-align:center;padding:60px 20px;color:var(--text-muted)">
+        <i class="fa fa-shield-check" style="font-size:48px;margin-bottom:16px;color:var(--green)"></i>
+        <div style="font-size:18px;font-weight:600">All Clear</div>
+        <div style="font-size:13px;margin-top:8px">No humidity violations detected in the last 48 h.</div>
+       </div>`
+    : all.map(n => `
+    <div class="watchdog-card ${n.status === 'UNREAD' ? 'watchdog-card--unread' : ''}" id="wcard-${n.id}">
+      <div class="watchdog-card-header">
+        <span class="watchdog-severity watchdog-severity--${n.severity.toLowerCase()}">
+          <i class="fa fa-circle-exclamation"></i> ${n.severity}
+        </span>
+        <span class="watchdog-ts">${new Date(n.detectedAt).toLocaleString('en-SA')}</span>
+        ${n.status === 'UNREAD'
+          ? `<button class="watchdog-ack-btn" onclick="ackNotif('${n.id}')">
+               <i class="fa fa-check"></i> ACK
+             </button>`
+          : `<span style="font-size:11px;color:var(--text-muted);font-family:var(--font-mono)">✓ READ</span>`
+        }
+      </div>
+      <div class="watchdog-card-title">
+        <i class="fa fa-triangle-exclamation" style="color:var(--red);margin-right:6px"></i>
+        ${n.title}
+      </div>
+      <div class="watchdog-card-body">${n.body}</div>
+      <div class="watchdog-card-meta">
+        <span><i class="fa fa-box"></i> Lot: <code>${n.lotId}</code> · ${n.lotOrigin}</span>
+        <span><i class="fa fa-building"></i> ${n.branchName}</span>
+        <span><i class="fa fa-droplet"></i> Avg ${n.avgHumidity}% RH | Max ${n.maxHumidity}% RH</span>
+        <span><i class="fa fa-clock"></i> ${n.exposureHours}h exposure · ${n.readingCount} readings</span>
+        <span><i class="fa fa-brands fa-whatsapp" style="color:#25d366"></i>
+          ${n.whatsappSent
+            ? `<span style="color:#25d366">Sent ${n.whatsappSentAt ? new Date(n.whatsappSentAt).toLocaleString('en-SA') : ''}</span>`
+            : `<span style="color:var(--text-muted)">Pending</span>`
+          }
+        </span>
+      </div>
+    </div>`).join('')
+
+  const content = `
+  <!-- ── Risk Watchdog Banner ── -->
+  ${unread.length > 0 ? `
+  <div class="alert alert-watchdog">
+    <i class="fa fa-shield-virus" style="font-size:18px"></i>
+    <div>
+      <strong>${unread.length} unresolved humidity violation${unread.length > 1 ? 's' : ''}</strong> —
+      ${unread.map(n => `Lot <code>${n.lotId}</code> (${n.lotOrigin}) @ ${n.branchName}`).join(' · ')}
+    </div>
+    <button onclick="ackAll()" style="margin-left:auto;background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);border-radius:4px;color:white;padding:4px 12px;cursor:pointer;font-size:11px;font-family:var(--font-mono)">
+      <i class="fa fa-check-double"></i> ACK ALL
+    </button>
+  </div>` : ''}
+
+  <!-- ── Header row ── -->
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px">
+    <div>
+      <h2 style="margin:0;font-size:18px;font-weight:700;letter-spacing:.3px">
+        <i class="fa fa-shield-virus" style="color:var(--red);margin-right:8px"></i>Risk Watchdog
+      </h2>
+      <div style="font-size:12px;color:var(--text-muted);margin-top:4px;font-family:var(--font-mono)">
+        Monitors Climate Passport logs · Triggers on RH &gt; ${WATCHDOG_RH_CRITICAL}% sustained for ${WATCHDOG_DURATION_CRITICAL_H}h
+      </div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button onclick="runWatchdog()" id="watchdog-run-btn"
+        style="background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.45);border-radius:4px;color:var(--red);padding:6px 14px;cursor:pointer;font-size:11px;font-family:var(--font-mono);font-weight:700;letter-spacing:.3px">
+        <i class="fa fa-rotate"></i> RUN WATCHDOG NOW
+      </button>
+    </div>
+  </div>
+
+  <!-- ── Stats row ── -->
+  <div class="stat-grid" style="margin-bottom:24px">
+    <div class="stat-card">
+      <div class="stat-label">Total Notifications</div>
+      <div class="stat-value" id="wdg-total">${all.length}</div>
+    </div>
+    <div class="stat-card" style="${unread.length > 0 ? 'border-color:var(--red)' : ''}">
+      <div class="stat-label">Unresolved</div>
+      <div class="stat-value" id="wdg-unread" style="${unread.length > 0 ? 'color:var(--red)' : 'color:var(--green)'}">${unread.length}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Detection Threshold</div>
+      <div class="stat-value" style="font-size:14px">&gt; ${WATCHDOG_RH_CRITICAL}% RH / ${WATCHDOG_DURATION_CRITICAL_H}h</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Cron Schedule</div>
+      <div class="stat-value" style="font-size:14px;font-family:var(--font-mono)">Every 6 hours</div>
+    </div>
+  </div>
+
+  <!-- ── Notification cards ── -->
+  <div id="watchdog-cards" style="display:flex;flex-direction:column;gap:16px">
+    ${cards}
+  </div>
+
+  <script>
+    async function runWatchdog() {
+      const btn = document.getElementById('watchdog-run-btn')
+      btn.disabled = true
+      btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> RUNNING...'
+      try {
+        const r = await fetch('/api/watchdog/run')
+        const d = await r.json()
+        btn.innerHTML = '<i class="fa fa-check"></i> DONE — ' + d.violations + ' violation(s)'
+        setTimeout(() => location.reload(), 1200)
+      } catch(e) {
+        btn.innerHTML = '<i class="fa fa-xmark"></i> ERROR'
+        btn.disabled = false
+      }
+    }
+    async function ackNotif(id) {
+      await fetch('/api/watchdog/notifications/' + id + '/ack', { method: 'POST' })
+      const el = document.getElementById('wcard-' + id)
+      if (el) el.classList.remove('watchdog-card--unread')
+      document.querySelectorAll('.watchdog-ack-btn').forEach(b => {
+        if (b.getAttribute('onclick') === "ackNotif('" + id + "')") {
+          b.outerHTML = '<span style="font-size:11px;color:var(--text-muted);font-family:var(--font-mono)">✓ READ</span>'
+        }
+      })
+    }
+    async function ackAll() {
+      await fetch('/api/watchdog/notifications/ack-all', { method: 'POST' })
+      location.reload()
+    }
+  </script>
+  `
+
+  return c.html(adminLayout('Risk Watchdog', 'watchdog', content, pending, getUnreadNotifications().length))
+})
+
+// ── Scheduled handler (Cloudflare Workers cron — "0 */6 * * *") ───────────────
+// Cloudflare calls this when the cron fires. ctx.waitUntil keeps the Worker
+// alive while WhatsApp messages are dispatched asynchronously.
+export const scheduled = async (
+  _event: { cron: string; scheduledTime: number; type: 'scheduled' },
+  _env: unknown,
+  ctx: { waitUntil: (p: Promise<unknown>) => void }
+) => {
+  await runWatchdog(ctx)
+}
 
 export default app
