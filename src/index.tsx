@@ -2189,7 +2189,7 @@ function adminLayout(pageTitle: string, activeNav: string, content: string, pend
         <div class="sidebar-link" style="font-size:11px;color:var(--text-muted)">
           <i class="fa fa-database"></i> ${branches.length} <span data-i18n="misc.branches.active">Branches Active</span>
         </div>
-        <a href="/manual" target="_blank" class="sidebar-link" style="font-size:11px;color:var(--amber);margin-top:2px;text-decoration:none">
+        <a href="/static/manual.html" target="_blank" class="sidebar-link" style="font-size:11px;color:var(--amber);margin-top:2px;text-decoration:none">
           <i class="fa fa-book-open"></i> User Manual
         </a>
       </div>
