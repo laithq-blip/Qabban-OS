@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>QABBAN OS — User Manual v2.0</title>
+  <title>QABBAN OS — User Manual v4.0</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css">
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
@@ -381,7 +381,7 @@
 <nav id="sidebar">
   <div class="sidebar-brand">
     <div class="sidebar-logo">QABBAN OS</div>
-    <div class="sidebar-sub">User Manual v2.0 · March 2026</div>
+    <div class="sidebar-sub">User Manual v4.0 · March 2026</div>
   </div>
   <div class="sidebar-section">Getting Started</div>
   <a class="sidebar-link active" href="#overview"><i class="fa fa-circle-info"></i> System Overview</a>
@@ -412,10 +412,17 @@
   <a class="sidebar-link" href="#zatca"><i class="fa fa-file-invoice"></i> ZATCA Compliance</a>
   <a class="sidebar-link" href="#sfda"><i class="fa fa-shield-halved"></i> SFDA Recall Shield</a>
   <a class="sidebar-link" href="#i18n"><i class="fa fa-language"></i> Bilingual Engine</a>
+  <div class="sidebar-section">New Modules v3.0</div>
+  <a class="sidebar-link" href="#pulse"><i class="fa fa-weight-scale"></i> Qabban Pulse</a>
+  <a class="sidebar-link" href="#acaia"><i class="fa fa-bluetooth"></i> AcaiaLink Bluetooth</a>
+  <a class="sidebar-link" href="#foodics"><i class="fa fa-cash-register"></i> Foodics POS Sync</a>
+  <a class="sidebar-link" href="#iot-telemetry"><i class="fa fa-microchip"></i> IoT Telemetry Route</a>
+  <a class="sidebar-link" href="#iot-toggle"><i class="fa fa-toggle-on"></i> IoT Source Toggle</a>
   <div class="sidebar-section">Reference</div>
   <a class="sidebar-link" href="#api"><i class="fa fa-plug"></i> API Reference</a>
   <a class="sidebar-link" href="#constants"><i class="fa fa-sliders"></i> Constants & Config</a>
   <a class="sidebar-link" href="#demo"><i class="fa fa-user-circle"></i> Demo Credentials</a>
+
 </nav>
 
 <!-- Main Content -->
@@ -428,7 +435,7 @@
     <div class="hero-sub">Qabban Global Exchange & Loyalty Engine v6 · Complete Feature Reference</div>
     <div class="hero-meta">
       <div class="hero-meta-item"><i class="fa fa-calendar"></i> March 2026</div>
-      <div class="hero-meta-item"><i class="fa fa-code-branch"></i> Version 2.0</div>
+      <div class="hero-meta-item"><i class="fa fa-code-branch"></i> Version 4.0</div>
       <div class="hero-meta-item"><i class="fa fa-globe"></i> Bilingual EN / AR</div>
       <div class="hero-meta-item"><i class="fa fa-server"></i> Cloudflare Pages · Hono · TypeScript</div>
       <div class="hero-meta-item"><i class="fa fa-file-lines"></i> ~12,000 lines of code</div>
@@ -654,15 +661,48 @@
       <li><i class="fa fa-scale-balanced"></i> Live Balance Banner — purchased green kg vs dispatched equivalent</li>
     </ul>
 
-    <div class="sub-title">QFI Wholesale Price Formula</div>
-    <div class="code-block">
-<span class="comment">// True Roasted Cost</span>
-trueRoastedCost = costPerKg / 0.82
+    <div class="sub-title">QFI Financial Engine — Full Equation Set</div>
+    <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px">The QFI (Qabban Financial Intelligence) engine converts raw green-bean cost into tier-based wholesale prices using the Sponge baseline coefficient and a gross-margin formula.</p>
 
-<span class="comment">// Wholesale Price per Tier</span>
-wpBronze = trueRoastedCost × (1 + <span class="string">40%</span> / 100)
-wpSilver = trueRoastedCost × (1 + <span class="string">35%</span> / 100)
-wpGold   = trueRoastedCost × (1 + <span class="string">28%</span> / 100)
+    <div class="code-block">
+<span class="comment">── Step 1: True Roasted Cost ─────────────────────────────────────</span>
+<span class="comment">// Converts green-bean purchase price to roasted cost per kg.</span>
+<span class="comment">// Dividing by 0.82 accounts for the 18% mass lost during roasting.</span>
+
+trueRoastedCost = costPerKgGreen ÷ SPONGE_BASELINE_COEFFICIENT
+                = costPerKgGreen ÷ 0.82
+
+<span class="comment">Example: SAR 100/kg green → SAR 121.95/kg roasted</span>
+
+
+<span class="comment">── Step 2: Wholesale Price (Gross-Margin Formula) ────────────────</span>
+<span class="comment">// Gross margin = profit as % of selling price (not markup on cost).</span>
+<span class="comment">// Formula: price = cost ÷ (1 − margin)</span>
+
+wholesalePrice = trueRoastedCost ÷ (1 − targetMargin)
+
+<span class="comment">Tier prices for SAR 100/kg green cost:</span>
+wpBronze = (100 ÷ 0.82) ÷ (1 − 0.40) = 121.95 ÷ 0.60 = <span class="keyword">SAR 203.25 / kg</span>
+wpSilver = (100 ÷ 0.82) ÷ (1 − 0.35) = 121.95 ÷ 0.65 = <span class="keyword">SAR 187.62 / kg</span>
+wpGold   = (100 ÷ 0.82) ÷ (1 − 0.28) = 121.95 ÷ 0.72 = <span class="keyword">SAR 169.38 / kg</span>
+
+
+<span class="comment">── Step 3: Live Inventory Value ──────────────────────────────────</span>
+liveInventoryValue = wholesalePrice × liveRoastedKg
+
+
+<span class="comment">── Step 4: Projected Profit ──────────────────────────────────────</span>
+projectedProfit = (wholesalePrice − trueRoastedCost) × liveRoastedKg
+
+
+<span class="comment">── Step 5: Environmental P&amp;L (Sponge Impact) ─────────────────────</span>
+spongeKgDelta    = (spongeCoeff − 0.82) × liveGreenKg
+environmentalPnL = spongeKgDelta × wholesalePrice
+    </div>
+
+    <div class="info-box info-amber">
+      <i class="fa fa-info-circle"></i>
+      <strong>Why gross-margin, not markup?</strong> A 40% <em>gross margin</em> means 40% of the selling price is profit — this is the standard retail/wholesale pricing convention. A 40% <em>markup</em> on cost would be <code>cost × 1.40</code>, which yields a lower gross margin of ~28.6%. Qabban uses gross-margin convention throughout.
     </div>
 
     <div class="sub-title">Margin Input Panel (SET ALL)</div>
@@ -716,23 +756,53 @@ wpGold   = trueRoastedCost × (1 + <span class="string">28%</span> / 100)
       <span style="background:rgba(248,113,113,0.12);border:1px solid rgba(248,113,113,0.3);color:#f87171;padding:4px 12px;border-radius:4px;font-size:12px"><i class="fa fa-ban"></i> RECALLED — BLOCKED</span>
     </div>
 
-    <div class="sub-title">Request Beans Modal — Hybrid Discount Display</div>
+    <div class="sub-title">Hybrid Discount Engine — Full Equation Set</div>
+    <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px">The final price a cafe pays is the wholesale price reduced by two stacking discounts: a loyalty tier base discount and an optional bulk volume bonus. Both are additive (not compounding).</p>
     <div class="code-block">
-<span class="comment">// calcHybridDiscount(lifetimeKg, orderKg)</span>
-bags = orderKg / 60
-isBulk = bags > 10
+<span class="comment">── Inputs ────────────────────────────────────────────────────────</span>
+lifetimeKg    = total kg purchased by this cafe across all time
+orderKg       = kg in the current order
+BAG_SIZE_KG   = 60 kg  (standard sack size)
+BULK_THRESHOLD = 10 bags  (strictly greater than)
 
-tierBase = 0%   <span class="comment">// Bronze</span>
-         = 3%   <span class="comment">// Silver</span>
-         = 5%   <span class="comment">// Gold</span>
 
-bulkBonus = isBulk ? <span class="string">+10%</span> : 0%
+<span class="comment">── Step 1: Determine Tier ────────────────────────────────────────</span>
+tier = Gold    if lifetimeKg ≥ 2001 kg
+     = Silver  if lifetimeKg ≥ 501  kg
+     = Bronze  otherwise
 
-<span class="keyword">totalDiscount</span> = tierBase + bulkBonus
-finalPrice = unitPrice × (1 − totalDiscount / 100)
+tierBaseDiscount = 0%  (Bronze)
+                 = 3%  (Silver)
+                 = 5%  (Gold)
 
-<span class="comment">// Example: Gold buyer, 750 kg order (12.5 bags)</span>
-<span class="comment">// 5% + 10% = 15% total discount</span>
+
+<span class="comment">── Step 2: Bulk Bonus ────────────────────────────────────────────</span>
+bags    = orderKg ÷ 60
+isBulk  = bags &gt; 10   <span class="comment">// 600 kg exactly does NOT qualify — must exceed</span>
+
+bulkBonus = 10%  if isBulk
+          =  0%  otherwise
+
+
+<span class="comment">── Step 3: Total Discount (additive stacking) ───────────────────</span>
+totalDiscountPct      = tierBaseDiscount + bulkBonus
+totalDiscountFraction = totalDiscountPct ÷ 100
+
+
+<span class="comment">── Step 4: Final Price ───────────────────────────────────────────</span>
+discountedPricePerKg = wholesalePrice × (1 − totalDiscountFraction)
+orderTotal           = discountedPricePerKg × orderKg
+
+
+<span class="comment">── Examples ──────────────────────────────────────────────────────</span>
+<span class="comment">Gold + 750 kg order (12.5 bags):  5% + 10% = 15% off</span>
+<span class="comment">  SAR 169.38 × (1 − 0.15) = SAR 143.97/kg</span>
+
+<span class="comment">Silver + 300 kg order (5 bags):   3% + 0%  = 3% off</span>
+<span class="comment">  SAR 187.62 × (1 − 0.03) = SAR 181.99/kg</span>
+
+<span class="comment">Bronze + 660 kg order (11 bags):  0% + 10% = 10% off</span>
+<span class="comment">  SAR 203.25 × (1 − 0.10) = SAR 182.93/kg</span>
     </div>
   </div>
 
@@ -879,11 +949,34 @@ finalPrice = unitPrice × (1 − totalDiscount / 100)
       <li><i class="fa fa-cart-shopping"></i> <strong>Request Modal</strong> — Hybrid discount displayed in real-time before submission</li>
     </ul>
 
-    <div class="sub-title">kgToNextTier( ) Logic</div>
+    <div class="sub-title">kgToNextTier( ) — Progress Calculation</div>
     <div class="code-block">
-if lifetimeKg >= 2001 → MAX TIER { nextTier: null, progressPct: 100 }
-if lifetimeKg >= 501  → next = Gold,   needed = 2001 - lifetimeKg
-else                  → next = Silver, needed = 501  - lifetimeKg
+<span class="comment">── Tier Assignment ───────────────────────────────────────────────</span>
+tier = Gold    if lifetimeKg ≥ 2001
+     = Silver  if lifetimeKg ≥ 501
+     = Bronze  otherwise
+
+
+<span class="comment">── Progress to Next Tier ─────────────────────────────────────────</span>
+if lifetimeKg ≥ 2001:
+    nextTier    = null (MAX TIER)
+    progressPct = 100
+
+if 501 ≤ lifetimeKg &lt; 2001:
+    nextTier    = Gold
+    kgNeeded    = 2001 − lifetimeKg
+    progressPct = (lifetimeKg − 501) ÷ (2001 − 501) × 100
+                = (lifetimeKg − 501) ÷ 1500 × 100
+
+if lifetimeKg &lt; 501:
+    nextTier    = Silver
+    kgNeeded    = 501 − lifetimeKg
+    progressPct = lifetimeKg ÷ 501 × 100
+
+
+<span class="comment">── Nudge Threshold ───────────────────────────────────────────────</span>
+isInNudgeZone = (kgNeeded &gt; 0) AND (kgNeeded ≤ 50)
+<span class="comment">Triggers pulsing amber banner in Cafe Portal and ⚡ badge in Finance tab.</span>
     </div>
   </div>
 
@@ -952,78 +1045,254 @@ Place your next order to unlock your upgrade!
         <tr><td>SAMA USD Peg</td><td>3.75 SAR/USD (official)</td><td>No (regulatory fixed)</td></tr>
         <tr><td>XE Live Rate</td><td>XE Currency Data API</td><td>Refresh via button</td></tr>
         <tr><td>Exchange Buffer</td><td>0–10% markup</td><td>✓ Admin configurable</td></tr>
-        <tr><td>Effective Rate</td><td>liveRate × (1 + buffer/100)</td><td>Auto-calculated</td></tr>
+        <tr><td>Effective Rate</td><td>liveRate × (1 + buffer ÷ 100)</td><td>Auto-calculated</td></tr>
         <tr><td>Rate Lock Duration</td><td>60 seconds</td><td>Fixed constant</td></tr>
       </tbody>
     </table>
 
+    <div class="sub-title">Rate Equation Set</div>
+    <div class="code-block">
+<span class="comment">── Effective Exchange Rate ───────────────────────────────────────</span>
+<span class="comment">// The buffer is a protective spread added on top of the live rate.</span>
+<span class="comment">// Default buffer = 2%; admin can set 0–10% via Finance tab.</span>
+
+effectiveRate = liveUsdToSar × (1 + exchangeBufferPct ÷ 100)
+
+<span class="comment">Example: live = 3.75, buffer = 2%</span>
+<span class="comment">effectiveRate = 3.75 × 1.02 = 3.825 SAR/USD</span>
+
+
+<span class="comment">── Locked Rate (on LOCK RATE click) ─────────────────────────────</span>
+lockedRate = effectiveRate at the moment of lock
+expiresAt  = lockedAt + 60 seconds
+
+<span class="comment">During the 60s window, all price calculations use lockedRate.</span>
+<span class="comment">After expiry, the live effectiveRate is used again.</span>
+
+
+<span class="comment">── FOB Price Conversion (Landed Price) ──────────────────────────</span>
+fobPriceSar = fobPriceUsd × effectiveRate
+
+<span class="comment">Example: USD 4.20/kg lot, effectiveRate 3.825</span>
+<span class="comment">fobPriceSar = 4.20 × 3.825 = SAR 16.07/kg</span>
+    </div>
+
     <div class="sub-title">Rate Execution Lock Workflow</div>
     <ul class="checklist">
-      <li><i class="fa fa-lock"></i> Buyer clicks "LOCK RATE (60s)" in cafe portal</li>
-      <li><i class="fa fa-server"></i> POST /api/exchange/rate-lock → creates RateLock record with ID (RL-XXXX)</li>
+      <li><i class="fa fa-lock"></i> Buyer clicks "LOCK RATE (60s)" in cafe portal or buyer portal</li>
+      <li><i class="fa fa-server"></i> POST /api/exchange/rate-lock → creates RateLock record (ID: RL-XXXX) with the current effectiveRate frozen</li>
       <li><i class="fa fa-clock"></i> 60-second countdown displayed in currency bar</li>
-      <li><i class="fa fa-check-circle"></i> Rate frozen during order entry to prevent slippage</li>
-      <li><i class="fa fa-clock-rotate-left"></i> After 60s: "RATE EXPIRED" — buyer can re-lock</li>
+      <li><i class="fa fa-check-circle"></i> All price calculations during the window use the locked rate — immune to live rate movements</li>
+      <li><i class="fa fa-clock-rotate-left"></i> After 60s: lock status → EXPIRED; buyer can re-lock for a new window</li>
     </ul>
   </div>
 
   <!-- 21. Sponge -->
   <div class="section" id="sponge">
     <div class="section-title"><span class="section-num">21</span><i class="fa fa-flask" style="color:var(--amber)"></i> Sponge Effect — Dynamic Yield Engine</div>
-    <div class="section-desc">Dynamically adjusts the 0.82 roasting shrinkage baseline based on real warehouse humidity, affecting inventory value and environmental P&L.</div>
+    <div class="section-desc">Coffee beans are hygroscopic — they absorb or lose moisture based on ambient humidity. The Sponge Effect Engine dynamically adjusts the standard 0.82 roasting yield coefficient based on real warehouse humidity, producing more accurate inventory weights and a true Environmental P&amp;L figure.</div>
+
+    <div class="sub-title">The Baseline — Standard Roast Shrinkage</div>
+    <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px">During roasting, green coffee beans lose approximately 18% of their mass through evaporation of moisture and CO₂ off-gassing. This gives the standard yield coefficient:</p>
+    <div class="code-block">
+SPONGE_BASELINE_COEFFICIENT = 0.82
+
+roastedKg (baseline) = greenKg × 0.82
+
+<span class="comment">Example: 100 kg green → 82 kg roasted (18 kg lost to roasting)</span>
+    </div>
+
+    <div class="sub-title">Piecewise Humidity Rules</div>
+    <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px">The baseline coefficient is adjusted based on the active relative humidity (RH%) at the storage branch. There are two adjustment rules and one baseline band:</p>
 
     <table class="manual-table">
-      <thead><tr><th>Rule</th><th>Condition</th><th>Δ</th><th>Final Coefficient</th><th>Effect</th></tr></thead>
+      <thead><tr><th>Rule</th><th>Condition</th><th>Delta (Δ)</th><th>Coefficient</th><th>Physical Explanation</th></tr></thead>
       <tbody>
         <tr>
-          <td><strong>Rule A</strong> — Moisture Absorption</td>
-          <td>RH &gt; 70%</td><td style="color:#4ade80">+0.005</td>
+          <td><strong>Rule A</strong><br><span style="font-size:11px;color:#4ade80">Moisture Absorption</span></td>
+          <td>RH &gt; 70%</td>
+          <td style="color:#4ade80;font-family:var(--font-mono)">+0.005</td>
           <td style="color:#4ade80;font-family:var(--font-mono)">0.825</td>
-          <td>Beans heavier → less shrinkage → <strong style="color:#4ade80">GAIN</strong></td>
+          <td>High humidity → beans absorb ambient moisture before roasting → heavier → less % mass lost → more roasted output per green kg</td>
         </tr>
         <tr>
-          <td><strong>Baseline</strong></td>
-          <td>20% ≤ RH ≤ 70%</td><td>0</td>
+          <td><strong>Baseline</strong><br><span style="font-size:11px;color:#94a3b8">Normal Band</span></td>
+          <td>20% ≤ RH ≤ 70%</td>
+          <td style="font-family:var(--font-mono)">0</td>
           <td style="font-family:var(--font-mono)">0.820</td>
-          <td>Standard 18% shrinkage</td>
+          <td>Standard storage conditions — 18% shrinkage applies</td>
         </tr>
         <tr>
-          <td><strong>Rule B</strong> — Evaporation Loss</td>
-          <td>RH &lt; 20%</td><td style="color:#f87171">−0.003</td>
+          <td><strong>Rule B</strong><br><span style="font-size:11px;color:#f87171">Evaporation Loss</span></td>
+          <td>RH &lt; 20%</td>
+          <td style="color:#f87171;font-family:var(--font-mono)">−0.003</td>
           <td style="color:#f87171;font-family:var(--font-mono)">0.817</td>
-          <td>Beans lighter → more shrinkage → <strong style="color:#f87171">LOSS</strong></td>
+          <td>Very dry conditions → beans lose pre-roast moisture → lighter before roasting → greater % mass lost → less roasted output</td>
         </tr>
       </tbody>
     </table>
 
-    <div class="sub-title">Environmental P&L Calculation</div>
+    <div class="sub-title">Full Equation Set</div>
     <div class="code-block">
-spongeKgDelta    = (spongeCoeff - 0.82) × greenKg
-environmentalPnL = spongeKgDelta × wpGold (SAR/kg)
+<span class="comment">── Coefficient Calculation ──────────────────────────────────────</span>
 
-<span class="comment">// Positive = moisture gain (more saleable weight)</span>
-<span class="comment">// Negative = evaporation loss (less saleable weight)</span>
+spongeCoeff = 0.82 + Δ
+
+  where Δ = +0.005   if RH &gt; 70%   (Rule A)
+          =  0        if 20% ≤ RH ≤ 70%  (Baseline)
+          = −0.003   if RH &lt; 20%   (Rule B)
+
+
+<span class="comment">── Roasted Weight (Sponge-adjusted) ────────────────────────────</span>
+
+roastedKg = greenKg × spongeCoeff
+
+<span class="comment">Rule A example (RH = 75%): 100 kg × 0.825 = 82.5 kg  (+0.5 kg vs baseline)</span>
+<span class="comment">Baseline    (RH = 50%): 100 kg × 0.820 = 82.0 kg</span>
+<span class="comment">Rule B example (RH = 15%): 100 kg × 0.817 = 81.7 kg  (−0.3 kg vs baseline)</span>
+
+
+<span class="comment">── Sponge Delta (kg gained or lost vs baseline) ─────────────────</span>
+
+spongeKgDelta = (spongeCoeff − 0.82) × greenKg
+              = Δ × greenKg
+
+<span class="comment">Rule A: +0.005 × 100 = +0.5 kg gain</span>
+<span class="comment">Rule B: −0.003 × 100 = −0.3 kg loss</span>
+
+
+<span class="comment">── Environmental P&amp;L (SAR impact of sponge delta) ───────────────</span>
+
+environmentalPnL = spongeKgDelta × wholesalePrice
+
+<span class="comment">Positive PnL = moisture gain → more saleable weight → revenue upside</span>
+<span class="comment">Negative PnL = evaporation loss → less saleable weight → revenue shortfall</span>
+
+<span class="comment">Example (Gold tier, wpGold = SAR 169.38/kg, RH = 75%, green = 100 kg):</span>
+<span class="comment">environmentalPnL = +0.5 × 169.38 = +SAR 84.69</span>
+
+
+<span class="comment">── ZATCA Shrinkage Report Rows ──────────────────────────────────</span>
+
+baselineRoastedKg = greenKg × 0.82
+actualRoastedKg   = greenKg × spongeCoeff
+spongeAdjKg       = actualRoastedKg − baselineRoastedKg
+
+ruleASurplusKg    = max(0,  spongeAdjKg)   <span class="comment">// only Rule A gains</span>
+ruleBDeficitKg    = min(0,  spongeAdjKg)   <span class="comment">// only Rule B losses</span>
     </div>
+
+    <div class="sub-title">Hybrid Humidity Source — How RH is Resolved</div>
+    <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px">Each branch has two possible humidity sources. The engine selects the most reliable one automatically:</p>
+    <table class="manual-table">
+      <thead><tr><th>Priority</th><th>Source</th><th>Condition to Use</th><th>Fallback?</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>1 — Primary</td>
+          <td>IoT Sensor (ESP32/DHT22)</td>
+          <td>Branch humidity_source = <code>IOT_SENSOR</code> AND last reading &lt; 60 minutes old</td>
+          <td>—</td>
+        </tr>
+        <tr>
+          <td>2 — Fallback</td>
+          <td>Weather API</td>
+          <td>No IoT data, source = <code>WEATHER_API</code>, or IoT reading is stale (&gt; 60 min)</td>
+          <td>Always available</td>
+        </tr>
+      </tbody>
+    </table>
+    <p style="font-size:13px;color:var(--text-muted);margin-top:8px">When a stale IoT reading is used as fallback, the system flags the response with <code>isStale: true</code> so admins can see the data quality in the branch card.</p>
   </div>
 
   <!-- 22. ZATCA -->
   <div class="section" id="zatca">
     <div class="section-title"><span class="section-num">22</span><i class="fa fa-file-invoice" style="color:var(--amber)"></i> ZATCA Phase-2 Compliance</div>
-    <div class="section-desc">ZATCA_VAT_RATE = 15%. UBL XML e-invoicing and Bulk Shrinkage Report for Saudi tax authority compliance.</div>
+    <div class="section-desc">QABBAN OS generates fully compliant ZATCA Phase-2 UBL XML e-invoices with 15% VAT, QR codes, and a Bulk Shrinkage Report for Saudi tax authority submission.</div>
+
+    <div class="sub-title">Landed Price — Full Equation Set</div>
+    <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px">The Landed Price Calculator converts a vendor's origin FOB price into the final SAR per kg cost to the Saudi buyer, including all fees and VAT:</p>
+    <div class="code-block">
+<span class="comment">── Constants ─────────────────────────────────────────────────────</span>
+SAUDI_CUSTOMS_RATE   = 5%     (ad valorem on CIF value)
+QABBAN_PLATFORM_FEE  = 1.5%   (of CIF)
+ZATCA_VAT_RATE       = 15%
+shippingEstimate     = SAR 1,500 (flat base estimate)
+
+
+<span class="comment">── Step 1: FOB value in SAR ──────────────────────────────────────</span>
+fobPriceSar   = fobPriceUsd × effectiveRate
+fobTotalSar   = fobPriceSar × quantityKg
+
+
+<span class="comment">── Step 2: CIF (Cost, Insurance, Freight) ───────────────────────</span>
+cif = fobTotalSar + shippingEstimate
+
+
+<span class="comment">── Step 3: Customs & Fees ────────────────────────────────────────</span>
+customsFees = cif × 0.05
+qabbanFee   = cif × 0.015
+
+
+<span class="comment">── Step 4: VAT Base & VAT ────────────────────────────────────────</span>
+vatBase = cif + customsFees + qabbanFee
+vat     = vatBase × 0.15
+
+
+<span class="comment">── Step 5: Final Landed Price ────────────────────────────────────</span>
+landedPriceSar  = fobTotalSar + shippingEstimate + customsFees + qabbanFee + vat
+landedPricePerKg = landedPriceSar ÷ quantityKg
+
+
+<span class="comment">── Example: 100 kg lot, USD 4.20/kg, effectiveRate 3.825 ──────────</span>
+<span class="comment">fobTotalSar  = 4.20 × 3.825 × 100     = SAR 1,606.50</span>
+<span class="comment">cif          = 1,606.50 + 1,500        = SAR 3,106.50</span>
+<span class="comment">customsFees  = 3,106.50 × 0.05         = SAR 155.33</span>
+<span class="comment">qabbanFee    = 3,106.50 × 0.015        = SAR 46.60</span>
+<span class="comment">vatBase      = 3,106.50 + 155.33 + 46.60 = SAR 3,308.43</span>
+<span class="comment">vat          = 3,308.43 × 0.15         = SAR 496.26</span>
+<span class="comment">landedTotal  = 1,606.50+1,500+155.33+46.60+496.26 = SAR 3,804.69</span>
+<span class="comment">landedPerKg  = 3,804.69 ÷ 100          = SAR 38.05/kg</span>
+    </div>
+
+    <div class="sub-title">Invoice VAT Calculation</div>
+    <div class="code-block">
+<span class="comment">── ZATCA Invoice Lines ───────────────────────────────────────────</span>
+subtotal = unitPriceSar × quantityKg
+vatAmt   = subtotal × ZATCA_VAT_RATE   (= subtotal × 0.15)
+total    = subtotal + vatAmt
+
+<span class="comment">Example: SAR 169.38/kg × 100 kg</span>
+<span class="comment">subtotal = SAR 16,938.00</span>
+<span class="comment">vatAmt   = 16,938.00 × 0.15 = SAR 2,540.70</span>
+<span class="comment">total    = SAR 19,478.70</span>
+    </div>
 
     <div class="sub-title">ZATCA Invoice Fields</div>
     <table class="manual-table">
       <thead><tr><th>Field</th><th>Value</th></tr></thead>
       <tbody>
         <tr><td>Invoice Type Code</td><td>388 (Standard Tax Invoice)</td></tr>
+        <tr><td>Invoice Numbering</td><td>QGE-INV-YYYY-#### (sequential per year)</td></tr>
         <tr><td>Unit Code</td><td>KGM (kilograms)</td></tr>
-        <tr><td>VAT Rate</td><td>15%</td></tr>
-        <tr><td>Schema</td><td>OASIS UBL Invoice-2</td></tr>
-        <tr><td>Format</td><td>XML download + HTML view</td></tr>
+        <tr><td>VAT Rate</td><td>15% — constant <code>ZATCA_VAT_RATE = 0.15</code></td></tr>
+        <tr><td>Schema</td><td>OASIS UBL Invoice-2 namespace</td></tr>
+        <tr><td>QR Code</td><td>TLV base64 — tags: seller name, VAT number, datetime, total, VAT amount</td></tr>
+        <tr><td>Format</td><td>XML download + HTML view + QR display</td></tr>
       </tbody>
     </table>
 
-    <div class="sub-title">Bulk Shrinkage Report</div>
+    <div class="sub-title">Bulk Shrinkage Report — What It Covers</div>
+    <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px">The ZATCA Bulk Shrinkage Report documents the difference between the standard 18% roast loss and the actual sponge-adjusted loss across all lots in a 30-day period. This supports tax authority documentation of inventory mass changes.</p>
+    <div class="code-block">
+<span class="comment">Per lot, the report records:</span>
+baselineShrinkKg  = greenKg × 0.18                    <span class="comment">// standard expected loss</span>
+spongeAdjKg       = (spongeCoeff − 0.82) × greenKg   <span class="comment">// surplus or deficit</span>
+ruleASurplusKg    = max(0, spongeAdjKg)
+ruleBDeficitKg    = min(0, spongeAdjKg)
+
+<span class="comment">30-day totals are summed across all lots and exported as CSV.</span>
+    </div>
+
     <div class="info-box info-amber">
       <i class="fa fa-download"></i>
       <strong>GET /admin/finance/zatca-export</strong> → Downloads <code>qabban-zatca-bulk-shrinkage-{date}.csv</code><br>
@@ -1189,10 +1458,463 @@ curl -X POST http://localhost:3000/api/sponge/simulate \
     </div>
   </div>
 
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- NEW SECTIONS v3.0                                              -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+
+  <!-- 28. Qabban Pulse -->
+  <div class="section" id="pulse">
+    <div class="section-title">
+      <span class="section-num">28</span>
+      <i class="fa fa-weight-scale" style="color:var(--amber)"></i>
+      Qabban Pulse — Barista Waste Tracking Module
+    </div>
+    <div class="section-desc">Route: <code style="color:var(--amber)">/admin/pulse</code> — Real-time bean waste tracking using Acaia precision scales paired via Web Bluetooth. Reconciles actual espresso-bar consumption against Foodics POS theoretical usage.</div>
+
+    <div class="sub-title">What Pulse Does</div>
+    <ul class="checklist">
+      <li><i class="fa fa-bluetooth" style="color:var(--blue)"></i> Connects to Acaia Lunar / Pearl scales via <strong>Web Bluetooth GATT</strong> — no app or cable needed</li>
+      <li><i class="fa fa-weight-scale"></i> Logs every stable scale reading as a <strong>WasteLog</strong> entry (grams, session ID, branch ID, timestamp)</li>
+      <li><i class="fa fa-calculator"></i> Pulls <strong>Foodics POS orders</strong> for the day and computes <em>theoretical bean usage</em> from the drink-to-bean map</li>
+      <li><i class="fa fa-scale-balanced"></i> Calculates <strong>variance</strong> = Actual IoT grams − Theoretical POS grams</li>
+      <li><i class="fa fa-coins"></i> Converts variance to <strong>SAR financial loss</strong> using the branch's active lot cost per kg</li>
+      <li><i class="fa fa-upload"></i> Optionally pushes a <strong>Quantity Adjustment</strong> back to Foodics inventory API</li>
+    </ul>
+
+    <div class="sub-title">Pulse Dashboard Cards</div>
+    <table class="manual-table">
+      <thead><tr><th>Card</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td>Total Waste Logs</td><td>Count of all Acaia scale readings stored in this session</td></tr>
+        <tr><td>Total Grams Logged</td><td>Sum of all WasteLog weightGrams values</td></tr>
+        <tr><td>Reconciliations Run</td><td>Number of completed Foodics sync cycles</td></tr>
+        <tr><td>Total Financial Loss (SAR)</td><td>Cumulative SAR loss from positive variance (over-use)</td></tr>
+      </tbody>
+    </table>
+
+    <div class="sub-title">PULSE_BEAN_MAP — Drink → Grams Reference</div>
+    <table class="manual-table">
+      <thead><tr><th>Drink</th><th>Grams/Serving</th><th>Drink</th><th>Grams/Serving</th></tr></thead>
+      <tbody>
+        <tr><td>Espresso</td><td>18 g</td><td>Double Espresso</td><td>36 g</td></tr>
+        <tr><td>Americano</td><td>18 g</td><td>Cappuccino</td><td>18 g</td></tr>
+        <tr><td>Flat White</td><td>18 g</td><td>Latte</td><td>18 g</td></tr>
+        <tr><td>Double Latte</td><td>36 g</td><td>Cortado</td><td>18 g</td></tr>
+        <tr><td>Macchiato</td><td>18 g</td><td>Double Macchiato</td><td>36 g</td></tr>
+        <tr><td>Ristretto</td><td>14 g</td><td>Double Ristretto</td><td>28 g</td></tr>
+        <tr><td>Cold Brew</td><td>50 g</td><td>Pour Over</td><td>20 g</td></tr>
+        <tr><td>Filter Coffee</td><td>20 g</td><td>Batch Brew</td><td>20 g</td></tr>
+        <tr><td colspan="2"><strong>Default (unknown drink)</strong></td><td colspan="2">18 g</td></tr>
+      </tbody>
+    </table>
+
+    <div class="sub-title">Data Models</div>
+    <div class="code-block">
+<span class="comment">// WasteLog — one Acaia scale reading</span>
+<span class="keyword">interface</span> WasteLog {
+  id          : string    <span class="comment">// "WL-{timestamp}-{rand4}"</span>
+  sessionId   : string    <span class="comment">// "DI-{timestamp}" from Dial-in mode</span>
+  branchId    : string    <span class="comment">// e.g. "BR-RUH"</span>
+  weightGrams : number    <span class="comment">// raw scale reading</span>
+  stable      : boolean   <span class="comment">// was reading stable at capture?</span>
+  loggedAt    : string    <span class="comment">// ISO datetime</span>
+}
+
+<span class="comment">// PulseReconciliation — one Foodics sync cycle result</span>
+<span class="keyword">interface</span> PulseReconciliation {
+  id                 : string
+  branchId           : string
+  periodDate         : string    <span class="comment">// "YYYY-MM-DD"</span>
+  theoreticalUsage   : number    <span class="comment">// grams from POS</span>
+  actualUsageIot     : number    <span class="comment">// grams from scale</span>
+  variance           : number    <span class="comment">// actual − theoretical</span>
+  financialLossSar   : number    <span class="comment">// SAR cost of over-use</span>
+  costPerKgSar       : number
+  foodicsOrderCount  : number
+  adjustmentPushed   : boolean
+  adjustmentId       : string
+  createdAt          : string
+}
+    </div>
+
+    <div class="sub-title">Reconciliation Equation Set</div>
+    <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px">The reconciliation engine compares what Foodics <em>says</em> was sold (theoretical usage) against what the Acaia scale <em>actually measured</em> being used (actual usage), then converts any gap into a SAR financial figure.</p>
+    <div class="code-block">
+<span class="comment">── Step 1: Theoretical Usage (from Foodics POS) ─────────────────</span>
+<span class="comment">// For each Foodics order, look up the drink name in PULSE_BEAN_MAP</span>
+<span class="comment">// and sum the grams across all items.</span>
+
+theoreticalUsageGrams = Σ (PULSE_BEAN_MAP[drinkName] × quantity)
+                        for each item in all Foodics orders of the day
+
+<span class="comment">Example: 10 Espressos (18g) + 5 Double Lattes (36g) = 180 + 180 = 360g</span>
+
+
+<span class="comment">── Step 2: Actual Usage (from Acaia Scale) ───────────────────────</span>
+<span class="comment">// Sum all WasteLog entries for this branch/session/date.</span>
+<span class="comment">// Each entry is a scale reading rounded to 1 decimal place.</span>
+
+actualUsageGrams = Σ wasteLogs[i].weightGrams
+                   (filtered by branchId + date + optional sessionId)
+
+
+<span class="comment">── Step 3: Variance ──────────────────────────────────────────────</span>
+varianceGrams = actualUsageGrams − theoreticalUsageGrams
+
+<span class="comment">Positive variance → actual &gt; theoretical → over-use (waste or theft risk)</span>
+<span class="comment">Negative variance → actual &lt; theoretical → under-use (possible POS miss)</span>
+
+
+<span class="comment">── Step 4: Financial Loss ────────────────────────────────────────</span>
+<span class="comment">// Only positive variance (over-use) generates a loss.</span>
+<span class="comment">// costPerKgSar comes from the branch's active lot (OPTIMAL or MONITOR status).</span>
+
+financialLossSar = 0                                        if variance ≤ 0
+                 = (varianceGrams ÷ 1000) × costPerKgSar   if variance &gt; 0
+
+<span class="comment">Example: variance = +45g · cost = SAR 180/kg</span>
+<span class="comment">financialLossSar = (45 ÷ 1000) × 180 = SAR 8.10</span>
+
+
+<span class="comment">── Step 5: Foodics Inventory Adjustment (optional) ──────────────</span>
+<span class="comment">// If pushAdjustment = true, POST to Foodics /inventory_transactions:</span>
+adjustmentKg   = |varianceGrams| ÷ 1000
+adjustmentType = "waste"
+    </div>
+
+    <div class="sub-title">Pulse API Endpoints</div>
+    <table class="manual-table">
+      <thead><tr><th>Method</th><th>Path</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><span class="method-post">POST</span></td><td class="endpoint-path">/api/pulse/waste-log</td><td>Append one Acaia scale reading. Body: { branchId, sessionId, weightGrams, stable? }</td></tr>
+        <tr><td><span class="method-get">GET</span></td><td class="endpoint-path">/api/pulse/logs</td><td>Fetch waste logs. Query: ?branchId=&sessionId=&limit=200</td></tr>
+        <tr><td><span class="method-post">POST</span></td><td class="endpoint-path">/api/pulse/sync</td><td>Run Foodics reconciliation. Body: { branchId, periodDate, foodicsApiKey, pushAdjustment, sessionId? }</td></tr>
+        <tr><td><span class="method-get">GET</span></td><td class="endpoint-path">/api/pulse/reconciliations</td><td>List past reconciliations. Query: ?branchId=&limit=50</td></tr>
+        <tr><td><span class="method-get">GET</span></td><td class="endpoint-path">/admin/pulse</td><td>Full Pulse dashboard UI</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 29. AcaiaLink Web Bluetooth -->
+  <div class="section" id="acaia">
+    <div class="section-title">
+      <span class="section-num">29</span>
+      <i class="fa fa-bluetooth" style="color:var(--blue)"></i>
+      AcaiaLink — Web Bluetooth Scale Integration
+    </div>
+    <div class="section-desc">Client-side TypeScript class (<code style="color:var(--amber)">src/acaia-link.ts</code>) that connects to Acaia Lunar / Pearl scales via the browser's Web Bluetooth API. Runs entirely in-browser — no native app, no USB cable.</div>
+
+    <div class="sub-title">GATT Profile</div>
+    <table class="manual-table">
+      <thead><tr><th>Property</th><th>Value</th></tr></thead>
+      <tbody>
+        <tr><td>Service UUID</td><td class="endpoint-path">0000ffe0-0000-1000-8000-00805f9b34fb</td></tr>
+        <tr><td>Characteristic UUID</td><td class="endpoint-path">0000ffe1-0000-1000-8000-00805f9b34fb</td></tr>
+        <tr><td>Max Update Rate</td><td>5 readings / second (200ms debounce)</td></tr>
+        <tr><td>Heartbeat Interval</td><td>Every 2,800ms (keeps GATT connection alive)</td></tr>
+        <tr><td>Supported Scales</td><td>Acaia Lunar, Acaia Pearl (name prefix: ACAIA, Acaia, LUNAR, PEARL)</td></tr>
+      </tbody>
+    </table>
+
+    <div class="sub-title">Binary Packet Structure</div>
+    <div class="code-block">
+<span class="comment">// Acaia weight report packet (9 bytes)</span>
+Byte 0   : 0xEF  — header byte 1
+Byte 1   : 0xDD  — header byte 2
+Byte 2   : 0x0B  — message type (Weight Report)
+Byte 3   : payload length
+Byte 4-5 : weight (little-endian int16) ÷ 10 = grams
+Byte 6   : unit  (0x02 = grams · 0x05 = oz)
+Byte 7   : status bits  (bit 0 = stable flag)
+Byte 8   : checksum (XOR of bytes 2–7)
+
+<span class="comment">// Other message types</span>
+0x07 = Heartbeat ack
+0x0A = Tare confirmed
+    </div>
+
+    <div class="sub-title">AcaiaLink Class — Public Methods</div>
+    <table class="manual-table">
+      <thead><tr><th>Method</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td class="endpoint-path">connect()</td><td>Opens Web Bluetooth device picker, connects GATT server, subscribes to notifications, starts heartbeat</td></tr>
+        <tr><td class="endpoint-path">disconnect()</td><td>Stops heartbeat, unsubscribes notifications, disconnects GATT gracefully</td></tr>
+        <tr><td class="endpoint-path">tare()</td><td>Writes TARE_CMD to scale — zeroes the display</td></tr>
+        <tr><td class="endpoint-path">startDialIn(sessionId?)</td><td>Activates Dial-in mode — all subsequent stable readings are logged to dialInLog[]</td></tr>
+        <tr><td class="endpoint-path">stopDialIn()</td><td>Stops Dial-in mode, returns { sessionId, entries, totalGrams }</td></tr>
+        <tr><td class="endpoint-path">simulateWeight(grams, stable?)</td><td>Injects a synthetic weight event — for testing without physical scale</td></tr>
+        <tr><td class="endpoint-path">on(listener)</td><td>Subscribe to events: weight · connected · disconnected · error · tare. Returns unsubscribe function.</td></tr>
+      </tbody>
+    </table>
+
+    <div class="sub-title">Dial-in Mode — Waste Logging Flow</div>
+    <ul class="checklist">
+      <li><i class="fa fa-1"></i> Barista clicks <strong>START DIAL-IN</strong> → <code>acaiaLink.startDialIn(sessionId)</code></li>
+      <li><i class="fa fa-2"></i> Scale sends weight events at up to 5/sec — only <strong>stable positive</strong> readings are logged</li>
+      <li><i class="fa fa-3"></i> Each reading is auto-POSTed to <code>/api/pulse/waste-log</code> with branchId + sessionId</li>
+      <li><i class="fa fa-4"></i> Barista clicks <strong>STOP DIAL-IN</strong> → <code>acaiaLink.stopDialIn()</code> → session summary shown</li>
+      <li><i class="fa fa-5"></i> Session total grams vs theoretical usage compared in the Reconciliation panel</li>
+    </ul>
+
+    <div class="info-box info-blue">
+      <i class="fa fa-triangle-exclamation"></i>
+      <strong>Browser Compatibility:</strong> Web Bluetooth API requires Chrome or Edge on desktop (Windows/macOS/Linux/Android). Not supported in Firefox or Safari. The <code>simulateWeight()</code> method enables full testing on non-Bluetooth browsers.
+    </div>
+
+    <div class="sub-title">Memory Leak Prevention</div>
+    <ul class="checklist">
+      <li><i class="fa fa-check"></i> <code>on(listener)</code> returns an <strong>unsubscribe function</strong> — call it on component unmount to prevent listener accumulation</li>
+      <li><i class="fa fa-check"></i> <code>_hbTimer</code> is always cleared via <code>_stopHeartbeat()</code> before any new interval is created</li>
+      <li><i class="fa fa-check"></i> <code>_parseBuffer</code> is spliced (not re-created) on each packet drain — no array growth</li>
+      <li><i class="fa fa-check"></i> <code>gattserverdisconnected</code> event listener cleans up state via <code>_onDisconnect()</code></li>
+      <li><i class="fa fa-check"></i> 200ms rate-limit debounce caps processing at 5 events/sec regardless of scale output rate</li>
+    </ul>
+  </div>
+
+  <!-- 30. Foodics POS Sync -->
+  <div class="section" id="foodics">
+    <div class="section-title">
+      <span class="section-num">30</span>
+      <i class="fa fa-cash-register" style="color:var(--amber)"></i>
+      Foodics POS Sync & Reconciliation
+    </div>
+    <div class="section-desc">Route: <code style="color:var(--amber)">POST /api/pulse/sync</code> — Pulls sales orders from the Foodics v5 API, computes theoretical bean consumption, compares against IoT scale readings, and optionally pushes a Quantity Adjustment back to Foodics inventory.</div>
+
+    <div class="sub-title">Sync Flow (6 Steps)</div>
+    <table class="manual-table">
+      <thead><tr><th>Step</th><th>Action</th><th>API Call</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>Pull Foodics orders for branch + date</td><td class="endpoint-path">GET /api/v5/orders?filters[business_date]={date}&filters[branch_id]={id}</td></tr>
+        <tr><td>2</td><td>Map each drink → grams via PULSE_BEAN_MAP</td><td>In-memory lookup — no API call</td></tr>
+        <tr><td>3</td><td>Sum actual IoT readings from wasteLogs[]</td><td>In-memory filter by branchId + periodDate</td></tr>
+        <tr><td>4</td><td>Calculate variance = actual − theoretical</td><td>In-memory arithmetic</td></tr>
+        <tr><td>5</td><td>Push Quantity Adjustment if pushAdjustment=true</td><td class="endpoint-path">POST /api/v5/inventory_transactions</td></tr>
+        <tr><td>6</td><td>Save PulseReconciliation record</td><td>pulseRecons[] in-memory store</td></tr>
+      </tbody>
+    </table>
+
+    <div class="sub-title">Foodics Inventory Adjustment Payload</div>
+    <div class="code-block">
+<span class="comment">// POST https://api.foodics.com/api/v5/inventory_transactions</span>
+{
+  <span class="string">"type"</span>      : <span class="string">"waste"</span>,
+  <span class="string">"branch_id"</span>  : <span class="string">"BR-001"</span>,
+  <span class="string">"reference"</span>  : <span class="string">"PULSE-2026-03-13"</span>,
+  <span class="string">"quantity"</span>   : 0.045,   <span class="comment">// variance grams ÷ 1000 → kg</span>
+  <span class="string">"unit"</span>       : <span class="string">"kg"</span>,
+  <span class="string">"notes"</span>      : <span class="string">"Qabban Pulse reconciliation — variance: +45g"</span>
+}
+    </div>
+
+    <div class="info-box info-amber">
+      <i class="fa fa-info-circle"></i>
+      <strong>Network Resilience:</strong> If the Foodics API call fails (network error or invalid API key), the reconciliation still completes using <strong>zero theoretical usage</strong> — actual IoT data is never lost. The adjustment is marked <code>adjustmentId: "ADJ-FAILED"</code>.
+    </div>
+
+    <div class="sub-title">Cost Per Kg Resolution</div>
+    <p style="font-size:13px;color:var(--text-muted);margin-bottom:8px">The system resolves costPerKgSar by finding the first OPTIMAL or MONITOR lot, then converting its <code>costPerKg</code> (SAR) field. If no lot is found, a hardcoded fallback of <strong>SAR 180/kg</strong> is used.</p>
+    <div class="code-block">
+costPerKgSar = activeLot.costPerKg × lastKnownUsdToSar
+<span class="comment">// Fallback: SAR 180/kg if no active lot exists</span>
+    </div>
+  </div>
+
+  <!-- 31. IoT Telemetry Route -->
+  <div class="section" id="iot-telemetry">
+    <div class="section-title">
+      <span class="section-num">31</span>
+      <i class="fa fa-microchip" style="color:var(--amber)"></i>
+      IoT Telemetry Route — ESP32/DHT22 Sensor Integration
+    </div>
+    <div class="section-desc">Route: <code style="color:var(--amber)">POST /api/iot/telemetry</code> — Receives humidity and temperature pulses from physical ESP32/DHT22 sensors deployed in each warehouse. Authenticates via <code>device_key</code>, updates branch IoT readings, and re-runs the Sponge Effect engine.</div>
+
+    <div class="sub-title">Telemetry Payload</div>
+    <div class="code-block">
+<span class="comment">// POST /api/iot/telemetry</span>
+{
+  <span class="string">"device_key"</span>  : <span class="string">"dkey-ruh-0a1b2c3d-4e5f-6789-abcd-ef0123456789"</span>,
+  <span class="string">"humidity"</span>    : 68.4,    <span class="comment">// % RH — must be 0–100</span>
+  <span class="string">"temperature"</span> : 26.1     <span class="comment">// °C — must be -20 to 80</span>
+}
+    </div>
+
+    <div class="sub-title">Processing Flow</div>
+    <table class="manual-table">
+      <thead><tr><th>Step</th><th>Action</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>Validate payload types and ranges</td><td>Returns 400 if humidity out of 0–100 or temperature out of -20–80</td></tr>
+        <tr><td>2</td><td>Authenticate <code>device_key</code> → find branch</td><td>Returns 401 if key not found in any branch</td></tr>
+        <tr><td>3</td><td>Persist IoT reading to branch object</td><td>Updates <code>iot_humidity</code>, <code>iot_temperature</code>, <code>last_iot_reading_at</code></td></tr>
+        <tr><td>4</td><td>Run <code>resolveActiveRH(branch)</code></td><td>If source=WEATHER_API, reading stored but not yet active</td></tr>
+        <tr><td>5</td><td>Run <code>calcSpongeCoefficientForBranch()</code></td><td>Returns humidity-adjusted yield coefficient</td></tr>
+        <tr><td>6</td><td>Recalculate <code>roastedWeightKg</code> for all non-recalled lots in branch</td><td>Live mutation of lot data</td></tr>
+        <tr><td>7</td><td>Return JSON with sponge result + lot updates</td><td>Includes <code>activeSource</code>, <code>autoFallback</code>, <code>lotsRecalculated</code></td></tr>
+      </tbody>
+    </table>
+
+    <div class="sub-title">Device Key Format</div>
+    <div class="code-block">
+<span class="comment">// Auto-generated at branch creation — format:</span>
+dkey-{branchId-lowercase}-{crypto.randomUUID()}
+
+<span class="comment">// Demo device keys:</span>
+Riyadh : dkey-ruh-0a1b2c3d-4e5f-6789-abcd-ef0123456789
+Jeddah : dkey-jed-1f2e3d4c-5b6a-7890-bcde-fa1234567890
+Dammam : dkey-dmm-2a3b4c5d-6e7f-8901-cdef-ab2345678901
+    </div>
+
+    <div class="sub-title">Telemetry Response</div>
+    <div class="code-block">
+{
+  <span class="string">"ok"</span>              : true,
+  <span class="string">"branchId"</span>        : <span class="string">"BR-RUH"</span>,
+  <span class="string">"branchName"</span>      : <span class="string">"Riyadh"</span>,
+  <span class="string">"receivedAt"</span>      : <span class="string">"2026-03-13T10:22:00.000Z"</span>,
+  <span class="string">"iotReading"</span>      : { <span class="string">"humidity"</span>: 68.4, <span class="string">"temperature"</span>: 26.1 },
+  <span class="string">"activeSource"</span>    : <span class="string">"IOT_SENSOR"</span>,
+  <span class="string">"autoFallback"</span>    : false,
+  <span class="string">"sponge"</span>          : {
+    <span class="string">"activeRH"</span>    : 68.4,
+    <span class="string">"coefficient"</span> : 0.82,
+    <span class="string">"rule"</span>        : <span class="string">"BASELINE"</span>,
+    <span class="string">"pct"</span>         : <span class="string">"82.0%"</span>,
+    <span class="string">"delta"</span>       : 0
+  },
+  <span class="string">"lotsRecalculated"</span>: 3,
+  <span class="string">"lotUpdates"</span>      : [ ... ]
+}
+    </div>
+
+    <div class="info-box info-amber">
+      <i class="fa fa-info-circle"></i>
+      <strong>Important:</strong> The telemetry endpoint has <strong>no role-based auth guard</strong> in the current implementation — it uses <code>device_key</code> as its only authentication mechanism. Any request with a valid device_key will be accepted. For production, add an IP allowlist or HMAC signature verification layer.
+    </div>
+  </div>
+
+  <!-- 32. IoT Source Toggle -->
+  <div class="section" id="iot-toggle">
+    <div class="section-title">
+      <span class="section-num">32</span>
+      <i class="fa fa-toggle-on" style="color:var(--amber)"></i>
+      IoT Source Toggle — Hybrid Humidity Model
+    </div>
+    <div class="section-desc">Routes: <code style="color:var(--amber)">POST /api/iot/source-toggle</code> · <code style="color:var(--amber)">GET /api/iot/status</code> — Per-branch toggle that switches the active humidity data source between the city Weather API and the local IoT sensor. This drives the entire Sponge Effect engine.</div>
+
+    <div class="sub-title">Data Source Priority Logic</div>
+    <div class="code-block">
+<span class="comment">// resolveActiveRH(branch) — called by every Sponge calculation</span>
+
+<span class="keyword">if</span> (source === <span class="string">'IOT_SENSOR'</span> && iot_humidity !== null) {
+  ageMs = now − last_iot_reading_at
+  <span class="keyword">if</span> (ageMs &lt;= 60 minutes) {
+    <span class="keyword">return</span> { rh: iot_humidity, source: <span class="string">'IOT_SENSOR'</span>, stale: false }
+  }
+  <span class="comment">// Stale — auto-fallback</span>
+  <span class="keyword">return</span> { rh: weather_humidity, source: <span class="string">'WEATHER_API'</span>, stale: true }
+}
+<span class="keyword">return</span> { rh: weather_humidity, source: <span class="string">'WEATHER_API'</span>, stale: false }
+    </div>
+
+    <div class="sub-title">Three Possible States per Branch</div>
+    <table class="manual-table">
+      <thead><tr><th>State</th><th>Condition</th><th>Active RH</th><th>UI Indicator</th></tr></thead>
+      <tbody>
+        <tr><td><span style="color:#4ade80">● LIVE SENSOR</span></td><td>source=IOT_SENSOR, data fresh (&lt;60 min)</td><td>iot_humidity</td><td>Green "LIVE SENSOR DATA" badge</td></tr>
+        <tr><td><span style="color:#fbbf24">● STALE → FALLBACK</span></td><td>source=IOT_SENSOR, data stale (&gt;60 min)</td><td>weather humidity</td><td>Amber "⚠ Stale→Fallback" warning</td></tr>
+        <tr><td><span style="color:#94a3b8">● WEATHER API</span></td><td>source=WEATHER_API (default)</td><td>weather humidity</td><td>Grey "City Weather" badge</td></tr>
+      </tbody>
+    </table>
+
+    <div class="sub-title">Source Toggle Request</div>
+    <div class="code-block">
+<span class="comment">// POST /api/iot/source-toggle</span>
+{ <span class="string">"branchId"</span>: <span class="string">"BR-JED"</span>, <span class="string">"source"</span>: <span class="string">"IOT_SENSOR"</span> }
+
+<span class="comment">// Response includes updated sponge coefficient for immediate UI refresh</span>
+{
+  <span class="string">"ok"</span>         : true,
+  <span class="string">"branchId"</span>   : <span class="string">"BR-JED"</span>,
+  <span class="string">"source"</span>     : <span class="string">"IOT_SENSOR"</span>,
+  <span class="string">"hasIotData"</span> : true,
+  <span class="string">"isStale"</span>    : false,
+  <span class="string">"activeRH"</span>   : 68.4,
+  <span class="string">"sponge"</span>     : { <span class="string">"coefficient"</span>: 0.82, <span class="string">"rule"</span>: <span class="string">"BASELINE"</span> ... }
+}
+    </div>
+
+    <div class="sub-title">Branch Card IoT UI Elements</div>
+    <ul class="checklist">
+      <li><i class="fa fa-toggle-on"></i> <strong>Data Fidelity Toggle</strong> — slider switch on each branch card; label shows "City Weather ↔ Local Sensor"</li>
+      <li><i class="fa fa-microchip"></i> <strong>Device Key Display</strong> — first 28 chars of device_key shown (truncated for security)</li>
+      <li><i class="fa fa-clock"></i> <strong>Last Reading Timestamp</strong> — shows time of most recent IoT pulse in en-SA locale</li>
+      <li><i class="fa fa-triangle-exclamation" style="color:var(--amber)"></i> <strong>Stale Warning</strong> — auto-shown when IoT data is &gt;60 minutes old</li>
+      <li><i class="fa fa-circle" style="color:#4ade80"></i> <strong>Live Dot Animation</strong> — pulsing green dot when sensor is active and fresh</li>
+    </ul>
+
+    <div class="sub-title">GET /api/iot/status</div>
+    <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px">Returns the current IoT status for all branches — useful for monitoring dashboards.</p>
+    <div class="code-block">
+<span class="comment">// GET /api/iot/status</span>
+{
+  <span class="string">"branches"</span>: [
+    {
+      <span class="string">"branchId"</span>     : <span class="string">"BR-RUH"</span>,
+      <span class="string">"name"</span>         : <span class="string">"Riyadh"</span>,
+      <span class="string">"source"</span>       : <span class="string">"WEATHER_API"</span>,
+      <span class="string">"hasIotData"</span>   : false,
+      <span class="string">"iotHumidity"</span>  : null,
+      <span class="string">"iotTemp"</span>      : null,
+      <span class="string">"lastReadingAt"</span>: null,
+      <span class="string">"activeRH"</span>     : 45,
+      <span class="string">"spongeCoeff"</span>  : 0.82
+    }, ...
+  ]
+}
+    </div>
+  </div>
+
+  <!-- Updated API Reference additions -->
+  <div class="section" id="api-v3-additions">
+    <div class="section-title">
+      <span class="section-num">33</span>
+      <i class="fa fa-plug" style="color:var(--amber)"></i>
+      New API Endpoints — v3.0 Additions
+    </div>
+    <div class="section-desc">All new endpoints added in v3.0 (Pulse + IoT modules). See Section 25 for the complete original API reference.</div>
+
+    <div class="sub-title">Pulse Endpoints</div>
+    <table class="manual-table">
+      <thead><tr><th>Method</th><th>Path</th><th>Auth</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><span class="method-post">POST</span></td><td class="endpoint-path">/api/pulse/waste-log</td><td>None</td><td>Append Acaia scale reading to wasteLogs store</td></tr>
+        <tr><td><span class="method-get">GET</span></td><td class="endpoint-path">/api/pulse/logs</td><td>None</td><td>Fetch waste logs filtered by branchId / sessionId / limit</td></tr>
+        <tr><td><span class="method-post">POST</span></td><td class="endpoint-path">/api/pulse/sync</td><td>foodicsApiKey in body</td><td>Full Foodics reconciliation cycle — pulls POS, compares IoT, pushes adjustment</td></tr>
+        <tr><td><span class="method-get">GET</span></td><td class="endpoint-path">/api/pulse/reconciliations</td><td>None</td><td>List past PulseReconciliation records</td></tr>
+        <tr><td><span class="method-get">GET</span></td><td class="endpoint-path">/admin/pulse</td><td>Admin (client-side)</td><td>Pulse dashboard UI with Acaia connect button + Foodics sync form</td></tr>
+      </tbody>
+    </table>
+
+    <div class="sub-title">IoT Endpoints</div>
+    <table class="manual-table">
+      <thead><tr><th>Method</th><th>Path</th><th>Auth</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><span class="method-post">POST</span></td><td class="endpoint-path">/api/iot/telemetry</td><td>device_key in body</td><td>Receive ESP32/DHT22 sensor pulse — updates branch IoT readings + re-runs Sponge</td></tr>
+        <tr><td><span class="method-post">POST</span></td><td class="endpoint-path">/api/iot/source-toggle</td><td>Admin (client-side)</td><td>Switch branch humidity source between WEATHER_API and IOT_SENSOR</td></tr>
+        <tr><td><span class="method-get">GET</span></td><td class="endpoint-path">/api/iot/status</td><td>None</td><td>Current IoT status for all branches — source, readings, sponge coefficients</td></tr>
+      </tbody>
+    </table>
+
+    <div class="info-box info-red">
+      <i class="fa fa-shield-halved"></i>
+      <strong>Security Note (v3.0):</strong> The Pulse and IoT endpoints currently have <strong>no server-side role enforcement</strong>. Access control relies on client-side navigation and device_key authentication for IoT. For production hardening, implement a JWT middleware that rejects Café-role tokens from hitting <code>/api/iot/telemetry</code> and <code>/api/pulse/*</code> admin routes.
+    </div>
+  </div>
+
+
   <!-- Footer -->
   <div style="background:#0a0a0f;border-top:1px solid var(--border);padding:32px 60px;text-align:center">
     <div style="color:var(--amber);font-family:var(--font-mono);font-weight:700;letter-spacing:3px;margin-bottom:8px">QABBAN OS</div>
-    <div style="color:var(--text-muted);font-size:12px">User Manual v2.0 · March 2026 · Qabban Global Exchange & Loyalty Engine v6</div>
+    <div style="color:var(--text-muted);font-size:12px">User Manual v4.0 · March 2026 · Qabban Global Exchange &amp; Loyalty Engine v6</div>
     <div style="color:var(--text-muted);font-size:11px;margin-top:6px">Hono + TypeScript + Cloudflare Pages · ~12,000 lines · Bilingual EN/AR</div>
   </div>
 
@@ -1204,10 +1926,9 @@ curl -X POST http://localhost:3000/api/sponge/simulate \
 </button>
 
 <script>
-  // Sidebar active link highlighting on scroll
   const sections = document.querySelectorAll('.section');
   const links = document.querySelectorAll('.sidebar-link');
-  
+
   const observer = new IntersectionObserver((entries) => {
     entries.forEach(entry => {
       if (entry.isIntersecting) {
@@ -1218,19 +1939,16 @@ curl -X POST http://localhost:3000/api/sponge/simulate \
       }
     });
   }, { threshold: 0.3 });
-  
+
   sections.forEach(s => observer.observe(s));
 
-  // Smooth scroll
   links.forEach(link => {
     link.addEventListener('click', (e) => {
       const href = link.getAttribute('href');
-      if (href.startsWith('#')) {
+      if (href && href.startsWith('#')) {
         e.preventDefault();
         const target = document.getElementById(href.slice(1));
-        if (target) {
-          target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }
+        if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }
     });
   });
