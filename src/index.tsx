@@ -101,9 +101,11 @@ import {
   persistViolations,
   getUnreadNotifications,
   markNotification,
+  buildWhatsAppMessage,
   WATCHDOG_RH_CRITICAL,
   WATCHDOG_DURATION_CRITICAL_H,
   type SystemNotification,
+  type HumidityViolation,
 } from './data'
 
 const app = new Hono()
@@ -591,6 +593,14 @@ const shell = (title: string, body: string) => `<!DOCTYPE html>
     .watchdog-card-meta code {
       background: rgba(255,255,255,.07); padding: 1px 5px; border-radius: 3px;
       font-size: 10px;
+    }
+    /* ── Watchdog empty state ── */
+    .watchdog-empty {
+      text-align: center; padding: 60px 24px;
+      color: var(--text-muted);
+      background: rgba(16,185,129,.03);
+      border: 1px dashed rgba(16,185,129,.2);
+      border-radius: var(--radius);
     }
 
     /* ── NOTIFICATION BELL ── */
@@ -2182,15 +2192,26 @@ function adminLayout(pageTitle: string, activeNav: string, content: string, pend
       </div>
     </nav>
     <main class="main">
-      ${watchdogCount > 0 && activeNav !== 'watchdog' ? `
-      <div class="alert alert-watchdog" style="cursor:pointer" onclick="location.href='/admin/watchdog'">
-        <i class="fa fa-shield-virus" style="font-size:18px;flex-shrink:0"></i>
-        <div>
-          <strong>⚠ ${watchdogCount} High-Humidity Spoilage Risk${watchdogCount > 1 ? 's' : ''} Detected</strong> —
-          Lot(s) have exceeded the 48h safety window. Immediate action required.
+      ${watchdogCount > 0 && activeNav !== 'watchdog' ? (() => {
+        const unreadNow = getUnreadNotifications()
+        const lotLinks = unreadNow.map(n =>
+          `<a href="${n.lotPassportUrl}" style="color:#fca5a5;font-family:var(--font-mono);font-size:10px;font-weight:700;text-decoration:none">` +
+          `${n.lotId}</a> (${n.lotOrigin} @ ${n.branchName})`
+        ).join(' &nbsp;·&nbsp; ')
+        return `
+      <div class="alert alert-watchdog">
+        <i class="fa fa-shield-virus" style="font-size:20px;flex-shrink:0"></i>
+        <div style="flex:1">
+          <strong>🚨 ${watchdogCount} High-Humidity Spoilage Risk${watchdogCount > 1 ? 's' : ''} Detected</strong>
+          — Lot${watchdogCount > 1 ? 's' : ''} exceeded the 48h safety window. Immediate action required.<br>
+          <span style="font-size:10px;opacity:.85">${lotLinks}</span>
         </div>
-        <span style="margin-left:auto;font-family:var(--font-mono);font-size:11px;white-space:nowrap">VIEW WATCHDOG →</span>
-      </div>` : ''}
+        <a href="/admin/watchdog"
+          style="flex-shrink:0;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.25);border-radius:4px;color:white;padding:5px 14px;font-size:11px;font-family:var(--font-mono);font-weight:700;text-decoration:none;white-space:nowrap">
+          <i class="fa fa-shield-virus"></i> WATCHDOG →
+        </a>
+      </div>`
+      })() : ''}
       <div class="page-header">
         <div class="page-title"><span>// </span>${pageTitle}</div>
         <div class="page-sub" data-i18n="sub.overview">Last sync: 2026-02-24 08:30 UTC+3</div>
@@ -9691,7 +9712,56 @@ app.get('/exchange/climate/:lotId', (c) => {
     </div>`
   }).filter(Boolean).join('')
 
+  // ── Active Risk Watchdog — check for open HUMIDITY_VIOLATION on this lot ──
+  const watchdogAlert = systemNotifications.find(
+    n => n.lotId === lot.id && n.type === 'HUMIDITY_VIOLATION' && n.status === 'UNREAD'
+  ) ?? null
+
   const content = `
+  ${watchdogAlert ? `
+  <!-- ╔══ ACTIVE RISK WATCHDOG BANNER ══════════════════════════════════════╗ -->
+  <div style="
+    background:linear-gradient(135deg,rgba(239,68,68,.18),rgba(239,68,68,.08));
+    border:1.5px solid rgba(239,68,68,.6);
+    border-radius:8px;
+    padding:16px 18px;
+    margin-bottom:20px;
+    animation:pulseAlert 2s ease-in-out infinite;
+  ">
+    <div style="display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap">
+      <i class="fa fa-shield-virus" style="font-size:22px;color:var(--red);flex-shrink:0;margin-top:2px"></i>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:700;color:var(--red);margin-bottom:4px;letter-spacing:.2px">
+          🚨 ACTIVE RISK WATCHDOG — High-Humidity Spoilage Risk Detected
+        </div>
+        <div style="font-size:11px;color:#fca5a5;line-height:1.65;margin-bottom:10px">
+          <strong>Condition:</strong> Consistent &gt;${WATCHDOG_RH_CRITICAL}% RH for ${WATCHDOG_DURATION_CRITICAL_H}+ hours<br>
+          Avg RH: <strong>${watchdogAlert.avgHumidity}%</strong> &nbsp;|&nbsp;
+          Peak: <strong>${watchdogAlert.maxHumidity}%</strong> &nbsp;|&nbsp;
+          Sustained: <strong>${watchdogAlert.exposureHours}h</strong> &nbsp;|&nbsp;
+          ${watchdogAlert.readingCount} reading${watchdogAlert.readingCount > 1 ? 's' : ''}
+        </div>
+        <div style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.25);border-radius:5px;padding:10px 12px;font-size:11px;font-family:var(--font-mono);color:var(--text-secondary);line-height:1.7">
+          <div style="color:var(--red);font-weight:700;font-size:10px;letter-spacing:.5px;margin-bottom:5px">⚡ ACTION REQUIRED</div>
+          ${watchdogAlert.actionInstruction.replace(/\. /g, '.<br>')}
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;margin-top:10px;flex-wrap:wrap">
+          ${watchdogAlert.sfdaAuditFlagged
+            ? `<span style="background:rgba(168,85,247,.12);color:#c084fc;border:1px solid rgba(168,85,247,.35);border-radius:4px;padding:2px 8px;font-size:10px;font-family:var(--font-mono);font-weight:700">
+                 <i class="fa fa-gavel"></i> SFDA AUDIT FLAGGED
+               </span>`
+            : ''}
+          <a href="/admin/watchdog"
+            style="color:var(--red);font-size:11px;font-family:var(--font-mono);font-weight:700;text-decoration:none">
+            VIEW IN WATCHDOG DASHBOARD →
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+  <!-- ╚══ END RISK WATCHDOG BANNER ════════════════════════════════════════╝ -->
+  ` : ''}
+
   <div style="display:flex;align-items:center;gap:12px;margin-bottom:4px;flex-wrap:wrap">
     <div class="pg-title"><i class="fa fa-passport" style="color:${lot.scaGoldStorage?'var(--cyan)':'var(--muted)'}"></i>Digital Climate Passport</div>
     ${lot.scaGoldStorage
@@ -11445,217 +11515,384 @@ app.get('/api/iot/status', (c) => {
 // ══════════════════════════════════════════════════════════════════════════════
 // ── RISK WATCHDOG — Cron Trigger Handler & Notification API ──────────────────
 // ══════════════════════════════════════════════════════════════════════════════
+//
+//  ARCHITECTURE
+//  ┌─────────────────────────────────────────────────────────────────┐
+//  │  Cloudflare Cron  "0 */6 * * *"  →  scheduled()               │
+//  │    └─ runWatchdog(ctx)                                          │
+//  │         ├─ checkHumidityViolations()   ← query climate logs    │
+//  │         ├─ persistViolations()         ← set CRITICAL status   │
+//  │         └─ sendWatchdogWhatsApp()      ← ctx.waitUntil()       │
+//  └─────────────────────────────────────────────────────────────────┘
+//
+//  REST API
+//    GET  /api/watchdog/run                  manual trigger (admin)
+//    GET  /api/watchdog/active-risks         active lot risks for dashboard
+//    GET  /api/watchdog/notifications        full notification log
+//    POST /api/watchdog/notifications/:id/ack
+//    POST /api/watchdog/notifications/ack-all
+//    GET  /admin/watchdog                    watchdog dashboard page
+// ─────────────────────────────────────────────────────────────────────────────
 
-// ── Mock WhatsApp sender (replace with real WhatsApp Business API in prod) ───
+// ── WhatsApp sender using verbatim spec message ───────────────────────────────
+// In production: POST https://graph.facebook.com/v18.0/{PHONE_ID}/messages
+// Template name: "humidity_critical_risk_alert"  (must be pre-approved in Meta)
 async function sendWatchdogWhatsApp(notif: SystemNotification): Promise<boolean> {
-  // In production: POST to https://graph.facebook.com/v18.0/{PHONE_ID}/messages
-  // with the high-priority template "humidity_spoilage_alert" and the body below.
   const phone = notif.branchManagerPhone
   if (!phone) return false
-  const body = (
-    `🚨 *QABBAN OS — High-Humidity Alert*\n\n` +
-    `*${notif.title}*\n\n` +
-    `${notif.body}\n\n` +
-    `📍 Branch: ${notif.branchName}\n` +
-    `💧 Avg RH: ${notif.avgHumidity}% | Max: ${notif.maxHumidity}%\n` +
-    `⏱ Exposure: ${notif.exposureHours}h (${notif.readingCount} readings)\n\n` +
-    `_QABBAN OS Risk Watchdog — auto-generated ${new Date().toISOString()}_`
-  )
-  // Mock: log to console (would call WA API in production)
-  console.log(`[WATCHDOG] WhatsApp to ${phone}:\n${body}`)
-  return true  // mock success
+
+  // The verbatim message is pre-built by buildWhatsAppMessage() in data.ts
+  const message = notif.whatsappMessage
+
+  // ── Production call (uncomment + add env vars) ────────────────────────────
+  // const res = await fetch(
+  //   `https://graph.facebook.com/v18.0/${env.WHATSAPP_PHONE_ID}/messages`,
+  //   {
+  //     method : 'POST',
+  //     headers: { Authorization: `Bearer ${env.WHATSAPP_TOKEN}`, 'Content-Type': 'application/json' },
+  //     body   : JSON.stringify({
+  //       messaging_product: 'whatsapp',
+  //       to               : phone,
+  //       type             : 'text',
+  //       text             : { body: message },
+  //     }),
+  //   }
+  // )
+  // return res.ok
+
+  // Development: log to console
+  console.log(`[WATCHDOG] 📱 WhatsApp → ${phone}\n${message}`)
+  return true
 }
 
-// ── Core watchdog runner ─────────────────────────────────────────────────────
+// ── Core cron runner ──────────────────────────────────────────────────────────
+// ctx.waitUntil() keeps the Cloudflare Worker alive while WhatsApp messages
+// are dispatched asynchronously — prevents the 10 ms CPU budget from expiring.
 async function runWatchdog(ctx?: { waitUntil: (p: Promise<unknown>) => void }) {
+  console.log(`[WATCHDOG] Scan started at ${new Date().toISOString()}`)
+
   const violations = checkHumidityViolations()
   if (violations.length === 0) {
-    console.log('[WATCHDOG] No humidity violations detected.')
-    return { checked: new Date().toISOString(), violations: 0, notifications: 0 }
+    console.log('[WATCHDOG] ✅ No sustained violations found.')
+    return {
+      checked      : new Date().toISOString(),
+      violations   : 0,
+      notifications: 0,
+    }
   }
 
+  // Persist → updates lot status to CRITICAL + inserts system_notifications
   const created = persistViolations(violations)
 
-  // Fire WhatsApp alerts — wrap in ctx.waitUntil so the Worker doesn't time out
+  // Fire WhatsApp alerts per notification — batched via waitUntil
   const waPromises = created.map(async (n) => {
     const sent = await sendWatchdogWhatsApp(n)
     if (sent) {
       n.whatsappSent   = true
       n.whatsappSentAt = new Date().toISOString()
     }
+    console.log(`[WATCHDOG] ${sent ? '✅' : '❌'} WhatsApp → ${n.branchManagerPhone ?? 'no phone'} (${n.lotId})`)
   })
 
+  // Use ctx.waitUntil so Worker does not time out waiting for WA API
   if (ctx) {
     ctx.waitUntil(Promise.allSettled(waPromises))
   } else {
     await Promise.allSettled(waPromises)
   }
 
-  console.log(`[WATCHDOG] ${violations.length} violation(s) → ${created.length} new notification(s) created.`)
+  console.log(`[WATCHDOG] 🚨 ${violations.length} violation(s) → ${created.length} new notification(s).`)
+
   return {
     checked      : new Date().toISOString(),
     violations   : violations.length,
     notifications: created.length,
     details      : created.map(n => ({
-      id        : n.id,
-      lotId     : n.lotId,
-      lotOrigin : n.lotOrigin,
-      branch    : n.branchName,
-      avgRH     : n.avgHumidity,
-      maxRH     : n.maxHumidity,
-      exposureH : n.exposureHours,
-      whatsapp  : n.whatsappSent,
+      id             : n.id,
+      lotId          : n.lotId,
+      lotOrigin      : n.lotOrigin,
+      passportUrl    : n.lotPassportUrl,
+      branch         : n.branchName,
+      avgRH          : n.avgHumidity,
+      maxRH          : n.maxHumidity,
+      exposureH      : n.exposureHours,
+      sfdaFlagged    : n.sfdaAuditFlagged,
+      whatsapp       : n.whatsappSent,
     })),
   }
 }
 
-// ── GET /api/watchdog/run — manual trigger (admin only) ──────────────────────
+// ── GET /api/watchdog/run — manual trigger (admin) ────────────────────────────
 app.get('/api/watchdog/run', async (c) => {
   const result = await runWatchdog()
   return c.json({ ok: true, ...result })
 })
 
-// ── GET /api/watchdog/notifications — list all system notifications ───────────
+// ── GET /api/watchdog/active-risks — active lot risks for the dashboard ────────
+// Returns all lots currently in CRITICAL status (from watchdog or manual),
+// enriched with their open notification if one exists.
+// Used by the admin dashboard and any external monitoring consumers.
+app.get('/api/watchdog/active-risks', (c) => {
+  const criticalLots = coffeeLots.filter(l => l.status === 'CRITICAL')
+
+  const risks = criticalLots.map(lot => {
+    const notif = systemNotifications
+      .filter(n => n.lotId === lot.id && n.type === 'HUMIDITY_VIOLATION')
+      .sort((a, b) => b.detectedAt.localeCompare(a.detectedAt))[0] ?? null
+
+    const branch = branches.find(b => b.name === lot.branch)
+    const { rh: liveRH } = branch ? resolveActiveRH(branch) : { rh: null as number | null }
+
+    return {
+      lotId          : lot.id,
+      lotOrigin      : lot.origin,
+      branch         : lot.branch,
+      passportUrl    : notif?.lotPassportUrl ?? `/admin/inventory#lot-${lot.id}`,
+      currentRH      : liveRH,
+      avgHumidity    : notif?.avgHumidity ?? null,
+      maxHumidity    : notif?.maxHumidity ?? null,
+      exposureHours  : notif?.exposureHours ?? null,
+      sfdaFlagged    : notif?.sfdaAuditFlagged ?? false,
+      notifId        : notif?.id ?? null,
+      notifStatus    : notif?.status ?? null,
+      detectedAt     : notif?.detectedAt ?? null,
+      whatsappSent   : notif?.whatsappSent ?? false,
+      actionInstruction: notif?.actionInstruction ?? null,
+    }
+  })
+
+  return c.json({
+    total       : risks.length,
+    sfdaFlagged : risks.filter(r => r.sfdaFlagged).length,
+    risks,
+  })
+})
+
+// ── GET /api/watchdog/notifications — full notification log ───────────────────
 app.get('/api/watchdog/notifications', (c) => {
-  const filter = c.req.query('status')   // optional: ?status=UNREAD
+  const filter = c.req.query('status')
   const list   = filter
     ? systemNotifications.filter(n => n.status === filter)
     : systemNotifications
   return c.json({
-    total   : list.length,
-    unread  : systemNotifications.filter(n => n.status === 'UNREAD').length,
-    notifications: list.slice().reverse(),  // newest first
+    total        : list.length,
+    unread       : systemNotifications.filter(n => n.status === 'UNREAD').length,
+    sfdaFlagged  : systemNotifications.filter(n => n.sfdaAuditFlagged).length,
+    notifications: list.slice().reverse(),
   })
 })
 
-// ── POST /api/watchdog/notifications/:id/ack — acknowledge a notification ─────
+// ── POST /api/watchdog/notifications/:id/ack ──────────────────────────────────
 app.post('/api/watchdog/notifications/:id/ack', (c) => {
-  const id   = c.req.param('id')
-  const notif = markNotification(id, 'READ')
+  const notif = markNotification(c.req.param('id'), 'READ')
   if (!notif) return c.json({ ok: false, error: 'Notification not found' }, 404)
   return c.json({ ok: true, notification: notif })
 })
 
-// ── POST /api/watchdog/notifications/ack-all — bulk acknowledge ───────────────
+// ── POST /api/watchdog/notifications/ack-all ─────────────────────────────────
 app.post('/api/watchdog/notifications/ack-all', (c) => {
   const unread = systemNotifications.filter(n => n.status === 'UNREAD')
   unread.forEach(n => markNotification(n.id, 'READ'))
   return c.json({ ok: true, acknowledged: unread.length })
 })
 
-// ── GET /admin/watchdog — Risk Watchdog dashboard page ────────────────────────
+// ── GET /admin/watchdog — Risk Watchdog full dashboard ────────────────────────
 app.get('/admin/watchdog', (c) => {
-  const pending = beanRequests.filter(r => r.status === 'PENDING').length
-  const unread  = getUnreadNotifications()
-  const all     = systemNotifications.slice().reverse()
+  const pending   = beanRequests.filter(r => r.status === 'PENDING').length
+  const unread    = getUnreadNotifications()
+  const allNotifs = systemNotifications.slice().reverse()
 
-  const cards = all.length === 0
-    ? `<div style="text-align:center;padding:60px 20px;color:var(--text-muted)">
-        <i class="fa fa-shield-check" style="font-size:48px;margin-bottom:16px;color:var(--green)"></i>
-        <div style="font-size:18px;font-weight:600">All Clear</div>
-        <div style="font-size:13px;margin-top:8px">No humidity violations detected in the last 48 h.</div>
+  // ── Violation cards ───────────────────────────────────────────────────────
+  const cards = allNotifs.length === 0
+    ? `<div class="watchdog-empty">
+        <i class="fa fa-shield-check" style="font-size:52px;color:var(--green);margin-bottom:16px"></i>
+        <div style="font-size:17px;font-weight:700">All Clear</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-top:6px">
+          No humidity violations detected in the last ${WATCHDOG_DURATION_CRITICAL_H}h window.
+        </div>
        </div>`
-    : all.map(n => `
-    <div class="watchdog-card ${n.status === 'UNREAD' ? 'watchdog-card--unread' : ''}" id="wcard-${n.id}">
+    : allNotifs.map(n => {
+        const isUnread  = n.status === 'UNREAD'
+        const waLines   = n.whatsappMessage.split('\n')
+
+        return `
+    <div class="watchdog-card ${isUnread ? 'watchdog-card--unread' : ''}" id="wcard-${n.id}">
+
+      <!-- ── Card header ── -->
       <div class="watchdog-card-header">
-        <span class="watchdog-severity watchdog-severity--${n.severity.toLowerCase()}">
-          <i class="fa fa-circle-exclamation"></i> ${n.severity}
+        <span class="watchdog-severity watchdog-severity--critical">
+          <i class="fa fa-circle-exclamation"></i> CRITICAL
         </span>
+        ${n.sfdaAuditFlagged
+          ? `<span class="watchdog-severity" style="background:rgba(168,85,247,.12);color:#c084fc;border:1px solid rgba(168,85,247,.35)">
+               <i class="fa fa-gavel"></i> SFDA AUDIT
+             </span>`
+          : ''}
         <span class="watchdog-ts">${new Date(n.detectedAt).toLocaleString('en-SA')}</span>
-        ${n.status === 'UNREAD'
+        ${isUnread
           ? `<button class="watchdog-ack-btn" onclick="ackNotif('${n.id}')">
                <i class="fa fa-check"></i> ACK
              </button>`
-          : `<span style="font-size:11px;color:var(--text-muted);font-family:var(--font-mono)">✓ READ</span>`
-        }
+          : `<span style="font-size:11px;color:var(--text-muted);font-family:var(--font-mono)">✓ READ</span>`}
       </div>
+
+      <!-- ── Alert title + body ── -->
       <div class="watchdog-card-title">
-        <i class="fa fa-triangle-exclamation" style="color:var(--red);margin-right:6px"></i>
+        <i class="fa fa-triangle-exclamation" style="color:var(--red)"></i>
         ${n.title}
       </div>
-      <div class="watchdog-card-body">${n.body}</div>
-      <div class="watchdog-card-meta">
-        <span><i class="fa fa-box"></i> Lot: <code>${n.lotId}</code> · ${n.lotOrigin}</span>
-        <span><i class="fa fa-building"></i> ${n.branchName}</span>
-        <span><i class="fa fa-droplet"></i> Avg ${n.avgHumidity}% RH | Max ${n.maxHumidity}% RH</span>
-        <span><i class="fa fa-clock"></i> ${n.exposureHours}h exposure · ${n.readingCount} readings</span>
-        <span><i class="fa fa-brands fa-whatsapp" style="color:#25d366"></i>
-          ${n.whatsappSent
-            ? `<span style="color:#25d366">Sent ${n.whatsappSentAt ? new Date(n.whatsappSentAt).toLocaleString('en-SA') : ''}</span>`
-            : `<span style="color:var(--text-muted)">Pending</span>`
-          }
-        </span>
-      </div>
-    </div>`).join('')
+      <div class="watchdog-card-body">${n.body.replace(/\n/g, '<br>')}</div>
 
+      <!-- ── Action instruction ── -->
+      <div style="background:rgba(239,68,68,.06);border:1px solid rgba(239,68,68,.2);border-radius:5px;padding:10px 12px;margin-bottom:12px;font-size:11px;line-height:1.7;font-family:var(--font-mono);color:var(--text-secondary)">
+        <div style="font-size:10px;color:var(--red);font-weight:700;margin-bottom:5px;letter-spacing:.5px">
+          ⚡ ACTION REQUIRED
+        </div>
+        ${n.actionInstruction.replace(/\. /g, '.<br>')}
+      </div>
+
+      <!-- ── Metadata strip ── -->
+      <div class="watchdog-card-meta">
+        <span>
+          <i class="fa fa-box" style="color:var(--amber)"></i>
+          <a href="${n.lotPassportUrl}" style="color:var(--amber);text-decoration:none;font-weight:700">
+            ${n.lotId}
+          </a> · ${n.lotOrigin}
+        </span>
+        <span><i class="fa fa-building"></i> ${n.branchName}</span>
+        <span><i class="fa fa-droplet" style="color:var(--red)"></i> Avg <strong>${n.avgHumidity}%</strong> | Peak <strong>${n.maxHumidity}%</strong> RH</span>
+        <span><i class="fa fa-clock"></i> ${n.exposureHours}h sustained · ${n.readingCount} reading${n.readingCount > 1 ? 's' : ''}</span>
+        <a href="${n.lotPassportUrl}" style="color:var(--blue);font-family:var(--font-mono);font-size:10px;text-decoration:none">
+          <i class="fa fa-passport"></i> Climate Passport →
+        </a>
+      </div>
+
+      <!-- ── WhatsApp message preview ── -->
+      <details style="margin-top:12px">
+        <summary style="font-size:10px;color:#25d366;cursor:pointer;font-family:var(--font-mono);font-weight:700;list-style:none;display:flex;align-items:center;gap:6px">
+          <i class="fa fa-brands fa-whatsapp"></i>
+          ${n.whatsappSent
+            ? `WhatsApp sent to ${n.branchManagerPhone} at ${n.whatsappSentAt ? new Date(n.whatsappSentAt).toLocaleString('en-SA') : ''}`
+            : `WhatsApp message (pending dispatch)`}
+        </summary>
+        <div style="margin-top:8px;background:rgba(37,211,102,.05);border:1px solid rgba(37,211,102,.2);border-radius:6px;padding:12px">
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;font-size:10px;color:var(--text-muted)">
+            <i class="fa fa-brands fa-whatsapp" style="color:#25d366"></i>
+            <span>To: <strong style="color:var(--text-primary)">${n.branchManagerPhone ?? 'No phone configured'}</strong></span>
+            <span style="margin-left:auto;font-family:var(--font-mono)">Template: humidity_critical_risk_alert</span>
+          </div>
+          <pre style="font-size:11px;line-height:1.65;color:var(--text-secondary);white-space:pre-wrap;word-break:break-word;margin:0;font-family:system-ui,sans-serif">${n.whatsappMessage.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</pre>
+        </div>
+      </details>
+
+    </div>`
+      }).join('')
+
+  // ── Page content ──────────────────────────────────────────────────────────
   const content = `
-  <!-- ── Risk Watchdog Banner ── -->
+
+  <!-- Top banner for unresolved violations -->
   ${unread.length > 0 ? `
-  <div class="alert alert-watchdog">
-    <i class="fa fa-shield-virus" style="font-size:18px"></i>
-    <div>
-      <strong>${unread.length} unresolved humidity violation${unread.length > 1 ? 's' : ''}</strong> —
-      ${unread.map(n => `Lot <code>${n.lotId}</code> (${n.lotOrigin}) @ ${n.branchName}`).join(' · ')}
+  <div class="alert alert-watchdog" style="margin-bottom:20px">
+    <i class="fa fa-shield-virus" style="font-size:20px;flex-shrink:0"></i>
+    <div style="flex:1">
+      <strong>${unread.length} unresolved violation${unread.length > 1 ? 's' : ''} require immediate action</strong><br>
+      <span style="font-size:11px">
+        ${unread.map(n =>
+          `<a href="${n.lotPassportUrl}" style="color:#fca5a5;font-family:var(--font-mono)">${n.lotId}</a> (${n.lotOrigin}) @ ${n.branchName}`
+        ).join(' &nbsp;·&nbsp; ')}
+      </span>
     </div>
-    <button onclick="ackAll()" style="margin-left:auto;background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);border-radius:4px;color:white;padding:4px 12px;cursor:pointer;font-size:11px;font-family:var(--font-mono)">
+    <button onclick="ackAll()"
+      style="flex-shrink:0;background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.25);border-radius:4px;color:white;padding:5px 14px;cursor:pointer;font-size:11px;font-family:var(--font-mono)">
       <i class="fa fa-check-double"></i> ACK ALL
     </button>
   </div>` : ''}
 
-  <!-- ── Header row ── -->
+  <!-- Page header -->
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px">
     <div>
-      <h2 style="margin:0;font-size:18px;font-weight:700;letter-spacing:.3px">
-        <i class="fa fa-shield-virus" style="color:var(--red);margin-right:8px"></i>Risk Watchdog
+      <h2 style="margin:0;font-size:18px;font-weight:700">
+        <i class="fa fa-shield-virus" style="color:var(--red);margin-right:8px"></i>
+        Active Risk Watchdog
       </h2>
-      <div style="font-size:12px;color:var(--text-muted);margin-top:4px;font-family:var(--font-mono)">
-        Monitors Climate Passport logs · Triggers on RH &gt; ${WATCHDOG_RH_CRITICAL}% sustained for ${WATCHDOG_DURATION_CRITICAL_H}h
+      <div style="font-size:11px;color:var(--text-muted);margin-top:4px;font-family:var(--font-mono)">
+        Climate Passport Monitor · RH &gt; ${WATCHDOG_RH_CRITICAL}% sustained ≥ ${WATCHDOG_DURATION_CRITICAL_H}h · Cron: every 6 hours
       </div>
     </div>
-    <div style="display:flex;gap:8px">
-      <button onclick="runWatchdog()" id="watchdog-run-btn"
-        style="background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.45);border-radius:4px;color:var(--red);padding:6px 14px;cursor:pointer;font-size:11px;font-family:var(--font-mono);font-weight:700;letter-spacing:.3px">
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <a href="/api/watchdog/active-risks" target="_blank"
+        style="background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.35);border-radius:4px;color:#60a5fa;padding:6px 12px;font-size:10px;font-family:var(--font-mono);text-decoration:none;font-weight:700">
+        <i class="fa fa-code"></i> /api/watchdog/active-risks
+      </a>
+      <button onclick="triggerWatchdog()" id="watchdog-run-btn"
+        style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,.4);border-radius:4px;color:var(--red);padding:6px 14px;cursor:pointer;font-size:11px;font-family:var(--font-mono);font-weight:700;letter-spacing:.3px">
         <i class="fa fa-rotate"></i> RUN WATCHDOG NOW
       </button>
     </div>
   </div>
 
-  <!-- ── Stats row ── -->
+  <!-- Stats row -->
   <div class="stat-grid" style="margin-bottom:24px">
-    <div class="stat-card">
-      <div class="stat-label">Total Notifications</div>
-      <div class="stat-value" id="wdg-total">${all.length}</div>
-    </div>
-    <div class="stat-card" style="${unread.length > 0 ? 'border-color:var(--red)' : ''}">
-      <div class="stat-label">Unresolved</div>
-      <div class="stat-value" id="wdg-unread" style="${unread.length > 0 ? 'color:var(--red)' : 'color:var(--green)'}">${unread.length}</div>
+    <div class="stat-card" style="${allNotifs.filter(n=>n.status==='UNREAD').length > 0 ? 'border-color:var(--red)' : ''}">
+      <div class="stat-label">Unresolved Alerts</div>
+      <div class="stat-value" style="${unread.length > 0 ? 'color:var(--red)' : 'color:var(--green)'}">
+        ${unread.length}
+      </div>
     </div>
     <div class="stat-card">
-      <div class="stat-label">Detection Threshold</div>
-      <div class="stat-value" style="font-size:14px">&gt; ${WATCHDOG_RH_CRITICAL}% RH / ${WATCHDOG_DURATION_CRITICAL_H}h</div>
+      <div class="stat-label">Total Alerts</div>
+      <div class="stat-value">${allNotifs.length}</div>
+    </div>
+    <div class="stat-card" style="${allNotifs.filter(n=>n.sfdaAuditFlagged).length > 0 ? 'border-color:rgba(168,85,247,.4)' : ''}">
+      <div class="stat-label">SFDA Audit Flagged</div>
+      <div class="stat-value" style="color:#c084fc">${allNotifs.filter(n=>n.sfdaAuditFlagged).length}</div>
     </div>
     <div class="stat-card">
-      <div class="stat-label">Cron Schedule</div>
-      <div class="stat-value" style="font-size:14px;font-family:var(--font-mono)">Every 6 hours</div>
+      <div class="stat-label">Threshold</div>
+      <div class="stat-value" style="font-size:13px">&gt;${WATCHDOG_RH_CRITICAL}% RH / ${WATCHDOG_DURATION_CRITICAL_H}h</div>
     </div>
   </div>
 
-  <!-- ── Notification cards ── -->
+  <!-- Violation cards -->
   <div id="watchdog-cards" style="display:flex;flex-direction:column;gap:16px">
     ${cards}
   </div>
 
+  <!-- TypeScript reference box -->
+  <div class="card" style="margin-top:24px;border-color:rgba(96,165,250,.2)">
+    <div class="card-title" style="color:#60a5fa;font-size:11px">
+      <i class="fa fa-code"></i> CRON TRIGGER REFERENCE — wrangler.jsonc
+    </div>
+    <pre style="font-size:11px;color:var(--text-secondary);margin:0;padding:10px;background:rgba(0,0,0,.25);border-radius:4px;overflow-x:auto;line-height:1.6">"triggers": { "crons": ["0 */6 * * *"] }
+
+// Cloudflare scheduled handler (src/index.tsx)
+export const scheduled = async (
+  event : { cron: string; scheduledTime: number },
+  env   : unknown,
+  ctx   : { waitUntil: (p: Promise&lt;unknown&gt;) =&gt; void }
+) =&gt; {
+  // 1. Query climate_logs for RH &gt; 70% sustained ≥ 48h
+  const violations = checkHumidityViolations()
+  // 2. Update lot status → CRITICAL, insert system_notifications, fire WhatsApp
+  const created = persistViolations(violations)
+  ctx.waitUntil(Promise.allSettled(created.map(sendWatchdogWhatsApp)))
+}</pre>
+  </div>
+
   <script>
-    async function runWatchdog() {
+    async function triggerWatchdog() {
       const btn = document.getElementById('watchdog-run-btn')
       btn.disabled = true
-      btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> RUNNING...'
+      btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> SCANNING...'
       try {
         const r = await fetch('/api/watchdog/run')
         const d = await r.json()
-        btn.innerHTML = '<i class="fa fa-check"></i> DONE — ' + d.violations + ' violation(s)'
-        setTimeout(() => location.reload(), 1200)
-      } catch(e) {
+        btn.innerHTML = d.violations > 0
+          ? '<i class="fa fa-triangle-exclamation"></i> ' + d.violations + ' VIOLATION(S) FOUND'
+          : '<i class="fa fa-check"></i> ALL CLEAR'
+        setTimeout(() => location.reload(), 1400)
+      } catch (e) {
         btn.innerHTML = '<i class="fa fa-xmark"></i> ERROR'
         btn.disabled = false
       }
@@ -11663,12 +11900,11 @@ app.get('/admin/watchdog', (c) => {
     async function ackNotif(id) {
       await fetch('/api/watchdog/notifications/' + id + '/ack', { method: 'POST' })
       const el = document.getElementById('wcard-' + id)
-      if (el) el.classList.remove('watchdog-card--unread')
-      document.querySelectorAll('.watchdog-ack-btn').forEach(b => {
-        if (b.getAttribute('onclick') === "ackNotif('" + id + "')") {
-          b.outerHTML = '<span style="font-size:11px;color:var(--text-muted);font-family:var(--font-mono)">✓ READ</span>'
-        }
-      })
+      if (el) {
+        el.classList.remove('watchdog-card--unread')
+        el.querySelector('.watchdog-ack-btn').outerHTML =
+          '<span style="font-size:11px;color:var(--text-muted);font-family:var(--font-mono)">✓ READ</span>'
+      }
     }
     async function ackAll() {
       await fetch('/api/watchdog/notifications/ack-all', { method: 'POST' })
@@ -11680,13 +11916,14 @@ app.get('/admin/watchdog', (c) => {
   return c.html(adminLayout('Risk Watchdog', 'watchdog', content, pending, getUnreadNotifications().length))
 })
 
-// ── Scheduled handler (Cloudflare Workers cron — "0 */6 * * *") ───────────────
-// Cloudflare calls this when the cron fires. ctx.waitUntil keeps the Worker
-// alive while WhatsApp messages are dispatched asynchronously.
+// ── Scheduled handler — Cloudflare Cron  "0 */6 * * *" ───────────────────────
+// Cloudflare calls this every 6 hours.
+// ctx.waitUntil() batches the async WhatsApp dispatches without blocking
+// the CPU budget (10 ms on free plan, 30 ms on paid plan).
 export const scheduled = async (
-  _event: { cron: string; scheduledTime: number; type: 'scheduled' },
-  _env: unknown,
-  ctx: { waitUntil: (p: Promise<unknown>) => void }
+  _event : { cron: string; scheduledTime: number; type: 'scheduled' },
+  _env   : unknown,
+  ctx    : { waitUntil: (p: Promise<unknown>) => void }
 ) => {
   await runWatchdog(ctx)
 }

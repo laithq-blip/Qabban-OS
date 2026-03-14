@@ -2016,63 +2016,68 @@ export function calcFinancialLoss(varianceGrams: number, costPerKgSar: number): 
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-//  RISK WATCHDOG  —  System Notifications & Humidity Violation Engine
-//  Cron: every 6 hours  |  Threshold: RH > 70% sustained for ≥ 48 hours
+//  RISK WATCHDOG  —  Climate Passport Violation Engine  (Cron: 0 */6 * * *)
+//  Threshold : RH > 70 % sustained for ≥ 48 consecutive hours
+//  On trigger: CRITICAL badge · SystemNotification · WhatsApp BM alert · SFDA flag
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // ─── Watchdog constants ───────────────────────────────────────────────────────
-export const WATCHDOG_RH_CRITICAL         = 70    // % — Rule A threshold
-export const WATCHDOG_DURATION_CRITICAL_H = 48    // hours — sustained window
+export const WATCHDOG_RH_CRITICAL          = 70    // %  — violation threshold
+export const WATCHDOG_DURATION_CRITICAL_H  = 48    // hours — sustained window
 export const WATCHDOG_DURATION_CRITICAL_MS = WATCHDOG_DURATION_CRITICAL_H * 60 * 60 * 1000
 
-// ─── SystemNotification ───────────────────────────────────────────────────────
-export type NotificationType = 'HUMIDITY_VIOLATION' | 'SPONGE_ANOMALY' | 'SYSTEM'
-export type NotificationSeverity = 'INFO' | 'WARNING' | 'CRITICAL'
-export type NotificationStatus = 'UNREAD' | 'READ' | 'DISMISSED'
+// ─── Notification types ───────────────────────────────────────────────────────
+export type NotificationType    = 'HUMIDITY_VIOLATION' | 'SPONGE_ANOMALY' | 'SYSTEM'
+export type NotificationSeverity= 'INFO' | 'WARNING' | 'CRITICAL'
+export type NotificationStatus  = 'UNREAD' | 'READ' | 'DISMISSED'
 
+// ─── SystemNotification record ────────────────────────────────────────────────
 export interface SystemNotification {
-  id: string
-  type: NotificationType
-  severity: NotificationSeverity
-  status: NotificationStatus
-  // Reference
-  lotId: string
-  lotOrigin: string
-  branchName: string
-  branchManagerPhone?: string
-  // Content
-  title: string
-  body: string
-  actionInstruction: string
-  // Watchdog metadata
-  avgHumidity: number           // average RH over the violation window
-  maxHumidity: number           // peak RH reading
-  exposureHours: number         // confirmed sustained exposure in hours
-  readingCount: number          // number of readings that all exceeded threshold
-  firstViolationTs: string      // ISO — oldest reading in window
-  lastViolationTs: string       // ISO — most recent reading
+  id                  : string
+  type                : NotificationType
+  severity            : NotificationSeverity
+  status              : NotificationStatus
+  // Lot reference
+  lotId               : string
+  lotOrigin           : string
+  lotPassportUrl      : string          // /exchange/climate/:lotId  or  #admin-lot-:lotId
+  branchName          : string
+  branchManagerPhone ?: string
+  // Notification content
+  title               : string
+  body                : string
+  actionInstruction   : string
+  whatsappMessage     : string          // verbatim text to be sent via WhatsApp API
+  // Violation metadata
+  avgHumidity         : number          // mean RH across window readings
+  maxHumidity         : number          // peak reading
+  exposureHours       : number          // confirmed sustained hours
+  readingCount        : number          // readings all above threshold
+  firstViolationTs    : string          // ISO — oldest reading in window
+  lastViolationTs     : string          // ISO — newest reading in window
+  // SFDA compliance flag
+  sfdaAuditFlagged    : boolean         // true → lot is queued for SFDA audit log
   // Lifecycle
-  detectedAt: string            // ISO — when watchdog flagged it
-  whatsappSent: boolean
-  whatsappSentAt?: string
+  detectedAt          : string          // ISO — cron detection timestamp
+  whatsappSent        : boolean
+  whatsappSentAt     ?: string
 }
 
-// ─── In-memory store (mirrors a DB table in production) ───────────────────────
+// ─── In-memory store (mirrors system_notifications DB table in production) ────
 export const systemNotifications: SystemNotification[] = []
 
-// ─── Helper: generate notification ID ────────────────────────────────────────
+// ─── ID generator ─────────────────────────────────────────────────────────────
 export function notifId(): string {
   const ts  = Date.now().toString(36).toUpperCase()
   const rnd = Math.random().toString(36).slice(2, 5).toUpperCase()
   return `WDG-${ts}-${rnd}`
 }
 
-// ─── Helper: get all UNREAD notifications (for admin banner injection) ────────
+// ─── Accessors ────────────────────────────────────────────────────────────────
 export function getUnreadNotifications(): SystemNotification[] {
   return systemNotifications.filter(n => n.status === 'UNREAD')
 }
 
-// ─── Helper: mark a notification read/dismissed ────────────────────────────────
 export function markNotification(
   id: string,
   status: 'READ' | 'DISMISSED'
@@ -2083,76 +2088,94 @@ export function markNotification(
   return n
 }
 
-// ─── Core violation detector ──────────────────────────────────────────────────
-// Scans globalLots climateLog + branches IoT readings.
-// A "sustained violation" = EVERY reading in the last 48h exceeds 70% RH
-// AND the span of readings covers at least 48 continuous hours.
-//
-// Returns an array of violation records (not yet persisted).
-export interface HumidityViolation {
-  lotId: string
-  lotOrigin: string
-  branchName: string
-  branchManagerPhone?: string
-  avgHumidity: number
-  maxHumidity: number
-  exposureHours: number
-  readingCount: number
-  firstViolationTs: string
-  lastViolationTs: string
+// ─── WhatsApp message builder (exact spec) ────────────────────────────────────
+// Produces the verbatim high-priority template sent to the Branch Manager.
+export function buildWhatsAppMessage(v: HumidityViolation): string {
+  return (
+    `🚨 *CRITICAL RISK ALERT: High Humidity Exposure Detected.*\n\n` +
+    `*Lot:* ${v.lotOrigin} (${v.lotId})\n` +
+    `*Branch:* ${v.branchName}\n` +
+    `*Condition:* Consistent >${WATCHDOG_RH_CRITICAL}% RH for ${WATCHDOG_DURATION_CRITICAL_H}+ hours\n` +
+    `  → Avg RH: ${v.avgHumidity}% | Peak: ${v.maxHumidity}% | ${v.exposureHours}h sustained\n\n` +
+    `*Action Required:*\n` +
+    `• Move lot to an environment with <50% RH or activate industrial dehumidifiers immediately.\n` +
+    `• Perform a sensory check (Aroma/Visual) for musty notes.\n` +
+    `• DO NOT DISPOSE unless mold or musty odor is confirmed.\n` +
+    `• This lot is now flagged for *SFDA Audit* compliance.\n\n` +
+    `🔗 Climate Passport: ${v.lotPassportUrl ?? '/exchange/climate/' + v.lotId}\n\n` +
+    `_QABBAN OS Risk Watchdog · Detected ${new Date().toISOString().replace('T',' ').slice(0,16)} UTC_`
+  )
 }
 
+// ─── Violation record (pre-persist) ───────────────────────────────────────────
+export interface HumidityViolation {
+  lotId               : string
+  lotOrigin           : string
+  lotPassportUrl      : string
+  branchName          : string
+  branchManagerPhone ?: string
+  avgHumidity         : number
+  maxHumidity         : number
+  exposureHours       : number
+  readingCount        : number
+  firstViolationTs    : string
+  lastViolationTs     : string
+}
+
+// ─── Core detector ────────────────────────────────────────────────────────────
+// Queries climate logs for EVERY lot where ALL readings in the last 48 h
+// are above 70 % RH AND the reading span covers ≥ 48 continuous hours.
+// This is a sustained-exposure test — a single dip below the threshold clears
+// the lot from the violation list.
 export function checkHumidityViolations(): HumidityViolation[] {
   const now       = Date.now()
-  const windowMs  = WATCHDOG_DURATION_CRITICAL_MS
-  const cutoffTs  = new Date(now - windowMs).toISOString()
-  const violations: HumidityViolation[] = []
+  const cutoffTs  = new Date(now - WATCHDOG_DURATION_CRITICAL_MS).toISOString()
+  const results   : HumidityViolation[] = []
 
-  // ── 1. Scan GlobalLots climate passport logs ──────────────────────────────
+  // ── Pass 1: GlobalLots — full Climate Passport log ────────────────────────
   for (const lot of globalLots) {
     if (lot.status === 'RECALLED') continue
 
-    // Filter readings within the last 48 hours
-    const windowReadings = lot.climateLog.filter(e => e.ts >= cutoffTs)
-    if (windowReadings.length === 0) continue
+    // All climate-log entries within the 48-hour window
+    const window = lot.climateLog.filter(e => e.ts >= cutoffTs)
+    if (window.length === 0) continue
 
-    // All readings must exceed the threshold (sustained = no safe reading)
-    const allViolating = windowReadings.every(e => e.humidity > WATCHDOG_RH_CRITICAL)
-    if (!allViolating) continue
+    // SUSTAINED violation = every single reading in the window exceeds threshold
+    if (!window.every(e => e.humidity > WATCHDOG_RH_CRITICAL)) continue
 
-    // The span of readings must cover ≥ 48 h
-    const firstTs  = windowReadings[0].ts
-    const lastTs   = windowReadings[windowReadings.length - 1].ts
-    const spanMs   = new Date(lastTs).getTime() - new Date(firstTs).getTime()
-    const spanHrs  = spanMs / (1000 * 3600)
+    // The span of readings must cover ≥ 48 h (rules out single-point spikes)
+    const firstTs  = window[0].ts
+    const lastTs   = window[window.length - 1].ts
+    const spanHrs  = (new Date(lastTs).getTime() - new Date(firstTs).getTime()) / 3_600_000
     if (spanHrs < WATCHDOG_DURATION_CRITICAL_H) continue
 
-    const humValues = windowReadings.map(e => e.humidity)
-    const avgRH = Math.round(humValues.reduce((s, v) => s + v, 0) / humValues.length)
-    const maxRH = Math.max(...humValues)
+    const humVals  = window.map(e => e.humidity)
+    const avgRH    = Math.round(humVals.reduce((s, v) => s + v, 0) / humVals.length)
+    const maxRH    = Math.max(...humVals)
 
-    // Resolve branch name from lot location
-    const branchName = lot.shipTracker?.destination ?? lot.climateLog[0]?.location ?? 'Unknown'
-    const branch     = branches.find(b =>
-      b.name.toLowerCase().includes(branchName.toLowerCase().split(' ')[0]) ||
-      branchName.toLowerCase().includes(b.name.toLowerCase())
+    // Resolve branch from ship destination or first log location
+    const rawBranch = lot.shipTracker?.destination ?? window[0]?.location ?? 'Unknown'
+    const branch    = branches.find(b =>
+      rawBranch.toLowerCase().includes(b.name.toLowerCase()) ||
+      b.name.toLowerCase().includes(rawBranch.toLowerCase().split(' ')[0])
     )
 
-    violations.push({
-      lotId             : lot.id,
-      lotOrigin         : lot.origin,
-      branchName        : branch?.name ?? branchName,
-      branchManagerPhone: (branch as any)?.managerPhone,
-      avgHumidity       : avgRH,
-      maxHumidity       : maxRH,
-      exposureHours     : Math.round(spanHrs),
-      readingCount      : windowReadings.length,
-      firstViolationTs  : firstTs,
-      lastViolationTs   : lastTs,
+    results.push({
+      lotId            : lot.id,
+      lotOrigin        : lot.origin,
+      lotPassportUrl   : `/exchange/climate/${lot.id}`,
+      branchName       : branch?.name ?? rawBranch,
+      branchManagerPhone: branch?.managerPhone,
+      avgHumidity      : avgRH,
+      maxHumidity      : maxRH,
+      exposureHours    : Math.round(spanHrs),
+      readingCount     : window.length,
+      firstViolationTs : firstTs,
+      lastViolationTs  : lastTs,
     })
   }
 
-  // ── 2. Scan domestic CoffeeLots via branch IoT / Weather API humidity ──────
+  // ── Pass 2: Domestic CoffeeLots — branch IoT or Weather-API RH ───────────
   for (const lot of coffeeLots) {
     if (lot.status === 'RECALLED' || lot.status === 'CRITICAL') continue
 
@@ -2162,99 +2185,100 @@ export function checkHumidityViolations(): HumidityViolation[] {
     const { rh } = resolveActiveRH(branch)
     if (rh <= WATCHDOG_RH_CRITICAL) continue
 
-    // For domestic lots we check if the branch has been above threshold
-    // continuously — use IoT log duration if available, else treat as sustained
-    // (conservative: if live reading is critical, flag immediately for 48h+)
-    const lastIotTs      = branch.last_iot_reading_at
-      ? new Date(branch.last_iot_reading_at).getTime() : null
-    const iotAgeMs       = lastIotTs ? now - lastIotTs : null
-    const exposureHours  = iotAgeMs
-      ? Math.round(iotAgeMs / 3600000)
-      : WATCHDOG_DURATION_CRITICAL_H   // conservative — assume full window
-
-    // Only flag if IoT data is fresh (< 60 min) and exposure ≥ 48h
-    // OR if no IoT — weather API says critical (flag as potential)
+    // IoT path: require fresh data and duration ≥ 48 h
     if (branch.humidity_source === 'IOT_SENSOR') {
-      if (!lastIotTs || iotAgeMs! > IOT_STALE_THRESHOLD_MS) continue
-      if (exposureHours < WATCHDOG_DURATION_CRITICAL_H)     continue
+      const lastIot = branch.last_iot_reading_at
+        ? new Date(branch.last_iot_reading_at).getTime() : null
+      if (!lastIot || (now - lastIot) > IOT_STALE_THRESHOLD_MS) continue
+      const iotAgeH = (now - lastIot) / 3_600_000
+      if (iotAgeH < WATCHDOG_DURATION_CRITICAL_H) continue
     }
+    // Weather-API path: treat branch as permanently above threshold if critical
+    // (conservative — no timestamp, so we flag immediately)
 
-    violations.push({
-      lotId             : lot.id,
-      lotOrigin         : lot.origin,
-      branchName        : branch.name,
-      branchManagerPhone: (branch as any)?.managerPhone,
-      avgHumidity       : rh,
-      maxHumidity       : rh,
-      exposureHours,
-      readingCount      : 1,
-      firstViolationTs  : new Date(now - exposureHours * 3600000).toISOString(),
-      lastViolationTs   : new Date(now).toISOString(),
+    const exposureH = branch.humidity_source === 'IOT_SENSOR' && branch.last_iot_reading_at
+      ? Math.round((now - new Date(branch.last_iot_reading_at).getTime()) / 3_600_000)
+      : WATCHDOG_DURATION_CRITICAL_H    // conservative default
+
+    results.push({
+      lotId            : lot.id,
+      lotOrigin        : lot.origin,
+      lotPassportUrl   : `/admin/inventory#lot-${lot.id}`,
+      branchName       : branch.name,
+      branchManagerPhone: branch.managerPhone,
+      avgHumidity      : rh,
+      maxHumidity      : rh,
+      exposureHours    : exposureH,
+      readingCount     : 1,
+      firstViolationTs : new Date(now - exposureH * 3_600_000).toISOString(),
+      lastViolationTs  : new Date(now).toISOString(),
     })
   }
 
-  return violations
+  return results
 }
 
-// ─── Persist violations → SystemNotification records ─────────────────────────
-// Called by the cron handler after checkHumidityViolations().
-// Deduplicates: skips lot_id already with an UNREAD notification.
+// ─── Persist violations → system_notifications ────────────────────────────────
+// • Updates lot status to CRITICAL (never downgrade a RECALLED lot)
+// • Deduplicates: one UNREAD notification per lot at a time
+// • Sets SFDA audit flag on every violation record
 export function persistViolations(
   violations: HumidityViolation[]
 ): SystemNotification[] {
   const created: SystemNotification[] = []
-  const existingUnreadIds = new Set(
+
+  const existingUnreadLotIds = new Set(
     systemNotifications
       .filter(n => n.status === 'UNREAD' && n.type === 'HUMIDITY_VIOLATION')
       .map(n => n.lotId)
   )
 
   for (const v of violations) {
-    if (existingUnreadIds.has(v.lotId)) continue   // already flagged — skip
+    if (existingUnreadLotIds.has(v.lotId)) continue  // already has an open alert
 
-    // Escalate lot status to CRITICAL in coffeeLots store
-    const lot = coffeeLots.find(l => l.id === v.lotId)
-    if (lot && lot.status !== 'RECALLED') lot.status = 'CRITICAL'
+    // ── State update: escalate lot to CRITICAL ──────────────────────────────
+    const coffeeLot = coffeeLots.find(l => l.id === v.lotId)
+    if (coffeeLot && coffeeLot.status !== 'RECALLED') coffeeLot.status = 'CRITICAL'
+    // (globalLots use a separate status enum — leave untouched, just notify)
 
-    // Also escalate globalLots
-    const gLot = globalLots.find(l => l.id === v.lotId)
-    // (globalLotStatus is a separate type — leave unchanged, just notify)
-
+    // ── Build exact notification body ───────────────────────────────────────
     const body = (
-      `Lot ${v.lotOrigin} has exceeded the ${WATCHDOG_DURATION_CRITICAL_H}h safety window ` +
-      `(avg ${v.avgRH ?? v.avgHumidity}% RH over ${v.exposureHours}h · ${v.readingCount} readings). ` +
-      `Move to <50% RH area immediately. Perform 'Stinker' sensory check before roasting. ` +
-      `Do not dispose unless musty aroma is detected.`
-    ).replace('v.avgRH ?? ', '')    // guard
+      `CRITICAL RISK ALERT: High Humidity Exposure Detected.\n` +
+      `Lot: ${v.lotOrigin} (${v.lotId}) — Branch: ${v.branchName}\n` +
+      `Condition: Consistent >${WATCHDOG_RH_CRITICAL}% RH for ${WATCHDOG_DURATION_CRITICAL_H}+ hours ` +
+      `(avg ${v.avgHumidity}% RH · peak ${v.maxHumidity}% · ${v.exposureHours}h · ${v.readingCount} readings).`
+    )
+
+    const actionInstruction = (
+      `Move lot to an environment with <50% RH or activate industrial dehumidifiers immediately. ` +
+      `Perform a sensory check (Aroma/Visual) for musty notes. ` +
+      `DO NOT DISPOSE unless mold or musty odor is confirmed. ` +
+      `This lot is now flagged for SFDA Audit compliance.`
+    )
 
     const notif: SystemNotification = {
-      id                : notifId(),
-      type              : 'HUMIDITY_VIOLATION',
-      severity          : 'CRITICAL',
-      status            : 'UNREAD',
-      lotId             : v.lotId,
-      lotOrigin         : v.lotOrigin,
-      branchName        : v.branchName,
-      branchManagerPhone: v.branchManagerPhone,
-      title             : 'High-Humidity Spoilage Risk Detected',
-      body              : (
-        `Lot ${v.lotOrigin} has exceeded the ${WATCHDOG_DURATION_CRITICAL_H}h safety window ` +
-        `(avg ${v.avgHumidity}% RH over ${v.exposureHours}h · ${v.readingCount} readings). ` +
-        `Move to <50% RH area immediately. Perform 'Stinker' sensory check before roasting. ` +
-        `Do not dispose unless musty aroma is detected.`
-      ),
-      actionInstruction : (
-        `Move to <50% RH area immediately. Perform 'Stinker' sensory check before roasting. ` +
-        `Do not dispose unless musty aroma is detected.`
-      ),
-      avgHumidity       : v.avgHumidity,
-      maxHumidity       : v.maxHumidity,
-      exposureHours     : v.exposureHours,
-      readingCount      : v.readingCount,
-      firstViolationTs  : v.firstViolationTs,
-      lastViolationTs   : v.lastViolationTs,
-      detectedAt        : new Date().toISOString(),
-      whatsappSent      : false,
+      id                  : notifId(),
+      type                : 'HUMIDITY_VIOLATION',
+      severity            : 'CRITICAL',
+      status              : 'UNREAD',
+      lotId               : v.lotId,
+      lotOrigin           : v.lotOrigin,
+      lotPassportUrl      : v.lotPassportUrl,
+      branchName          : v.branchName,
+      branchManagerPhone  : v.branchManagerPhone,
+      title               : 'High-Humidity Spoilage Risk Detected',
+      body,
+      actionInstruction,
+      whatsappMessage     : buildWhatsAppMessage(v),
+      avgHumidity         : v.avgHumidity,
+      maxHumidity         : v.maxHumidity,
+      exposureHours       : v.exposureHours,
+      readingCount        : v.readingCount,
+      firstViolationTs    : v.firstViolationTs,
+      lastViolationTs     : v.lastViolationTs,
+      sfdaAuditFlagged    : true,
+      detectedAt          : new Date().toISOString(),
+      whatsappSent        : false,
     }
 
     systemNotifications.push(notif)
