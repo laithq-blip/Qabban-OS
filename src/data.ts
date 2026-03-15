@@ -94,10 +94,18 @@ export const classifyRiskForPreset = (
 
 // ─── IoT Humidity Source Enum ────────────────────────────────────────────────
 /** Determines which humidity reading the Sponge Effect engine uses. */
-export type HumiditySource = 'WEATHER_API' | 'IOT_SENSOR'
+export type HumiditySource = 'WEATHER_API' | 'IOT_SENSOR' | 'MARITIME_API'
 
 /** Milliseconds before an IoT reading is considered stale (60 min) */
 export const IOT_STALE_THRESHOLD_MS = 60 * 60 * 1000   // 60 minutes
+
+/**
+ * Lifecycle phases that require Maritime Weather API lookup instead of any
+ * physical or branch sensor.  Covers active sea transit, arrival at port,
+ * and the customs clearance hold period.
+ */
+export type TransitPhase = 'TRANSIT' | 'ARRIVAL' | 'CUSTOMS'
+export const TRANSIT_PHASES: TransitPhase[] = ['TRANSIT', 'ARRIVAL', 'CUSTOMS']
 
 export interface Branch {
   id:          string
@@ -111,6 +119,12 @@ export interface Branch {
   // ── Hybrid Humidity Model (IoT integration) ──────────────────────────────
   /** Active data source. Defaults to WEATHER_API. */
   humidity_source      : HumiditySource
+  /**
+   * Geospatial Data Policy — admin-managed toggle.
+   * TRUE  → prefer IoT sensor data; auto-fail over to Weather API if stale.
+   * FALSE → always use Weather API regardless of sensor availability.
+   */
+  iot_enabled          : boolean
   /** UUID issued at branch creation; used to authenticate the physical sensor. */
   iot_device_key       : string
   /** Live RH% from the IoT sensor (null = never received). */
@@ -119,6 +133,16 @@ export interface Branch {
   iot_temperature      : number | null
   /** ISO timestamp of the last successful IoT telemetry pulse. */
   last_iot_reading_at  : string | null
+
+  // ── System Warning state ─────────────────────────────────────────────────
+  /**
+   * Set to true when iot_enabled is TRUE but the link has gone stale/lost.
+   * Triggers the blinking red Hardware-Disconnected icon on the Branch Card.
+   * Cleared automatically when a fresh IoT pulse arrives.
+   */
+  iot_link_lost        : boolean
+  /** ISO timestamp when the link-lost event was first detected. */
+  iot_link_lost_at     : string | null
 
   riskStatus:  'LOW' | 'MODERATE' | 'HIGH' | 'CRITICAL'
   activeLots:  number
@@ -129,24 +153,111 @@ export interface Branch {
 
 // ─── Helper: resolve the active RH for Sponge calculations ───────────────────
 /**
- * Returns the humidity the Sponge Effect engine should use for a given branch.
- * - If source is IOT_SENSOR AND data is fresh (< 60 min old) → iot_humidity
- * - Otherwise falls back to weather-API humidity automatically.
+ * resolveActiveRH  —  Geospatial Data Policy v2
+ * ────────────────────────────────────────────────────────────────────────────
+ * Determines the authoritative Relative Humidity value for a lot based on
+ * its current lifecycle phase (leg-based policy).
+ *
+ * ┌──────────────────────────────────┬──────────────────────────────────────┐
+ * │ Lot Phase                        │ Data Source                          │
+ * ├──────────────────────────────────┼──────────────────────────────────────┤
+ * │ TRANSIT / ARRIVAL / CUSTOMS      │ Maritime Weather API (ship GPS/IMO)  │
+ * │   → ignores ALL physical sensors │ → uses shipTracker.maritimeRH        │
+ * ├──────────────────────────────────┼──────────────────────────────────────┤
+ * │ STORAGE (iot_enabled = true)     │ IoT Sensor if fresh (≤ 60 min)       │
+ * │                                  │ → auto-fallback to Weather API +     │
+ * │                                  │   SYSTEM_WARNING if stale/lost       │
+ * ├──────────────────────────────────┼──────────────────────────────────────┤
+ * │ STORAGE (iot_enabled = false)    │ Weather API always                   │
+ * └──────────────────────────────────┴──────────────────────────────────────┘
+ *
+ * @param branch      The Branch record holding sensor and weather data.
+ * @param transitRH   Optional: maritime RH from ship GPS lookup (pass when
+ *                    the lot is in TRANSIT/ARRIVAL/CUSTOMS phase).  When
+ *                    provided the function returns MARITIME_API immediately.
  */
-export function resolveActiveRH(branch: Branch): { rh: number; source: HumiditySource; stale: boolean } {
-  if (
-    branch.humidity_source === 'IOT_SENSOR' &&
-    branch.iot_humidity !== null &&
-    branch.last_iot_reading_at !== null
-  ) {
-    const ageMs = Date.now() - new Date(branch.last_iot_reading_at).getTime()
-    if (ageMs <= IOT_STALE_THRESHOLD_MS) {
-      return { rh: branch.iot_humidity, source: 'IOT_SENSOR', stale: false }
-    }
-    // Stale — fallback to weather API
-    return { rh: branch.humidity, source: 'WEATHER_API', stale: true }
+export function resolveActiveRH(
+  branch: Branch,
+  transitRH?: number
+): { rh: number; source: HumiditySource; stale: boolean; failover: boolean } {
+
+  // ── Leg 1: Transit / Customs — Maritime API hard override ────────────────
+  if (transitRH !== undefined && transitRH !== null) {
+    return { rh: transitRH, source: 'MARITIME_API', stale: false, failover: false }
   }
-  return { rh: branch.humidity, source: 'WEATHER_API', stale: false }
+
+  // ── Leg 2: Local Storage with iot_enabled toggle ──────────────────────────
+  if (branch.iot_enabled) {
+    const hasReading = branch.iot_humidity !== null && branch.last_iot_reading_at !== null
+    if (hasReading) {
+      const ageMs = Date.now() - new Date(branch.last_iot_reading_at!).getTime()
+      if (ageMs <= IOT_STALE_THRESHOLD_MS) {
+        // Fresh IoT data — use it directly
+        return { rh: branch.iot_humidity!, source: 'IOT_SENSOR', stale: false, failover: false }
+      }
+      // Stale IoT data — failover to Weather API, caller must emit SYSTEM_WARNING
+      return { rh: branch.humidity, source: 'WEATHER_API', stale: true, failover: true }
+    }
+    // No reading yet — failover to Weather API
+    return { rh: branch.humidity, source: 'WEATHER_API', stale: false, failover: true }
+  }
+
+  // ── Leg 3: iot_enabled = false → always Weather API ─────────────────────
+  return { rh: branch.humidity, source: 'WEATHER_API', stale: false, failover: false }
+}
+
+// ─── Resolve maritime RH from the most recent TRANSIT-phase climate log ───────
+/**
+ * getMaritime RH  —  extracts the latest humidity reading from a lot's
+ * Climate Passport for the given transit phase(s).  Returns null if the
+ * lot has no matching log entries (caller should then fall back to branch RH).
+ */
+export function getMaritimeRH(
+  climateLog: Array<{ ts: string; phase: string; humidity: number }>,
+  phases: string[] = ['TRANSIT', 'ARRIVAL', 'CUSTOMS']
+): number | null {
+  const entries = climateLog
+    .filter(e => phases.includes(e.phase))
+    .sort((a, b) => b.ts.localeCompare(a.ts))  // most recent first
+  return entries.length > 0 ? entries[0].humidity : null
+}
+
+// ─── SYSTEM_WARNING notification builder for IoT link loss ───────────────────
+export function buildIotLinkLostWarning(branch: Branch, failoverRH: number): SystemNotification {
+  const ts  = new Date().toISOString()
+  const ts36 = Date.now().toString(36).toUpperCase()
+  const rnd  = Math.random().toString(36).slice(2, 5).toUpperCase()
+  const id   = `SYS-${ts36}-${rnd}`
+  const ageMin = branch.last_iot_reading_at
+    ? Math.round((Date.now() - new Date(branch.last_iot_reading_at).getTime()) / 60000)
+    : null
+  return {
+    id,
+    type               : 'SYSTEM_WARNING',
+    severity           : 'WARNING',
+    status             : 'UNREAD',
+    lotId              : '',           // branch-level warning, not lot-specific
+    lotOrigin          : '',
+    lotPassportUrl     : `/admin/branches`,
+    branchId           : branch.id,
+    branchName         : branch.name,
+    branchManagerPhone : branch.managerPhone,
+    title              : `⚠️ IoT Link Lost — ${branch.name}`,
+    body               : `Hardware sensor at ${branch.name} (${branch.id}) has gone ` +
+      `${ageMin !== null ? `stale (last reading ${ageMin} min ago)` : 'offline (no reading received)'}. ` +
+      `System has automatically switched to Weather API (${failoverRH}% RH) to maintain Sponge accuracy.`,
+    actionInstruction  : 'Check ESP32/DHT22 power supply and Wi-Fi connectivity. Replace sensor if fault persists.',
+    whatsappMessage    : '',
+    avgHumidity        : failoverRH,
+    maxHumidity        : failoverRH,
+    exposureHours      : ageMin !== null ? Math.round(ageMin / 60) : 0,
+    readingCount       : 0,
+    firstViolationTs   : ts,
+    lastViolationTs    : ts,
+    sfdaAuditFlagged   : false,
+    detectedAt         : ts,
+    whatsappSent       : false,
+  }
 }
 
 // ─── Unified Tier System ────────────────────────────────────────────────────
@@ -419,34 +530,36 @@ export const spongeCoeffForBranch = (humidity: number): number =>
   calcSpongeCoefficient(humidity).coefficient
 
 /**
- * calcSpongeCoefficientForBranch (Hybrid Model)
+ * calcSpongeCoefficientForBranch (Geospatial Data Policy v2)
  * ────────────────────────────────────────────────────────────────────────────
- * Resolves the active RH from a Branch object using the Hybrid Humidity Model:
- *   1. If humidity_source === 'IOT_SENSOR' and a fresh reading exists → use iot_humidity
- *   2. If IoT data is stale (> 60 min) → auto-fallback to weather-API humidity
- *   3. If humidity_source === 'WEATHER_API' → always use weather-API humidity
+ * Resolves the active RH using the leg-based policy:
+ *   1. Transit/Customs → maritimeRH (ship GPS coordinates from IMO number)
+ *   2. iot_enabled + fresh sensor → IoT reading
+ *   3. iot_enabled + stale/lost   → Weather API + failover=true
+ *   4. iot_enabled = false         → Weather API always
  *
- * Returns the full SpongeCoeffResult plus resolved source metadata.
+ * @param branch     Branch record
+ * @param transitRH  Optional: pre-resolved maritime RH for transit lots
  */
 export interface HybridSpongeResult extends SpongeCoeffResult {
   /** Which data source was actually used for this calculation */
   resolvedSource : HumiditySource
-  /** True when IoT was requested but data was too old → fell back to weather */
+  /** True when IoT was requested but the link was stale/lost → fell back to weather */
   autoFallback   : boolean
   /** The RH value that was fed into the engine */
   activeRH       : number
 }
 
-export function calcSpongeCoefficientForBranch(branch: Branch): HybridSpongeResult {
-  const { rh, source, stale } = resolveActiveRH(branch)
+export function calcSpongeCoefficientForBranch(branch: Branch, transitRH?: number): HybridSpongeResult {
+  const { rh, source, stale, failover } = resolveActiveRH(branch, transitRH)
   const base = calcSpongeCoefficient(rh)
+  const fbLabel = failover ? ' ⚠ Failover→WeatherAPI' : stale ? ' ⚠ Stale→Fallback' : ''
   return {
     ...base,
     resolvedSource : source,
-    autoFallback   : stale,
+    autoFallback   : stale || failover,
     activeRH       : rh,
-    // Enrich label with source context
-    label: `${base.label} [${source}${stale ? ' ⚠ Stale→Fallback' : ''}]`,
+    label: `${base.label} [${source}${fbLabel}]`,
   }
 }
 
@@ -828,10 +941,13 @@ export const branches: Branch[] = [
     lastChecked: '2026-02-24 08:30',
     // ── IoT ──
     humidity_source     : 'WEATHER_API',
+    iot_enabled         : false,
     iot_device_key      : 'dkey-ruh-0a1b2c3d-4e5f-6789-abcd-ef0123456789',
     iot_humidity        : null,
     iot_temperature     : null,
     last_iot_reading_at : null,
+    iot_link_lost       : false,
+    iot_link_lost_at    : null,
     riskStatus:  'LOW',
     activeLots:  coffeeLots.filter(l => l.branch === 'Riyadh').length,
     totalGreenKg: coffeeLots.filter(l => l.branch === 'Riyadh').reduce((s, l) => s + l.greenWeightKg, 0),
@@ -847,10 +963,13 @@ export const branches: Branch[] = [
     lastChecked: '2026-02-24 08:28',
     // ── IoT ──
     humidity_source     : 'WEATHER_API',
+    iot_enabled         : false,
     iot_device_key      : 'dkey-jed-1f2e3d4c-5b6a-7890-bcde-fa1234567890',
     iot_humidity        : null,
     iot_temperature     : null,
     last_iot_reading_at : null,
+    iot_link_lost       : false,
+    iot_link_lost_at    : null,
     riskStatus:  'CRITICAL',
     activeLots:  coffeeLots.filter(l => l.branch === 'Jeddah').length,
     totalGreenKg: coffeeLots.filter(l => l.branch === 'Jeddah').reduce((s, l) => s + l.greenWeightKg, 0),
@@ -866,10 +985,13 @@ export const branches: Branch[] = [
     lastChecked: '2026-02-24 08:25',
     // ── IoT ──
     humidity_source     : 'WEATHER_API',
+    iot_enabled         : false,
     iot_device_key      : 'dkey-dmm-2a3b4c5d-6e7f-8901-cdef-ab2345678901',
     iot_humidity        : null,
     iot_temperature     : null,
     last_iot_reading_at : null,
+    iot_link_lost       : false,
+    iot_link_lost_at    : null,
     riskStatus:  'CRITICAL',
     activeLots:  coffeeLots.filter(l => l.branch === 'Dammam').length,
     totalGreenKg: coffeeLots.filter(l => l.branch === 'Dammam').reduce((s, l) => s + l.greenWeightKg, 0),
@@ -2027,7 +2149,7 @@ export const WATCHDOG_DURATION_CRITICAL_H  = 48    // hours — sustained window
 export const WATCHDOG_DURATION_CRITICAL_MS = WATCHDOG_DURATION_CRITICAL_H * 60 * 60 * 1000
 
 // ─── Notification types ───────────────────────────────────────────────────────
-export type NotificationType    = 'HUMIDITY_VIOLATION' | 'SPONGE_ANOMALY' | 'SYSTEM'
+export type NotificationType    = 'HUMIDITY_VIOLATION' | 'SPONGE_ANOMALY' | 'SYSTEM' | 'SYSTEM_WARNING'
 export type NotificationSeverity= 'INFO' | 'WARNING' | 'CRITICAL'
 export type NotificationStatus  = 'UNREAD' | 'READ' | 'DISMISSED'
 
@@ -2041,6 +2163,7 @@ export interface SystemNotification {
   lotId               : string
   lotOrigin           : string
   lotPassportUrl      : string          // /exchange/climate/:lotId  or  #admin-lot-:lotId
+  branchId           ?: string          // populated for branch-level warnings (SYSTEM_WARNING)
   branchName          : string
   branchManagerPhone ?: string
   // Notification content
@@ -2185,8 +2308,8 @@ export function checkHumidityViolations(): HumidityViolation[] {
     const { rh } = resolveActiveRH(branch)
     if (rh <= WATCHDOG_RH_CRITICAL) continue
 
-    // IoT path: require fresh data and duration ≥ 48 h
-    if (branch.humidity_source === 'IOT_SENSOR') {
+    // IoT-enabled path: require fresh data and duration ≥ 48 h
+    if (branch.iot_enabled) {
       const lastIot = branch.last_iot_reading_at
         ? new Date(branch.last_iot_reading_at).getTime() : null
       if (!lastIot || (now - lastIot) > IOT_STALE_THRESHOLD_MS) continue
@@ -2196,7 +2319,7 @@ export function checkHumidityViolations(): HumidityViolation[] {
     // Weather-API path: treat branch as permanently above threshold if critical
     // (conservative — no timestamp, so we flag immediately)
 
-    const exposureH = branch.humidity_source === 'IOT_SENSOR' && branch.last_iot_reading_at
+    const exposureH = branch.iot_enabled && branch.last_iot_reading_at
       ? Math.round((now - new Date(branch.last_iot_reading_at).getTime()) / 3_600_000)
       : WATCHDOG_DURATION_CRITICAL_H    // conservative default
 

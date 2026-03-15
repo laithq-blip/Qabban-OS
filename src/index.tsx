@@ -91,8 +91,11 @@ import {
   type PulseReconciliation,
   // ── Hybrid Humidity / IoT ─────────────────────────────────────
   resolveActiveRH,
+  getMaritimeRH,
+  buildIotLinkLostWarning,
   calcSpongeCoefficientForBranch,
   IOT_STALE_THRESHOLD_MS,
+  TRANSIT_PHASES,
   type HumiditySource,
   type HybridSpongeResult,
   // ── Risk Watchdog ─────────────────────────────────────────────
@@ -3322,53 +3325,58 @@ app.get('/admin/branches', (c) => {
 
       <!-- ── DATA FIDELITY TOGGLE ── -->
       ${(() => {
-        const hasIot    = b.iot_humidity !== null && b.last_iot_reading_at !== null
-        const ageMs     = hasIot ? Date.now() - new Date(b.last_iot_reading_at!).getTime() : null
-        const isStale   = ageMs !== null && ageMs > IOT_STALE_THRESHOLD_MS
-        const isIotMode = b.humidity_source === 'IOT_SENSOR'
-        const showStale = isIotMode && isStale
-        const showNoData= isIotMode && !hasIot
-        const { rh: activeRH } = resolveActiveRH(b)
+        const hasIot      = b.iot_humidity !== null && b.last_iot_reading_at !== null
+        const ageMs       = hasIot ? Date.now() - new Date(b.last_iot_reading_at!).getTime() : null
+        const isStale     = ageMs !== null && ageMs > IOT_STALE_THRESHOLD_MS
+        const isIotMode   = b.iot_enabled
+        const showStale   = isIotMode && isStale
+        const showNoData  = isIotMode && !hasIot
+        const hwDisc      = b.iot_link_lost     // blinking red badge trigger
+        const { rh: activeRH, source: resolvedSrc } = resolveActiveRH(b)
+        const policyPhase = resolvedSrc === 'MARITIME_API' ? 'TRANSIT/CUSTOMS' : null
         return `
       <div style="padding:8px 18px;background:rgba(15,23,42,0.6);border-top:1px solid var(--border)">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
           <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted)">
             <i class="fa fa-tower-broadcast" style="margin-right:4px"></i>Data Fidelity
+            ${hwDisc ? `<span style="margin-left:6px;font-size:10px;color:var(--red);font-weight:700;animation:pulse 0.9s ease-in-out infinite" id="hw-disc-${b.id}" title="Hardware Disconnected — auto-failover to Weather API active"><i class="fa fa-wifi" style="text-decoration:line-through;margin-right:3px"></i>HW DISCONNECTED</span>` : ''}
           </div>
           <div style="display:flex;align-items:center;gap:6px">
-            <span style="font-size:10px;color:${isIotMode ? 'var(--text-muted)' : 'var(--amber)'}">City Weather</span>
-            <label class="iot-toggle" title="Switch between General City Weather and Local Room Sensor">
+            <span style="font-size:10px;color:${!isIotMode ? 'var(--amber)' : 'var(--text-muted)'}">City Weather</span>
+            <label class="iot-toggle" title="Toggle Geospatial Data Policy: City Weather API vs Local IoT Sensor">
               <input type="checkbox" ${isIotMode ? 'checked' : ''}
                 onchange="toggleIotSource('${b.id}', this.checked)"
                 id="iot-toggle-${b.id}"/>
               <span class="iot-slider"></span>
             </label>
-            <span style="font-size:10px;color:${isIotMode ? 'var(--green)' : 'var(--text-muted)'}">Local Sensor</span>
+            <span style="font-size:10px;color:${isIotMode && !hwDisc ? 'var(--green)' : 'var(--text-muted)'}">Local Sensor</span>
           </div>
         </div>
-        <!-- Source badge row -->
+        <!-- Source badge + active RH row -->
         <div style="margin-top:5px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-          <span id="src-badge-${b.id}" style="font-size:10px;font-family:var(--font-mono);padding:2px 7px;border-radius:3px;background:${isIotMode ? 'rgba(16,185,129,0.12)' : 'rgba(245,158,11,0.12)'};border:1px solid ${isIotMode ? 'rgba(16,185,129,0.4)' : 'rgba(245,158,11,0.4)'};color:${isIotMode ? 'var(--green)' : 'var(--amber)'}">
-            ${isIotMode ? '<i class="fa fa-microchip"></i> IOT_SENSOR' : '<i class="fa fa-cloud-sun"></i> WEATHER_API'}
+          <span id="src-badge-${b.id}" style="font-size:10px;font-family:var(--font-mono);padding:2px 7px;border-radius:3px;background:${resolvedSrc === 'IOT_SENSOR' ? 'rgba(16,185,129,0.12)' : resolvedSrc === 'MARITIME_API' ? 'rgba(56,189,248,0.12)' : 'rgba(245,158,11,0.12)'};border:1px solid ${resolvedSrc === 'IOT_SENSOR' ? 'rgba(16,185,129,0.4)' : resolvedSrc === 'MARITIME_API' ? 'rgba(56,189,248,0.4)' : 'rgba(245,158,11,0.4)'};color:${resolvedSrc === 'IOT_SENSOR' ? 'var(--green)' : resolvedSrc === 'MARITIME_API' ? '#38bdf8' : 'var(--amber)'}">
+            ${resolvedSrc === 'IOT_SENSOR' ? '<i class="fa fa-microchip"></i> IOT_SENSOR' : resolvedSrc === 'MARITIME_API' ? '<i class="fa fa-ship"></i> MARITIME_API' : '<i class="fa fa-cloud-sun"></i> WEATHER_API'}
           </span>
           <span style="font-size:10px;color:var(--text-muted)">Active RH:
             <span style="font-family:var(--font-mono);color:${humiColor}">${activeRH}%</span>
           </span>
-          ${hasIot && !isStale ? `<span style="font-size:10px;color:var(--green)"><i class="fa fa-circle-check"></i> IoT Live</span>` : ''}
-          ${showNoData ? `<span style="font-size:10px;color:#fb923c"><i class="fa fa-triangle-exclamation"></i> Waiting for first pulse</span>` : ''}
-          ${showStale ? `<span id="stale-warn-${b.id}" style="font-size:10px;color:var(--red);font-weight:600;animation:pulse 1.4s ease-in-out infinite">
+          ${policyPhase ? `<span style="font-size:10px;color:#38bdf8"><i class="fa fa-ship"></i> ${policyPhase} leg — Maritime override</span>` : ''}
+          ${hasIot && !isStale && !hwDisc ? `<span style="font-size:10px;color:var(--green)"><i class="fa fa-circle-check"></i> IoT Live</span>` : ''}
+          ${showNoData && !hwDisc ? `<span style="font-size:10px;color:#fb923c"><i class="fa fa-triangle-exclamation"></i> Waiting for first pulse</span>` : ''}
+          ${showStale && !hwDisc ? `<span id="stale-warn-${b.id}" style="font-size:10px;color:var(--red);font-weight:600;animation:pulse 1.4s ease-in-out infinite">
             <i class="fa fa-clock-rotate-left"></i> STALE DATA — ${ageMs !== null ? Math.round(ageMs/60000) : '?'}min ago · Auto-fallback active
           </span>` : ''}
         </div>
         <!-- IoT reading display (when available) -->
         ${hasIot ? `<div style="margin-top:4px;font-size:10px;color:var(--text-muted)">
-          <i class="fa fa-microchip" style="color:var(--green);margin-right:3px"></i>
-          Sensor: <span style="font-family:var(--font-mono);color:${isStale ? 'var(--red)' : 'var(--green)'}">
+          <i class="fa fa-microchip" style="color:${hwDisc ? 'var(--red)' : 'var(--green)'};margin-right:3px"></i>
+          Sensor: <span style="font-family:var(--font-mono);color:${hwDisc || isStale ? 'var(--red)' : 'var(--green)'}">
             ${b.iot_humidity}% RH · ${b.iot_temperature}°C
           </span>
           <span style="margin-left:4px;font-family:var(--font-mono)">
             · Last: ${b.last_iot_reading_at ? new Date(b.last_iot_reading_at).toLocaleString('en-SA', {hour:'2-digit',minute:'2-digit'}) : '—'}
           </span>
+          ${hwDisc ? `<span style="margin-left:6px;color:var(--red);font-size:10px">(link lost ${b.iot_link_lost_at ? new Date(b.iot_link_lost_at).toLocaleString('en-SA',{hour:'2-digit',minute:'2-digit'}) : '—'})</span>` : ''}
         </div>` : `<div style="margin-top:4px;font-size:10px;color:var(--text-muted)">
           <i class="fa fa-microchip" style="margin-right:3px"></i>Device key: <span style="font-family:var(--font-mono);color:var(--text-muted);font-size:9px">${b.iot_device_key.slice(0,28)}…</span>
         </div>`}
@@ -3621,45 +3629,65 @@ app.get('/admin/branches', (c) => {
     }
   }
 
-  // ── Data Fidelity Toggle — switches humidity source ───────────
+  // ── Data Fidelity Toggle (Geospatial Data Policy v2) ─────────────────────
   async function toggleIotSource(branchId, wantIot) {
-    const source = wantIot ? 'IOT_SENSOR' : 'WEATHER_API'
     const toggle = document.getElementById('iot-toggle-' + branchId)
     if (toggle) toggle.disabled = true
     try {
       const res = await fetch('/api/iot/source-toggle', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ branchId, source }),
+        body: JSON.stringify({ branchId, iot_enabled: wantIot }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Toggle failed')
-      // Update source badge without full reload
+
+      // ── Update source badge ────────────────────────────────────
       const badge = document.getElementById('src-badge-' + branchId)
       if (badge) {
-        badge.innerHTML = source === 'IOT_SENSOR'
+        const src = data.newSource
+        badge.innerHTML = src === 'IOT_SENSOR'
           ? '<i class="fa fa-microchip"></i> IOT_SENSOR'
           : '<i class="fa fa-cloud-sun"></i> WEATHER_API'
-        badge.style.background = source === 'IOT_SENSOR' ? 'rgba(16,185,129,0.12)' : 'rgba(245,158,11,0.12)'
-        badge.style.borderColor = source === 'IOT_SENSOR' ? 'rgba(16,185,129,0.4)' : 'rgba(245,158,11,0.4)'
-        badge.style.color = source === 'IOT_SENSOR' ? 'var(--green)' : 'var(--amber)'
+        badge.style.background  = src === 'IOT_SENSOR' ? 'rgba(16,185,129,0.12)' : 'rgba(245,158,11,0.12)'
+        badge.style.borderColor = src === 'IOT_SENSOR' ? 'rgba(16,185,129,0.4)'  : 'rgba(245,158,11,0.4)'
+        badge.style.color       = src === 'IOT_SENSOR' ? 'var(--green)'           : 'var(--amber)'
       }
+
+      // ── Show / hide Hardware-Disconnected blinking icon ────────
+      const hwIcon = document.getElementById('hw-disc-' + branchId)
+      if (data.iot_link_lost) {
+        if (!hwIcon) {
+          const iconEl = document.createElement('span')
+          iconEl.id = 'hw-disc-' + branchId
+          iconEl.title = 'Hardware Disconnected — auto-failover to Weather API active'
+          iconEl.style.cssText = 'font-size:11px;color:var(--red);font-weight:700;animation:pulse 0.9s ease-in-out infinite;cursor:help'
+          iconEl.innerHTML = '<i class="fa fa-wifi" style="text-decoration:line-through;margin-right:3px"></i>HW DISCONNECTED'
+          const badgeRow = document.getElementById('src-badge-' + branchId)
+          if (badgeRow && badgeRow.parentNode) badgeRow.parentNode.appendChild(iconEl)
+        }
+      } else {
+        if (hwIcon) hwIcon.remove()
+      }
+
+      // ── Toast warning ──────────────────────────────────────────
       if (data.warning) {
-        // Show transient warning banner instead of blocking alert
         const warnId = 'iot-warn-' + branchId
         let warn = document.getElementById(warnId)
         if (!warn) {
           warn = document.createElement('div')
           warn.id = warnId
-          warn.style.cssText = 'position:fixed;bottom:20px;right:20px;z-index:9999;padding:12px 16px;background:#1e293b;border:1px solid rgba(245,158,11,0.5);border-radius:8px;font-size:12px;color:var(--amber);max-width:340px;line-height:1.5'
+          warn.style.cssText = 'position:fixed;bottom:20px;right:20px;z-index:9999;padding:12px 16px;background:#1e293b;border:1px solid rgba(239,68,68,0.5);border-radius:8px;font-size:12px;color:var(--red);max-width:360px;line-height:1.5'
           document.body.appendChild(warn)
         }
-        warn.innerHTML = '<i class="fa fa-triangle-exclamation" style="margin-right:6px"></i>' + data.warning
-        setTimeout(() => warn.remove(), 6000)
+        warn.innerHTML = '<i class="fa fa-wifi" style="text-decoration:line-through;margin-right:6px"></i><strong>Hardware Disconnected</strong><br>' + data.warning
+        setTimeout(() => warn && warn.remove(), 8000)
       }
+
+      // ── Reload page after short delay to reflect Sponge changes ─
+      setTimeout(() => location.reload(), 1200)
     } catch(e) {
       alert('Source toggle error: ' + e.message)
-      // Revert toggle UI on error
       if (toggle) toggle.checked = !wantIot
     } finally {
       if (toggle) toggle.disabled = false
@@ -11332,17 +11360,14 @@ async function pulseFoodicsSync() {
 //  HYBRID HUMIDITY MODEL — IoT Telemetry & Source Toggle
 // ══════════════════════════════════════════════════════════════════
 
-// ── POST /api/iot/telemetry ───────────────────────────────────────
-// Receives a telemetry pulse from a physical ESP32/DHT22 sensor.
-//
-// Payload: { device_key: string, humidity: number, temperature: number }
-//
-// Flow:
+// ── POST /api/iot/telemetry ───────────────────────────────────────────────────
+// Geospatial Data Policy v2
 //  1. Validate device_key → find matching branch
-//  2. Update branch iot_humidity, iot_temperature, last_iot_reading_at
-//  3. Re-run Sponge Effect on all lots in that branch → return updated yields
-//  4. If branch source is WEATHER_API, reading is stored but not yet active
-//     (admin must toggle source to IOT_SENSOR to activate)
+//  2. Update iot_humidity, iot_temperature, last_iot_reading_at
+//  3. If branch had iot_link_lost = true → clear it (link recovered)
+//     Auto-resolve any open SYSTEM_WARNING notifications for this branch
+//  4. Resolve active RH via leg-based resolveActiveRH()
+//  5. Re-run Sponge Effect on all non-recalled lots in this branch
 app.post('/api/iot/telemetry', async (c) => {
   try {
     const body = await c.req.json() as {
@@ -11350,128 +11375,162 @@ app.post('/api/iot/telemetry', async (c) => {
       humidity    : number
       temperature : number
     }
-
     const { device_key, humidity, temperature } = body
 
-    // ── Validate payload ──────────────────────────────────────────
-    if (!device_key || typeof device_key !== 'string') {
+    if (!device_key || typeof device_key !== 'string')
       return c.json({ error: 'device_key is required' }, 400)
-    }
-    if (typeof humidity !== 'number' || humidity < 0 || humidity > 100) {
+    if (typeof humidity !== 'number' || humidity < 0 || humidity > 100)
       return c.json({ error: 'humidity must be a number 0–100' }, 400)
-    }
-    if (typeof temperature !== 'number' || temperature < -20 || temperature > 80) {
+    if (typeof temperature !== 'number' || temperature < -20 || temperature > 80)
       return c.json({ error: 'temperature must be a number -20–80' }, 400)
-    }
 
-    // ── Authenticate device_key → look up branch ──────────────────
     const branch = branches.find(b => b.iot_device_key === device_key)
-    if (!branch) {
+    if (!branch)
       return c.json({ error: 'Unknown device_key — no branch configured for this sensor' }, 401)
-    }
 
     const now = new Date().toISOString()
+    const wasLinkLost = branch.iot_link_lost
 
-    // ── Persist IoT reading ───────────────────────────────────────
-    branch.iot_humidity         = Math.round(humidity * 10) / 10
-    branch.iot_temperature      = Math.round(temperature * 10) / 10
-    branch.last_iot_reading_at  = now
+    // ── Persist reading ───────────────────────────────────────────
+    branch.iot_humidity        = Math.round(humidity * 10) / 10
+    branch.iot_temperature     = Math.round(temperature * 10) / 10
+    branch.last_iot_reading_at = now
 
-    // ── Determine active RH and run hybrid Sponge ─────────────────
-    const { rh: activeRH, source: resolvedSource, stale } = resolveActiveRH(branch)
+    // ── Auto-recover link-lost state ──────────────────────────────
+    if (wasLinkLost) {
+      branch.iot_link_lost    = false
+      branch.iot_link_lost_at = null
+      systemNotifications
+        .filter(n => n.type === 'SYSTEM_WARNING' && n.branchId === branch.id && n.status === 'UNREAD')
+        .forEach(n => { n.status = 'READ' })
+    }
+
+    // ── Leg-based RH resolution + Sponge recalculation ───────────
+    const { rh: activeRH, source: resolvedSource, stale, failover } = resolveActiveRH(branch)
     const spongeResult = calcSpongeCoefficientForBranch(branch)
 
-    // ── Recalculate roasted weight for all lots in this branch ────
     const affectedLots = coffeeLots.filter(l => l.branch === branch.name && l.status !== 'RECALLED')
     const lotUpdates = affectedLots.map(lot => {
       const newRoasted = Math.round(lot.greenWeightKg * spongeResult.coefficient * 10) / 10
       lot.roastedWeightKg = newRoasted
       return {
-        lotId          : lot.id,
-        origin         : lot.origin,
-        greenWeightKg  : lot.greenWeightKg,
+        lotId: lot.id, origin: lot.origin,
+        greenWeightKg: lot.greenWeightKg,
         roastedWeightKg: newRoasted,
-        spongeCoeff    : spongeResult.coefficient,
+        spongeCoeff: spongeResult.coefficient,
       }
     })
 
     return c.json({
-      ok           : true,
-      branchId     : branch.id,
-      branchName   : branch.name,
-      receivedAt   : now,
-      iotReading   : { humidity: branch.iot_humidity, temperature: branch.iot_temperature },
-      activeSource : resolvedSource,
-      autoFallback : stale,
-      sponge       : {
-        activeRH,
-        coefficient  : spongeResult.coefficient,
-        rule         : spongeResult.rule,
-        label        : spongeResult.label,
-        pct          : spongeResult.pct,
-        delta        : spongeResult.delta,
+      ok: true, branchId: branch.id, branchName: branch.name, receivedAt: now,
+      linkRecovered: wasLinkLost,
+      iotReading: { humidity: branch.iot_humidity, temperature: branch.iot_temperature },
+      activeSource: resolvedSource,
+      autoFallback: stale || failover,
+      sponge: {
+        activeRH, coefficient: spongeResult.coefficient,
+        rule: spongeResult.rule, label: spongeResult.label,
+        pct: spongeResult.pct, delta: spongeResult.delta,
       },
       lotsRecalculated: lotUpdates.length,
       lotUpdates,
     })
-
   } catch (e) {
     return c.json({ error: String(e) }, 400)
   }
 })
 
-// ── POST /api/iot/source-toggle ───────────────────────────────────
-// Switches a branch between WEATHER_API and IOT_SENSOR data source.
-// Body: { branchId: string, source: 'WEATHER_API' | 'IOT_SENSOR' }
+// ── POST /api/iot/source-toggle ───────────────────────────────────────────────
+// Geospatial Data Policy v2 — toggle the iot_enabled flag on a branch.
+// Body: { branchId: string, iot_enabled: boolean }
+//
+// Enabling  (true):  sets humidity_source=IOT_SENSOR; if no fresh reading exists
+//                    sets iot_link_lost=true and emits SYSTEM_WARNING notification
+// Disabling (false): sets humidity_source=WEATHER_API; clears iot_link_lost;
+//                    re-runs Sponge with Weather-API RH for all lots in branch
 app.post('/api/iot/source-toggle', async (c) => {
   try {
-    const body = await c.req.json() as { branchId: string; source: HumiditySource }
-    const { branchId, source } = body
+    const body = await c.req.json() as { branchId: string; iot_enabled: boolean }
+    const { branchId, iot_enabled } = body
 
-    if (!branchId) return c.json({ error: 'branchId is required' }, 400)
-    if (source !== 'WEATHER_API' && source !== 'IOT_SENSOR') {
-      return c.json({ error: 'source must be WEATHER_API or IOT_SENSOR' }, 400)
-    }
+    if (!branchId)                     return c.json({ error: 'branchId is required' }, 400)
+    if (typeof iot_enabled !== 'boolean') return c.json({ error: 'iot_enabled must be a boolean' }, 400)
 
     const branch = branches.find(b => b.id === branchId)
     if (!branch) return c.json({ error: `Branch ${branchId} not found` }, 404)
 
-    const hasIotData = branch.iot_humidity !== null && branch.last_iot_reading_at !== null
-    const ageMs      = hasIotData
-      ? Date.now() - new Date(branch.last_iot_reading_at!).getTime()
-      : null
-    const isStale    = ageMs !== null && ageMs > IOT_STALE_THRESHOLD_MS
+    const now = new Date().toISOString()
+    let warning: string | null = null
+    let sysWarningCreated = false
 
-    branch.humidity_source = source
+    branch.iot_enabled     = iot_enabled
+    branch.humidity_source = iot_enabled ? 'IOT_SENSOR' : 'WEATHER_API'
 
-    const { rh: activeRH, stale } = resolveActiveRH(branch)
+    if (!iot_enabled) {
+      // Disabling — clear link-lost state and resolve any open warnings
+      branch.iot_link_lost    = false
+      branch.iot_link_lost_at = null
+      systemNotifications
+        .filter(n => n.type === 'SYSTEM_WARNING' && n.branchId === branch.id && n.status === 'UNREAD')
+        .forEach(n => { n.status = 'READ' })
+    } else {
+      // Enabling — check freshness of IoT data
+      const hasReading = branch.iot_humidity !== null && branch.last_iot_reading_at !== null
+      const ageMs      = hasReading ? Date.now() - new Date(branch.last_iot_reading_at!).getTime() : null
+      const isStale    = ageMs !== null && ageMs > IOT_STALE_THRESHOLD_MS
+
+      if (!hasReading) {
+        warning = 'No IoT reading received yet — using Weather API until first sensor pulse arrives'
+        branch.iot_link_lost    = true
+        branch.iot_link_lost_at = now
+      } else if (isStale) {
+        warning = `IoT data is stale (${Math.round(ageMs!/60000)} min old) — auto-failover to Weather API until fresh pulse`
+        branch.iot_link_lost    = true
+        branch.iot_link_lost_at = branch.last_iot_reading_at
+      }
+
+      // ── Emit SYSTEM_WARNING on link-lost (no duplicate open warnings) ──
+      if (branch.iot_link_lost) {
+        const alreadyOpen = systemNotifications.some(
+          n => n.type === 'SYSTEM_WARNING' && n.branchId === branch.id && n.status === 'UNREAD'
+        )
+        if (!alreadyOpen) {
+          const { rh: failoverRH } = resolveActiveRH(branch)
+          systemNotifications.push(buildIotLinkLostWarning(branch, failoverRH))
+          sysWarningCreated = true
+        }
+      }
+    }
+
+    // ── Re-run Sponge for all lots in branch ─────────────────────
+    const { rh: activeRH, source: resolvedSource, stale, failover } = resolveActiveRH(branch)
     const sponge = calcSpongeCoefficientForBranch(branch)
 
+    const lotUpdates = coffeeLots
+      .filter(l => l.branch === branch.name && l.status !== 'RECALLED')
+      .map(lot => {
+        const newRoasted = Math.round(lot.greenWeightKg * sponge.coefficient * 10) / 10
+        lot.roastedWeightKg = newRoasted
+        return { lotId: lot.id, origin: lot.origin, newRoastedKg: newRoasted, coeff: sponge.coefficient }
+      })
+
     return c.json({
-      ok            : true,
-      branchId      : branch.id,
-      branchName    : branch.name,
-      newSource     : source,
-      activeRH,
-      autoFallback  : stale,
-      warning       : source === 'IOT_SENSOR' && !hasIotData
-        ? 'No IoT reading received yet — will use WEATHER_API until first pulse arrives'
-        : source === 'IOT_SENSOR' && isStale
-        ? `IoT data is stale (${Math.round((ageMs! / 60000))} min old) — auto-fallback to WEATHER_API until fresh pulse`
-        : null,
-      sponge: {
-        coefficient: sponge.coefficient,
-        rule       : sponge.rule,
-        label      : sponge.label,
-        pct        : sponge.pct,
-      },
+      ok: true, branchId: branch.id, branchName: branch.name,
+      iot_enabled: branch.iot_enabled,
+      newSource: branch.humidity_source,
+      activeRH, resolvedSource,
+      autoFallback: stale || failover,
+      iot_link_lost: branch.iot_link_lost,
+      warning, sysWarningCreated,
+      sponge: { coefficient: sponge.coefficient, rule: sponge.rule, label: sponge.label, pct: sponge.pct },
+      lotsRecalculated: lotUpdates.length,
+      lotUpdates,
       iotStatus: {
-        hasData            : hasIotData,
-        iot_humidity       : branch.iot_humidity,
-        iot_temperature    : branch.iot_temperature,
+        hasData: branch.iot_humidity !== null,
+        iot_humidity: branch.iot_humidity, iot_temperature: branch.iot_temperature,
         last_iot_reading_at: branch.last_iot_reading_at,
-        stale              : isStale,
-        iot_device_key     : branch.iot_device_key,
+        iot_link_lost: branch.iot_link_lost, iot_link_lost_at: branch.iot_link_lost_at,
+        iot_device_key: branch.iot_device_key,
       },
     })
   } catch (e) {
@@ -11487,14 +11546,17 @@ app.get('/api/iot/status', (c) => {
     const hasData = b.iot_humidity !== null && b.last_iot_reading_at !== null
     const ageMs   = hasData ? now - new Date(b.last_iot_reading_at!).getTime() : null
     const stale   = ageMs !== null && ageMs > IOT_STALE_THRESHOLD_MS
-    const { rh: activeRH, source: resolvedSource } = resolveActiveRH(b)
+    const { rh: activeRH, source: resolvedSource, failover } = resolveActiveRH(b)
     const sponge  = calcSpongeCoefficientForBranch(b)
     return {
       branchId            : b.id,
       branchName          : b.name,
+      iot_enabled         : b.iot_enabled,
       humidity_source     : b.humidity_source,
       resolvedSource,
-      autoFallback        : b.humidity_source === 'IOT_SENSOR' && stale,
+      autoFallback        : b.iot_enabled && (stale || failover),
+      iot_link_lost       : b.iot_link_lost,
+      iot_link_lost_at    : b.iot_link_lost_at,
       iot_device_key      : b.iot_device_key,
       iot_humidity        : b.iot_humidity,
       iot_temperature     : b.iot_temperature,
