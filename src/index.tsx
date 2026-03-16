@@ -112,6 +112,9 @@ import {
   // ── License / Subscription ────────────────────────────────────
   type PlanType,
   type LicenseCheck,
+  type PaymentProduct,
+  type PaymentSession,
+  paymentSessions,
   checkLicense,
   hasErpAccess,
   hasPulseAccess,
@@ -2637,9 +2640,9 @@ app.get('/admin', (c) => {
       </div>
       <div style="font-size:11px;color:#6d28d9;margin-top:2px">SAR ${ERP_PRO_MONTHLY_SAR.toLocaleString()}/mo · Cancel anytime</div>
     </div>
-    <a href="/hq" style="background:linear-gradient(135deg,#7c3aed,#a855f7);color:#fff;padding:9px 20px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:700;white-space:nowrap">
-      <i class="fa fa-arrow-up-right-from-square"></i> Upgrade at HQ →
-    </a>
+    <button onclick="openPlanModal(null,'ERP_PRO')" style="background:linear-gradient(135deg,#7c3aed,#a855f7);color:#fff;border:none;padding:9px 20px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:700;white-space:nowrap">
+      <i class="fa fa-rocket"></i> View Plans →
+    </button>
   </div>` : ''}
 
   ${criticalBranches > 0 ? `
@@ -2819,9 +2822,9 @@ app.get('/admin', (c) => {
       <div style="background:rgba(124,58,237,0.15);border:1px solid rgba(124,58,237,0.4);border-radius:10px;padding:12px 20px;font-size:12px;color:#c4b5fd;max-width:340px">
         <i class="fa fa-circle-info"></i> <strong>Upgrade to Pro</strong> to unlock Physics-based mass calibration.
       </div>
-      <a href="/hq" style="display:inline-block;background:linear-gradient(135deg,#7c3aed,#a855f7);color:#fff;padding:10px 24px;border-radius:8px;text-decoration:none;font-weight:700;font-size:13px;margin-top:4px">
-        <i class="fa fa-arrow-up-right-from-square"></i> Upgrade Plan at HQ
-      </a>
+      <button onclick="openPlanModal(null,'ERP_PRO')" style="display:inline-block;background:linear-gradient(135deg,#7c3aed,#a855f7);color:#fff;border:none;padding:10px 24px;border-radius:8px;cursor:pointer;font-weight:700;font-size:13px;margin-top:4px">
+        <i class="fa fa-rocket"></i> View Plans
+      </button>
       <div style="font-size:11px;color:#475569;margin-top:4px">Branches on FREE plan: ${branches.filter(b => !hasErpAccess(b)).map(b => b.name).join(', ')}</div>
     </div>` : ''}
     <div class="card-title">
@@ -3552,11 +3555,11 @@ app.get('/admin/branches', (c) => {
         ${b.plan_type === 'ERP_PRO'
           ? b.pulse_enabled
             ? `<span style="font-size:10px;background:rgba(14,165,233,0.12);color:#0ea5e9;border:1px solid rgba(14,165,233,0.35);border-radius:6px;padding:4px 9px;font-weight:600"><i class="fa fa-bolt"></i> Pulse Active</span>`
-            : `<button onclick="activatePulse('${b.id}','${b.name}')"
+            : `<button onclick="openPlanModal('${b.id}','PULSE')"
                  style="background:linear-gradient(135deg,#0ea5e9,#38bdf8);color:#fff;border:none;padding:5px 12px;border-radius:6px;cursor:pointer;font-size:11px;font-weight:700">
                  <i class="fa fa-bolt"></i> Activate IoT Pulse
                </button>`
-          : `<button onclick="showUpgradeBanner('${b.name}')"
+          : `<button onclick="openPlanModal('${b.id}','ERP_PRO')"
                style="background:rgba(124,58,237,0.12);color:#a78bfa;border:1px solid rgba(124,58,237,0.35);padding:5px 12px;border-radius:6px;cursor:pointer;font-size:11px;font-weight:600"
                title="Upgrade to ERP Pro to unlock IoT Pulse">
                <i class="fa fa-lock"></i> Upgrade for Pulse
@@ -3845,78 +3848,264 @@ app.get('/admin/branches', (c) => {
     if (e.target === this) closeSensorModal()
   })
 
-  // ── Activate IoT Pulse (Moyasar invoice flow) ───────────────────────────────
-  async function activatePulse(branchId, branchName) {
-    const confirmed = confirm(
-      'Activate IoT Pulse for ' + branchName + '?\n\n' +
-      'This will generate a Moyasar invoice for SAR ${PULSE_ADDON_MONTHLY_SAR}/month.\n\n' +
-      'The add-on enables real-time sensor telemetry, automated fail-over, and\n' +
-      'Sponge Engine recalculation on every sensor pulse.'
-    )
-    if (!confirmed) return
-    try {
-      // In production this would call a Moyasar payment link endpoint;
-      // for now we toggle pulse_enabled via HQ API and show confirmation.
-      const res = await fetch('/api/hq/set-plan', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ branchId, pulse_enabled: true }),
+  // ══════════════════════════════════════════════════════════════
+  //  PLAN SELECTION MODAL  —  Netflix-style checkout
+  // ══════════════════════════════════════════════════════════════
+
+  // Inject modal HTML once into DOM
+  ;(function injectPlanModal() {
+    if (document.getElementById('plan-select-overlay')) return
+    document.body.insertAdjacentHTML('beforeend', \`
+    <!-- Plan Selection Modal -->
+    <div id="plan-select-overlay"
+         style="display:none;position:fixed;inset:0;z-index:10000;
+                background:rgba(5,10,20,0.88);backdrop-filter:blur(8px);
+                align-items:center;justify-content:center">
+      <div id="plan-select-box"
+           style="background:linear-gradient(160deg,#080e1e 0%,#0d1827 60%,#111827 100%);
+                  border:1px solid rgba(245,158,11,0.18);
+                  border-radius:20px;width:580px;max-width:95vw;
+                  box-shadow:0 0 80px rgba(245,158,11,0.08),0 32px 64px rgba(0,0,0,0.6);
+                  overflow:hidden;position:relative">
+
+        <!-- Ambient glow bar -->
+        <div style="height:3px;background:linear-gradient(90deg,transparent,rgba(245,158,11,0.6),#7c3aed,transparent)"></div>
+
+        <!-- Header -->
+        <div style="padding:28px 32px 0;display:flex;align-items:flex-start;justify-content:space-between">
+          <div>
+            <div style="font-size:11px;font-family:'Courier New',monospace;letter-spacing:3px;
+                        color:var(--amber,#f59e0b);text-transform:uppercase;margin-bottom:6px">
+              ⬡ QABBAN OS · SUBSCRIPTION
+            </div>
+            <h2 style="margin:0;font-size:22px;font-weight:800;color:#f1f5f9;letter-spacing:-0.5px">
+              Choose Your Plan
+            </h2>
+            <p style="margin:6px 0 0;font-size:13px;color:#64748b">
+              Precision tools for specialty coffee operations
+            </p>
+          </div>
+          <button id="plan-modal-close"
+                  style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.08);
+                         color:#64748b;width:32px;height:32px;border-radius:8px;cursor:pointer;
+                         font-size:16px;display:flex;align-items:center;justify-content:center">✕</button>
+        </div>
+
+        <!-- Plan cards -->
+        <div style="padding:24px 32px;display:grid;grid-template-columns:1fr 1fr;gap:16px" id="plan-cards">
+
+          <!-- Roaster Pro card -->
+          <div class="pm-card pm-card-pro" data-product="ERP_PRO"
+               style="border:2px solid rgba(245,158,11,0.25);border-radius:14px;
+                      padding:22px 20px;cursor:pointer;position:relative;
+                      background:rgba(245,158,11,0.04);transition:all .2s">
+            <div style="position:absolute;top:-10px;left:50%;transform:translateX(-50%);
+                        background:linear-gradient(135deg,#92400e,#f59e0b);
+                        color:#fff;font-size:10px;font-weight:700;letter-spacing:1px;
+                        padding:3px 12px;border-radius:20px;white-space:nowrap">
+              MOST POPULAR
+            </div>
+            <!-- Icon -->
+            <div style="width:48px;height:48px;background:rgba(245,158,11,0.12);
+                        border:1px solid rgba(245,158,11,0.3);border-radius:12px;
+                        display:flex;align-items:center;justify-content:center;
+                        font-size:22px;margin-bottom:16px">⚗️</div>
+            <div style="font-size:15px;font-weight:700;color:#f1f5f9;margin-bottom:4px">
+              Roaster Pro
+            </div>
+            <div style="font-size:11px;color:#78716c;margin-bottom:16px;line-height:1.5">
+              Precision Physics Engine
+            </div>
+            <div style="margin-bottom:18px">
+              <span style="font-size:28px;font-weight:800;color:#f59e0b">SAR 1,200</span>
+              <span style="font-size:12px;color:#64748b">/month</span>
+            </div>
+            <ul style="list-style:none;margin:0;padding:0;font-size:12px;color:#94a3b8;display:grid;gap:7px">
+              <li><span style="color:#f59e0b;margin-right:6px">⬡</span> Sponge Effect Engine</li>
+              <li><span style="color:#f59e0b;margin-right:6px">⬡</span> ZATCA e-Invoice Export</li>
+              <li><span style="color:#f59e0b;margin-right:6px">⬡</span> Finance & Margin Intelligence</li>
+              <li><span style="color:#f59e0b;margin-right:6px">⬡</span> IoT Sensor Integration</li>
+              <li><span style="color:#f59e0b;margin-right:6px">⬡</span> Risk Watchdog Escalation</li>
+            </ul>
+            <button class="pm-subscribe-btn" data-product="ERP_PRO"
+                    style="width:100%;margin-top:20px;padding:11px;
+                           background:linear-gradient(135deg,#92400e,#d97706,#f59e0b);
+                           color:#1c1008;font-weight:800;font-size:13px;
+                           border:none;border-radius:9px;cursor:pointer;letter-spacing:.3px">
+              Subscribe — SAR 1,200/mo
+            </button>
+          </div>
+
+          <!-- IoT Pulse card -->
+          <div class="pm-card pm-card-pulse" data-product="PULSE"
+               style="border:2px solid rgba(14,165,233,0.2);border-radius:14px;
+                      padding:22px 20px;cursor:pointer;position:relative;
+                      background:rgba(14,165,233,0.03);transition:all .2s">
+            <!-- Icon -->
+            <div style="width:48px;height:48px;background:rgba(14,165,233,0.1);
+                        border:1px solid rgba(14,165,233,0.3);border-radius:12px;
+                        display:flex;align-items:center;justify-content:center;
+                        font-size:22px;margin-bottom:16px">📡</div>
+            <div style="font-size:15px;font-weight:700;color:#f1f5f9;margin-bottom:4px">
+              IoT Pulse
+            </div>
+            <div style="font-size:11px;color:#78716c;margin-bottom:16px;line-height:1.5">
+              Counter Intelligence Add-on
+            </div>
+            <div style="margin-bottom:18px">
+              <span style="font-size:28px;font-weight:800;color:#0ea5e9">SAR 500</span>
+              <span style="font-size:12px;color:#64748b">/mo · per branch</span>
+            </div>
+            <ul style="list-style:none;margin:0;padding:0;font-size:12px;color:#94a3b8;display:grid;gap:7px">
+              <li><span style="color:#0ea5e9;margin-right:6px">◈</span> Scale-to-POS Reconciliation</li>
+              <li><span style="color:#0ea5e9;margin-right:6px">◈</span> Live RH Sensor Feed</li>
+              <li><span style="color:#0ea5e9;margin-right:6px">◈</span> Auto-failover to Weather API</li>
+              <li><span style="color:#0ea5e9;margin-right:6px">◈</span> Hardware Disconnect Alerts</li>
+              <li><span style="color:#0ea5e9;margin-right:6px">◈</span> Sponge Re-trigger on Pulse</li>
+            </ul>
+            <div style="font-size:10px;color:#475569;margin:10px 0 -4px;text-align:center">
+              Requires Roaster Pro
+            </div>
+            <button class="pm-subscribe-btn" data-product="PULSE"
+                    style="width:100%;margin-top:10px;padding:11px;
+                           background:linear-gradient(135deg,#0c4a6e,#0369a1,#0ea5e9);
+                           color:#fff;font-weight:800;font-size:13px;
+                           border:none;border-radius:9px;cursor:pointer;letter-spacing:.3px">
+              Activate — SAR 500/mo
+            </button>
+          </div>
+        </div>
+
+        <!-- Footer trust bar -->
+        <div style="padding:14px 32px 24px;display:flex;align-items:center;justify-content:center;
+                    gap:20px;border-top:1px solid rgba(255,255,255,0.04)">
+          <span style="font-size:11px;color:#475569;display:flex;align-items:center;gap:5px">
+            <i class="fa fa-lock" style="color:#64748b"></i> Secured by Moyasar
+          </span>
+          <span style="color:#1e2d3d">·</span>
+          <span style="font-size:11px;color:#475569">Cancel anytime</span>
+          <span style="color:#1e2d3d">·</span>
+          <span style="font-size:11px;color:#475569">
+            <i class="fa fa-shield-halved" style="color:#64748b"></i> ZATCA-compliant invoices
+          </span>
+        </div>
+
+        <!-- Loading state overlay -->
+        <div id="plan-modal-loading"
+             style="display:none;position:absolute;inset:0;border-radius:20px;
+                    background:rgba(8,14,30,0.92);align-items:center;justify-content:center;
+                    flex-direction:column;gap:16px;z-index:10">
+          <div style="width:44px;height:44px;border:3px solid rgba(245,158,11,0.2);
+                      border-top-color:#f59e0b;border-radius:50%;
+                      animation:pm-spin 0.8s linear infinite"></div>
+          <div style="font-size:13px;color:#94a3b8" id="plan-modal-loading-msg">
+            Creating payment session…
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <style>
+      @keyframes pm-spin { to { transform:rotate(360deg) } }
+      .pm-card:hover { transform:translateY(-3px);box-shadow:0 8px 32px rgba(0,0,0,0.4) }
+      .pm-card-pro:hover  { border-color:rgba(245,158,11,0.55)!important }
+      .pm-card-pulse:hover{ border-color:rgba(14,165,233,0.45)!important }
+      .pm-subscribe-btn:hover { filter:brightness(1.12) }
+      .pm-subscribe-btn:active { transform:scale(.97) }
+    </style>
+    \`)
+
+    // Bind close button
+    document.getElementById('plan-modal-close').addEventListener('click', closePlanModal)
+    document.getElementById('plan-select-overlay').addEventListener('click', function(e) {
+      if (e.target === this) closePlanModal()
+    })
+
+    // Bind subscribe buttons
+    document.querySelectorAll('.pm-subscribe-btn').forEach(btn => {
+      btn.addEventListener('click', async function(e) {
+        e.stopPropagation()
+        const product = this.dataset.product  // 'ERP_PRO' | 'PULSE'
+        await startCheckout(product)
       })
-      const data = await res.json()
-      if (data.ok) {
-        showUpgradeBanner(branchName, true)
-        setTimeout(() => location.reload(), 1800)
-      } else {
-        alert('Activation failed: ' + (data.error || 'Unknown error'))
-      }
-    } catch (e) {
-      alert('Network error: ' + e.message)
-    }
+    })
+  })()
+
+  let _planModalBranchId = null
+  let _planModalProduct  = null
+
+  // Auto-open modal if user arrives via /admin#upgrade (from /admin/billing redirect)
+  if (window.location.hash === '#upgrade') {
+    setTimeout(() => openPlanModal(null, 'ERP_PRO'), 300)
+    history.replaceState(null, '', '/admin')  // clean the hash
   }
 
-  // ── Upgrade-to-Pro banner ───────────────────────────────────────────────────
-  function showUpgradeBanner(branchName, activated) {
-    let banner = document.getElementById('upgrade-banner')
-    if (!banner) {
-      banner = document.createElement('div')
-      banner.id = 'upgrade-banner'
-      banner.style.cssText = [
-        'position:fixed;top:0;left:0;right:0;z-index:9999',
-        'background:linear-gradient(135deg,#1e1040,#2d1a6e)',
-        'border-bottom:2px solid #7c3aed',
-        'padding:14px 24px',
-        'display:flex;align-items:center;gap:16px;flex-wrap:wrap',
-        'box-shadow:0 4px 24px rgba(124,58,237,0.35)',
-      ].join(';')
-      document.body.appendChild(banner)
+  function openPlanModal(branchId, preselect) {
+    _planModalBranchId = branchId
+    _planModalProduct  = preselect || 'ERP_PRO'
+    // highlight the pre-selected card
+    document.querySelectorAll('.pm-card').forEach(c => {
+      c.style.outline = c.dataset.product === _planModalProduct
+        ? '2px solid rgba(245,158,11,0.6)'
+        : 'none'
+    })
+    const ov = document.getElementById('plan-select-overlay')
+    ov.style.display = 'flex'
+    requestAnimationFrame(() => {
+      const box = document.getElementById('plan-select-box')
+      box.style.transform = 'scale(0.94)'
+      box.style.opacity   = '0'
+      requestAnimationFrame(() => {
+        box.style.transition = 'transform .22s cubic-bezier(.22,1,.36,1),opacity .18s'
+        box.style.transform  = 'scale(1)'
+        box.style.opacity    = '1'
+      })
+    })
+  }
+
+  function closePlanModal() {
+    const ov = document.getElementById('plan-select-overlay')
+    const box = document.getElementById('plan-select-box')
+    box.style.transition = 'transform .16s ease,opacity .16s'
+    box.style.transform  = 'scale(0.96)'
+    box.style.opacity    = '0'
+    setTimeout(() => { ov.style.display = 'none'; box.style.transition = '' }, 180)
+    document.getElementById('plan-modal-loading').style.display = 'none'
+  }
+
+  function showPlanLoading(msg) {
+    const ld = document.getElementById('plan-modal-loading')
+    document.getElementById('plan-modal-loading-msg').textContent = msg || 'Creating payment session…'
+    ld.style.display = 'flex'
+  }
+  function hidePlanLoading() {
+    document.getElementById('plan-modal-loading').style.display = 'none'
+  }
+
+  async function startCheckout(product) {
+    // Use the branchId from modal context; fall back to first branch that needs upgrade
+    const branchId = _planModalBranchId || '${branches[0]?.id || 'BR-RUH'}'
+    showPlanLoading('Creating secure payment session…')
+    try {
+      const res = await fetch('/api/payments/create-session', {
+        method : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body   : JSON.stringify({ branchId, product }),
+      })
+      const data = await res.json()
+      if (data.payment_url) {
+        showPlanLoading('Redirecting to Moyasar checkout…')
+        // Short delay so user sees the loading state before redirect
+        setTimeout(() => { window.location.href = data.payment_url }, 600)
+      } else {
+        hidePlanLoading()
+        alert('Payment session error: ' + (data.error || 'Unknown error'))
+      }
+    } catch (err) {
+      hidePlanLoading()
+      alert('Network error: ' + err.message)
     }
-    if (activated) {
-      banner.innerHTML = [
-        '<i class="fa fa-bolt" style="color:#0ea5e9;font-size:18px"></i>',
-        '<div style="flex:1;min-width:200px">',
-          '<div style="font-size:14px;font-weight:700;color:#e2e8f0">IoT Pulse Activated — ' + branchName + '</div>',
-          '<div style="font-size:12px;color:#94a3b8;margin-top:2px">SAR ${PULSE_ADDON_MONTHLY_SAR}/month · Invoice sent · Reloading...</div>',
-        '</div>',
-        '<button onclick="this.parentElement.remove()" style="background:rgba(255,255,255,0.08);color:#94a3b8;border:none;padding:6px 12px;border-radius:6px;cursor:pointer">✕</button>',
-      ].join('')
-    } else {
-      banner.innerHTML = [
-        '<i class="fa fa-lock" style="color:#a78bfa;font-size:18px"></i>',
-        '<div style="flex:1;min-width:200px">',
-          '<div style="font-size:14px;font-weight:700;color:#e2e8f0">Upgrade to ERP Pro — ' + branchName + '</div>',
-          '<div style="font-size:12px;color:#c4b5fd;margin-top:2px">',
-            'Unlock: Physics-based mass calibration · IoT Pulse · ZATCA export · Finance tools',
-          '</div>',
-          '<div style="font-size:11px;color:#7c3aed;margin-top:4px">SAR ${ERP_PRO_MONTHLY_SAR.toLocaleString()}/month per roastery + SAR ${PULSE_ADDON_MONTHLY_SAR}/month per branch for Pulse</div>',
-        '</div>',
-        '<a href="/hq" style="background:linear-gradient(135deg,#7c3aed,#a855f7);color:#fff;padding:8px 18px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:700;white-space:nowrap">',
-          '<i class="fa fa-arrow-up-right-from-square"></i> Upgrade at HQ',
-        '</a>',
-        '<button onclick="this.parentElement.remove()" style="background:rgba(255,255,255,0.08);color:#94a3b8;border:none;padding:6px 12px;border-radius:6px;cursor:pointer">✕</button>',
-      ].join('')
-    }
-    // Auto-dismiss after 10 s
-    setTimeout(() => { if (banner) banner.remove() }, 10_000)
   }
 
   </script>`
@@ -11978,21 +12167,364 @@ app.post('/api/watchdog/notifications/ack-all', (c) => {
   return c.json({ ok: true, acknowledged: unread.length })
 })
 
-// ── GET /admin/billing — Billing redirect to HQ License Manager ──────────────
-app.get('/admin/billing', (c) => {
+// ══════════════════════════════════════════════════════════════════════════════
+//  MOYASAR PAYMENTS  —  Hosted Checkout + Webhook
+// ══════════════════════════════════════════════════════════════════════════════
+//
+//  Flow:
+//   1. Frontend calls POST /api/payments/create-session {branchId, product}
+//   2. Hono calls Moyasar /v1/payments with amount, callback_url, metadata
+//   3. Moyasar returns {id, payment_url} — we redirect the user there
+//   4. After payment Moyasar POSTs to /api/payments/webhook
+//   5. Webhook verifies the event, applies plan upgrade, returns 200
+//
+//  Env vars required (set via wrangler secret put):
+//    MOYASAR_SECRET_KEY   — your Moyasar secret key (sk_test_… / sk_live_…)
+//    APP_BASE_URL         — full base URL e.g. https://qabban.pages.dev
+//
+//  In development the secret key is read from .dev.vars.
+// ══════════════════════════════════════════════════════════════════════════════
+
+type Env = {
+  MOYASAR_SECRET_KEY?: string
+  APP_BASE_URL?      : string
+}
+
+/** Amount in halala for each product (1 SAR = 100 halala). */
+const PRODUCT_AMOUNTS: Record<string, number> = {
+  ERP_PRO: ERP_PRO_MONTHLY_SAR * 100,   // SAR 1,200 → 120,000 halala
+  PULSE  : PULSE_ADDON_MONTHLY_SAR * 100, // SAR 500   → 50,000  halala
+}
+
+const PRODUCT_DESCRIPTIONS: Record<string, string> = {
+  ERP_PRO: 'Qabban OS — Roaster Pro · SAR 1,200/month',
+  PULSE  : 'Qabban OS — IoT Pulse Add-on · SAR 500/month per branch',
+}
+
+// ── POST /api/payments/create-session ────────────────────────────────────────
+// Creates a Moyasar Hosted Checkout payment session and returns the URL.
+// Body: { branchId: string, product: 'ERP_PRO' | 'PULSE' }
+app.post('/api/payments/create-session', async (c) => {
+  try {
+    const env = c.env as Env
+    const body = await c.req.json() as { branchId: string; product: string }
+    const { branchId, product } = body
+
+    // Validate
+    if (!branchId || !product) {
+      return c.json({ error: 'branchId and product are required' }, 400)
+    }
+    const branch = branches.find(b => b.id === branchId)
+    if (!branch) return c.json({ error: 'Branch not found' }, 404)
+    if (!['ERP_PRO', 'PULSE'].includes(product)) {
+      return c.json({ error: 'Invalid product. Must be ERP_PRO or PULSE' }, 400)
+    }
+    // Pulse requires ERP_PRO
+    if (product === 'PULSE' && branch.plan_type !== 'ERP_PRO') {
+      return c.json({ error: 'IoT Pulse requires Roaster Pro plan first', reason: 'PLAN_REQUIRED' }, 402)
+    }
+
+    const secretKey  = env?.MOYASAR_SECRET_KEY ?? process.env?.MOYASAR_SECRET_KEY ?? ''
+    const baseUrl    = env?.APP_BASE_URL ?? process.env?.APP_BASE_URL ?? 'http://localhost:3000'
+    const callbackUrl = `${baseUrl}/api/payments/callback?branchId=${branchId}&product=${product}`
+
+    // ── Call Moyasar API ──────────────────────────────────────────────────────
+    // If no secret key is configured, return a simulated dev-mode URL
+    if (!secretKey || secretKey === 'YOUR_MOYASAR_SECRET_KEY') {
+      // Dev-mode: simulate checkout redirect back to callback immediately
+      const devSessionId = `dev-${Date.now()}-${Math.random().toString(36).slice(2,8)}`
+      paymentSessions.push({
+        sessionId : devSessionId,
+        branchId,
+        product   : product as PaymentProduct,
+        amountHalala: PRODUCT_AMOUNTS[product],
+        status    : 'initiated',
+        createdAt : new Date().toISOString(),
+        capturedAt: null,
+        callbackUrl,
+      })
+      return c.json({
+        payment_url : `${baseUrl}/api/payments/dev-capture?sessionId=${devSessionId}&branchId=${branchId}&product=${product}`,
+        session_id  : devSessionId,
+        mode        : 'dev',
+        note        : 'MOYASAR_SECRET_KEY not configured — using dev sandbox mode',
+        amount_sar  : PRODUCT_AMOUNTS[product] / 100,
+        product,
+        branchId,
+      })
+    }
+
+    // Production: create real Moyasar payment
+    const moyasarRes = await fetch('https://api.moyasar.com/v1/payments', {
+      method : 'POST',
+      headers: {
+        'Content-Type' : 'application/json',
+        'Authorization': 'Basic ' + btoa(secretKey + ':'),
+      },
+      body: JSON.stringify({
+        amount     : PRODUCT_AMOUNTS[product],
+        currency   : 'SAR',
+        description: PRODUCT_DESCRIPTIONS[product],
+        callback_url: callbackUrl,
+        source: { type: 'creditcard' },
+        metadata: {
+          branchId,
+          product,
+          branchName: branch.name,
+        },
+      }),
+    })
+
+    if (!moyasarRes.ok) {
+      const err = await moyasarRes.json() as Record<string,unknown>
+      return c.json({ error: 'Moyasar API error', detail: err }, 502)
+    }
+
+    const payment = await moyasarRes.json() as {
+      id: string; status: string; payment_url?: string; source?: { transaction_url?: string }
+    }
+
+    // Store session locally for webhook correlation
+    paymentSessions.push({
+      sessionId   : payment.id,
+      branchId,
+      product     : product as PaymentProduct,
+      amountHalala: PRODUCT_AMOUNTS[product],
+      status      : payment.status as any,
+      createdAt   : new Date().toISOString(),
+      capturedAt  : null,
+      callbackUrl,
+    })
+
+    const paymentUrl = payment.payment_url
+      ?? payment.source?.transaction_url
+      ?? `https://api.moyasar.com/v1/payments/${payment.id}`
+
+    return c.json({
+      payment_url: paymentUrl,
+      session_id : payment.id,
+      mode       : 'live',
+      amount_sar : PRODUCT_AMOUNTS[product] / 100,
+      product,
+      branchId,
+    })
+
+  } catch (e) {
+    return c.json({ error: String(e) }, 500)
+  }
+})
+
+// ── GET /api/payments/dev-capture ────────────────────────────────────────────
+// DEV ONLY: Simulates a successful Moyasar payment capture without real card.
+// Accessible at the URL returned by create-session in dev mode.
+app.get('/api/payments/dev-capture', async (c) => {
+  const sessionId = c.req.query('sessionId')
+  const branchId  = c.req.query('branchId')
+  const product   = c.req.query('product') as PaymentProduct | undefined
+
+  const session = paymentSessions.find(s => s.sessionId === sessionId)
+  if (!session) return c.json({ error: 'Session not found' }, 404)
+
+  // Apply the upgrade
+  const result = applyPlanUpgrade(branchId!, product!)
+  if (!result.ok) return c.json({ error: result.error }, 400)
+
+  session.status    = 'captured'
+  session.capturedAt = new Date().toISOString()
+
+  // Show a success page
   return c.html(`<!DOCTYPE html>
-<html><head><meta charset="UTF-8"/><title>Billing — Qabban OS</title>
-<meta http-equiv="refresh" content="0; url=/hq"/>
+<html><head><meta charset="UTF-8"/>
+<title>Payment Success — Qabban OS</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
 </head>
-<body style="background:#0a1628;color:#e2e8f0;font-family:sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0">
-  <div style="text-align:center">
-    <div style="font-size:40px;margin-bottom:16px">🔐</div>
-    <div style="font-size:18px;font-weight:700;margin-bottom:8px">Redirecting to HQ License Manager...</div>
-    <a href="/hq" style="color:#a78bfa;text-decoration:none;font-size:13px"><i class="fa fa-arrow-right"></i> Click here if not redirected</a>
+<body style="background:#080e1e;color:#e2e8f0;font-family:'Segoe UI',sans-serif;
+             display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0">
+  <div style="text-align:center;max-width:420px;padding:32px">
+    <div style="font-size:56px;margin-bottom:16px">✅</div>
+    <h1 style="font-size:22px;font-weight:800;color:#f59e0b;margin:0 0 8px">Payment Successful</h1>
+    <p style="color:#94a3b8;margin-bottom:4px">${result.message}</p>
+    <p style="font-size:12px;color:#475569;margin-bottom:28px">Session ID: ${sessionId}</p>
+    <a href="/admin" style="background:linear-gradient(135deg,#92400e,#f59e0b);color:#1c1008;
+       padding:12px 28px;border-radius:9px;text-decoration:none;font-weight:800;font-size:14px">
+      <i class="fa fa-arrow-left"></i> Back to Dashboard
+    </a>
+  </div>
+  <script>setTimeout(() => location.href='/admin', 4000)</script>
+</body></html>`)
+})
+
+// ── POST /api/payments/webhook ────────────────────────────────────────────────
+// Moyasar posts here when a payment status changes.
+// Qabban OS listens for payment.captured → applies plan upgrade.
+// Verify by replaying: Moyasar signs the webhook with your secret key via
+// an HMAC-SHA256 header "X-Moyasar-Signature" (validate in production).
+app.post('/api/payments/webhook', async (c) => {
+  try {
+    const body = await c.req.json() as {
+      type?   : string     // 'payment.captured' | 'payment.paid' | etc.
+      data?   : {
+        id            : string
+        status        : string
+        amount        : number
+        currency      : string
+        description?  : string
+        metadata?     : { branchId?: string; product?: string; branchName?: string }
+        captured_at?  : string
+      }
+    }
+
+    // ── Moyasar sends the payment object directly (not nested under .data) ──
+    // Handle both payload shapes:
+    const paymentData = body.data ?? (body as any)
+    const eventType   = body.type ?? 'payment.captured'
+
+    // Only act on capture/paid events
+    if (!['payment.captured', 'payment.paid', 'captured', 'paid'].includes(
+      (eventType ?? '').toLowerCase()
+    ) && !['captured', 'paid'].includes((paymentData?.status ?? '').toLowerCase())) {
+      return c.json({ received: true, action: 'ignored', event: eventType })
+    }
+
+    const paymentId = paymentData?.id
+    const metadata  = paymentData?.metadata
+    const branchId  = metadata?.branchId
+    const product   = metadata?.product as PaymentProduct | undefined
+
+    if (!paymentId || !branchId || !product) {
+      return c.json({ received: true, action: 'skipped', reason: 'missing metadata' })
+    }
+
+    // Update local session record
+    const session = paymentSessions.find(s => s.sessionId === paymentId)
+    if (session) {
+      session.status    = 'captured'
+      session.capturedAt = paymentData?.captured_at ?? new Date().toISOString()
+    }
+
+    // Apply plan upgrade
+    const result = applyPlanUpgrade(branchId, product)
+    return c.json({ received: true, action: result.ok ? 'applied' : 'error', ...result })
+
+  } catch (e) {
+    // Always 200 to Moyasar — log the error internally
+    return c.json({ received: true, error: String(e) }, 200)
+  }
+})
+
+// ── GET /api/payments/callback ───────────────────────────────────────────────
+// Moyasar redirects the user here after hosted checkout (success OR failure).
+// Query params include: id (payment id), status, message, branchId, product.
+app.get('/api/payments/callback', async (c) => {
+  const paymentId = c.req.query('id')
+  const status    = c.req.query('status')    // 'paid' | 'failed' | 'authorized'
+  const branchId  = c.req.query('branchId')
+  const product   = c.req.query('product') as PaymentProduct | undefined
+  const message   = c.req.query('message') ?? ''
+
+  const success = status === 'paid' || status === 'authorized' || status === 'captured'
+
+  if (success && branchId && product) {
+    // Verify with Moyasar API if secret key available (production)
+    const result = applyPlanUpgrade(branchId, product)
+
+    // Update session
+    const session = paymentSessions.find(s => s.sessionId === paymentId)
+    if (session) { session.status = 'captured'; session.capturedAt = new Date().toISOString() }
+
+    return c.html(`<!DOCTYPE html>
+<html><head><meta charset="UTF-8"/><title>Payment Success — Qabban OS</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+</head>
+<body style="background:#080e1e;color:#e2e8f0;font-family:'Segoe UI',sans-serif;
+             display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0">
+  <div style="text-align:center;max-width:440px;padding:32px">
+    <div style="font-size:3.5rem;margin-bottom:18px">🎉</div>
+    <h1 style="font-size:24px;font-weight:800;color:#f59e0b;margin:0 0 10px">
+      Welcome to ${product === 'PULSE' ? 'IoT Pulse' : 'Roaster Pro'}!
+    </h1>
+    <p style="color:#94a3b8;margin-bottom:6px">${result.message}</p>
+    <p style="font-size:12px;color:#475569;margin-bottom:28px">Payment ID: ${paymentId ?? '—'}</p>
+    <a href="/admin" style="background:linear-gradient(135deg,#92400e,#f59e0b);color:#1c1008;
+       padding:12px 28px;border-radius:9px;text-decoration:none;font-weight:800;font-size:14px">
+      <i class="fa fa-rocket"></i> Open Dashboard
+    </a>
+  </div>
+  <script>setTimeout(() => location.href='/admin', 5000)</script>
+</body></html>`)
+  }
+
+  // Payment failed
+  return c.html(`<!DOCTYPE html>
+<html><head><meta charset="UTF-8"/><title>Payment Failed — Qabban OS</title>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+</head>
+<body style="background:#080e1e;color:#e2e8f0;font-family:'Segoe UI',sans-serif;
+             display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0">
+  <div style="text-align:center;max-width:400px;padding:32px">
+    <div style="font-size:3.5rem;margin-bottom:18px">❌</div>
+    <h1 style="font-size:22px;font-weight:800;color:#f87171;margin:0 0 10px">Payment Not Completed</h1>
+    <p style="color:#94a3b8;margin-bottom:28px">${message || 'The payment was not completed. No charge was made.'}</p>
+    <a href="/admin" style="background:rgba(124,58,237,0.2);color:#a78bfa;border:1px solid rgba(124,58,237,0.4);
+       padding:12px 28px;border-radius:9px;text-decoration:none;font-weight:700;font-size:14px">
+      <i class="fa fa-arrow-left"></i> Back to Dashboard
+    </a>
   </div>
 </body></html>`)
 })
+
+// ── GET /api/payments/sessions ───────────────────────────────────────────────
+// Returns all payment sessions (admin view).
+app.get('/api/payments/sessions', (c) => {
+  return c.json({ count: paymentSessions.length, sessions: paymentSessions })
+})
+
+// ─── applyPlanUpgrade — shared helper ────────────────────────────────────────
+/**
+ * Applies the plan upgrade to the matching branch after a successful payment.
+ * Called by both the webhook and the dev-capture endpoint.
+ */
+function applyPlanUpgrade(branchId: string, product: PaymentProduct): {
+  ok: boolean; message: string; error?: string; branchId?: string; product?: PaymentProduct
+} {
+  const branch = branches.find(b => b.id === branchId)
+  if (!branch) return { ok: false, error: `Branch ${branchId} not found` }
+
+  const now = new Date()
+  // Subscription extends 31 days from today
+  const expires = new Date(now.getFullYear(), now.getMonth() + 1, now.getDate() + 1).toISOString()
+
+  if (product === 'ERP_PRO') {
+    branch.plan_type               = 'ERP_PRO'
+    branch.subscription_expires_at = expires
+    return {
+      ok     : true,
+      message: `${branch.name} upgraded to Roaster Pro. Subscription active until ${expires.slice(0,10)}.`,
+      branchId, product,
+    }
+  }
+
+  if (product === 'PULSE') {
+    if (branch.plan_type !== 'ERP_PRO') {
+      // Auto-upgrade to ERP_PRO first
+      branch.plan_type               = 'ERP_PRO'
+      branch.subscription_expires_at = expires
+    }
+    branch.pulse_enabled = true
+    return {
+      ok     : true,
+      message: `IoT Pulse add-on activated for ${branch.name}. Scale-to-POS reconciliation is now live.`,
+      branchId, product,
+    }
+  }
+
+  return { ok: false, error: `Unknown product: ${product}` }
+}
+
+// ── GET /admin/billing — redirects to /admin (which has the plan modal) ───────
+app.get('/admin/billing', (c) => c.redirect('/admin#upgrade', 302))
 
 // ── GET /admin/watchdog — Risk Watchdog full dashboard ────────────────────────
 app.get('/admin/watchdog', (c) => {

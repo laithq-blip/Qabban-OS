@@ -2101,14 +2101,14 @@ Dammam : dkey-dmm-2a3b4c5d-6e7f-8901-cdef-ab2345678901
           <td><span style="background:#0ea5e9;color:#fff;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700">LAYER 2</span></td>
           <td><strong>Roaster ERP</strong></td>
           <td>Monthly SaaS</td>
-          <td><code>SAR 2,500/mo</code></td>
+          <td><code>SAR 1,200/mo</code></td>
           <td>Per roastery with plan_type = ERP_PRO</td>
         </tr>
         <tr>
           <td><span style="background:#10b981;color:#fff;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700">LAYER 3</span></td>
           <td><strong>Pulse Add-on</strong></td>
           <td>Branch-level add-on</td>
-          <td><code>SAR 750/mo</code></td>
+          <td><code>SAR 500/mo</code></td>
           <td>Per branch with pulse_enabled = true</td>
         </tr>
       </tbody>
@@ -2129,8 +2129,8 @@ Dammam : dkey-dmm-2a3b4c5d-6e7f-8901-cdef-ab2345678901
     <table>
       <thead><tr><th>Branch</th><th>Plan</th><th>Pulse</th><th>Monthly SAR</th></tr></thead>
       <tbody>
-        <tr><td>Riyadh (BR-RUH)</td><td>ERP_PRO</td><td>❌</td><td>2,500</td></tr>
-        <tr><td>Jeddah (BR-JED)</td><td>ERP_PRO</td><td>✅</td><td>3,250</td></tr>
+        <tr><td>Riyadh (BR-RUH)</td><td>ERP_PRO</td><td>❌</td><td>1,200</td></tr>
+        <tr><td>Jeddah (BR-JED)</td><td>ERP_PRO</td><td>✅</td><td>1,700</td></tr>
         <tr><td>Dammam (BR-DMM)</td><td>FREE</td><td>❌</td><td>0</td></tr>
       </tbody>
     </table>
@@ -2223,7 +2223,7 @@ GET /api/hq/license-check?branchId=BR-RUH&amp;requires=ERP_PRO
       <thead><tr><th>Card</th><th>Color</th><th>Data Source</th></tr></thead>
       <tbody>
         <tr><td>Total Monthly Revenue</td><td style="color:#10b981">Green</td><td>SaaS + Commission</td></tr>
-        <tr><td>SaaS Revenue</td><td style="color:#7c3aed">Purple</td><td>ERP_PRO × SAR 2,500 + Pulse × SAR 750</td></tr>
+        <tr><td>SaaS Revenue</td><td style="color:#7c3aed">Purple</td><td>ERP_PRO × SAR 1,200 + Pulse × SAR 500</td></tr>
         <tr><td>Commission @1.5%</td><td style="color:#f59e0b">Amber</td><td>1.5% × CIF for CONTRACTED/SHIPPED lots</td></tr>
         <tr><td>ERP Pro Roasteries</td><td>White</td><td>Count of ERP_PRO + active branches</td></tr>
         <tr><td>Pulse Add-ons Active</td><td style="color:#0ea5e9">Cyan</td><td>pulse_enabled + active branches</td></tr>
@@ -2265,10 +2265,158 @@ GET /api/hq/license-check?branchId=BR-RUH&amp;requires=ERP_PRO
   </div>
 
 
+  <!-- 35d. Moyasar Checkout Flow -->
+  <div class="section" id="checkout-flow">
+    <div class="section-header">
+      <span class="section-num">35d</span>
+      <div>
+        <div class="section-title">Moyasar Checkout Flow</div>
+        <div class="section-sub">Plan Selection Modal · Hosted Checkout · Webhook Auto-Unlock</div>
+      </div>
+    </div>
+
+    <p>The upgrade flow is a fully self-contained in-app checkout that never redirects users to an internal management portal. It uses a Netflix-style dark modal for plan selection, then hands off to Moyasar's Hosted Checkout page for payment.</p>
+
+    <div class="sub-title">User Flow (5 Steps)</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:20px">
+      <div style="background:var(--bg-2);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center">
+        <div style="font-size:24px;margin-bottom:8px">🔒</div>
+        <div style="font-size:11px;font-weight:700;color:var(--amber);margin-bottom:4px">STEP 1</div>
+        <div style="font-size:12px;color:var(--text-sec)">User clicks <strong>"View Plans →"</strong> on the FREE-plan banner</div>
+      </div>
+      <div style="background:var(--bg-2);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center">
+        <div style="font-size:24px;margin-bottom:8px">⚗️</div>
+        <div style="font-size:11px;font-weight:700;color:var(--amber);margin-bottom:4px">STEP 2</div>
+        <div style="font-size:12px;color:var(--text-sec)">Plan Selection Modal opens — choose Roaster Pro or IoT Pulse</div>
+      </div>
+      <div style="background:var(--bg-2);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center">
+        <div style="font-size:24px;margin-bottom:8px">💳</div>
+        <div style="font-size:11px;font-weight:700;color:var(--amber);margin-bottom:4px">STEP 3</div>
+        <div style="font-size:12px;color:var(--text-sec)">POST <code>/api/payments/create-session</code> — Moyasar URL returned</div>
+      </div>
+      <div style="background:var(--bg-2);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center">
+        <div style="font-size:24px;margin-bottom:8px">🏦</div>
+        <div style="font-size:11px;font-weight:700;color:var(--amber);margin-bottom:4px">STEP 4</div>
+        <div style="font-size:12px;color:var(--text-sec)">User completes payment on Moyasar's Hosted Checkout page</div>
+      </div>
+      <div style="background:var(--bg-2);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center">
+        <div style="font-size:24px;margin-bottom:8px">✅</div>
+        <div style="font-size:11px;font-weight:700;color:var(--amber);margin-bottom:4px">STEP 5</div>
+        <div style="font-size:12px;color:var(--text-sec)">Webhook fires → <code>plan_type = ERP_PRO</code> applied instantly</div>
+      </div>
+    </div>
+
+    <div class="sub-title">Plan Selection Modal</div>
+    <p>The <code>openPlanModal(branchId, preselect)</code> JS function injects a full-screen overlay the first time it is called (lazy injection), then animates in a two-column plan card layout. The modal is accessible from:</p>
+    <ul>
+      <li>The purple <strong>"View Plans →"</strong> button in the FREE-plan admin banner</li>
+      <li>The <strong>"Upgrade for Pulse"</strong> button on any FREE-plan Branch Card footer</li>
+      <li>The <strong>"Activate IoT Pulse"</strong> button on any ERP_PRO Branch Card footer</li>
+      <li>Arriving at <code>/admin#upgrade</code> (e.g. from permission-denied 402 responses)</li>
+      <li>The Sponge Engine lock overlay button <strong>"View Plans"</strong></li>
+    </ul>
+
+    <div class="sub-title">Plan Cards</div>
+    <table>
+      <thead><tr><th>Plan</th><th>Icon</th><th>Price</th><th>Key Features</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>Roaster Pro</strong></td>
+          <td>⚗️ Precision Physics</td>
+          <td><code>SAR 1,200/mo</code></td>
+          <td>Sponge Effect Engine · ZATCA Export · Finance Intelligence · IoT Sensor Integration · Risk Watchdog</td>
+        </tr>
+        <tr>
+          <td><strong>IoT Pulse</strong></td>
+          <td>📡 Counter Intelligence</td>
+          <td><code>SAR 500/mo per branch</code></td>
+          <td>Scale-to-POS Reconciliation · Live RH Feed · Auto-failover · Hardware Alerts · Sponge Re-trigger</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="sub-title">Payment API Endpoints</div>
+    <table>
+      <thead><tr><th>Method</th><th>Path</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td>POST</td><td><code>/api/payments/create-session</code></td><td>Creates Moyasar payment session. Returns <code>{payment_url, session_id, mode, amount_sar}</code>. In dev mode (no MOYASAR_SECRET_KEY), returns a local dev-capture URL.</td></tr>
+        <tr><td>GET</td><td><code>/api/payments/dev-capture</code></td><td>Dev-only: simulates successful payment capture and applies the plan upgrade immediately. Auto-redirects to <code>/admin</code> after 4 s.</td></tr>
+        <tr><td>POST</td><td><code>/api/payments/webhook</code></td><td>Moyasar posts here on <code>payment.captured</code> / <code>payment.paid</code> events. Applies plan upgrade; always returns 200.</td></tr>
+        <tr><td>GET</td><td><code>/api/payments/callback</code></td><td>Moyasar redirects user here after checkout. Applies upgrade on success; shows error page on failure. Auto-redirects to <code>/admin</code>.</td></tr>
+        <tr><td>GET</td><td><code>/api/payments/sessions</code></td><td>Lists all payment sessions (admin diagnostics).</td></tr>
+      </tbody>
+    </table>
+
+    <div class="sub-title">create-session Request / Response</div>
+    <pre><code>POST /api/payments/create-session
+{ "branchId": "BR-DMM", "product": "ERP_PRO" }
+
+// Dev mode (no Moyasar key configured):
+{
+  "payment_url": "http://localhost:3000/api/payments/dev-capture?sessionId=dev-…",
+  "session_id" : "dev-1773704605917-pao57f",
+  "mode"       : "dev",
+  "amount_sar" : 1200,
+  "product"    : "ERP_PRO",
+  "branchId"   : "BR-DMM"
+}
+
+// Production (MOYASAR_SECRET_KEY configured):
+{
+  "payment_url": "https://payment.moyasar.com/invoices/…",
+  "session_id" : "pay_…",
+  "mode"       : "live",
+  "amount_sar" : 1200
+}</code></pre>
+
+    <div class="sub-title">Webhook Event Format</div>
+    <pre><code>POST /api/payments/webhook
+{
+  "type": "payment.captured",
+  "data": {
+    "id"     : "pay_abc123",
+    "status" : "captured",
+    "amount" : 120000,
+    "currency": "SAR",
+    "metadata": {
+      "branchId"  : "BR-DMM",
+      "product"   : "ERP_PRO",
+      "branchName": "Dammam"
+    }
+  }
+}
+
+// Response:
+{ "received": true, "action": "applied", "ok": true,
+  "message": "Dammam upgraded to Roaster Pro." }</code></pre>
+
+    <div class="sub-title">applyPlanUpgrade Logic</div>
+    <p>The shared helper <code>applyPlanUpgrade(branchId, product)</code> is called by both the webhook and dev-capture endpoints:</p>
+    <ul>
+      <li><strong>ERP_PRO:</strong> Sets <code>plan_type = 'ERP_PRO'</code> and <code>subscription_expires_at</code> = 31 days from now.</li>
+      <li><strong>PULSE:</strong> Sets <code>pulse_enabled = true</code>. If branch is still FREE, auto-upgrades to ERP_PRO first.</li>
+    </ul>
+
+    <div class="sub-title">Environment Variables</div>
+    <table>
+      <thead><tr><th>Variable</th><th>Description</th><th>Set via</th></tr></thead>
+      <tbody>
+        <tr><td><code>MOYASAR_SECRET_KEY</code></td><td>Moyasar API secret key (<code>sk_test_…</code> or <code>sk_live_…</code>)</td><td><code>wrangler secret put MOYASAR_SECRET_KEY</code></td></tr>
+        <tr><td><code>APP_BASE_URL</code></td><td>Full base URL for callback (<code>https://qabban.pages.dev</code>)</td><td><code>wrangler secret put APP_BASE_URL</code></td></tr>
+      </tbody>
+    </table>
+
+    <div class="info-box">
+      <i class="fa fa-flask"></i>
+      <strong>Dev Mode:</strong> Without <code>MOYASAR_SECRET_KEY</code>, <code>/api/payments/create-session</code> returns a local <code>/api/payments/dev-capture</code> URL that simulates a successful payment instantly — no card required. This is the default behaviour in the sandbox.
+    </div>
+  </div>
+
+
   <!-- Footer -->
   <div style="background:#0a0a0f;border-top:1px solid var(--border);padding:32px 60px;text-align:center">
     <div style="color:var(--amber);font-family:var(--font-mono);font-weight:700;letter-spacing:3px;margin-bottom:8px">QABBAN OS</div>
-    <div style="color:var(--text-muted);font-size:12px">User Manual v6.0 · March 2026 · Qabban Global Exchange &amp; Loyalty Engine v6 · Risk Watchdog v2.0 · Revenue Model v1.0</div>
+    <div style="color:var(--text-muted);font-size:12px">User Manual v7.0 · March 2026 · Qabban Global Exchange &amp; Loyalty Engine v6 · Risk Watchdog v2.0 · Revenue Model v2.0 · Moyasar Checkout v1.0</div>
     <div style="color:var(--text-muted);font-size:11px;margin-top:6px">Hono + TypeScript + Cloudflare Pages · ~12,000 lines · Bilingual EN/AR</div>
   </div>
 

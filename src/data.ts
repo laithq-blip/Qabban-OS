@@ -118,11 +118,36 @@ export const TRANSIT_PHASES: TransitPhase[] = ['TRANSIT', 'ARRIVAL', 'CUSTOMS']
  */
 export type PlanType = 'FREE' | 'ERP_PRO'
 
-/** Monthly SaaS fee for ERP_PRO plan (SAR). */
-export const ERP_PRO_MONTHLY_SAR = 2_500
+/** Monthly SaaS fee for ERP_PRO plan (SAR) — Roaster Pro tier. */
+export const ERP_PRO_MONTHLY_SAR = 1_200
 
-/** One-time activation fee for the IoT Pulse add-on per branch (SAR). */
-export const PULSE_ADDON_MONTHLY_SAR = 750
+/** Monthly fee for the IoT Pulse add-on per branch (SAR). */
+export const PULSE_ADDON_MONTHLY_SAR = 500
+
+// ─── Moyasar payment types ────────────────────────────────────────────────────
+/**
+ * Which plan/add-on a Moyasar payment session covers.
+ * Stored in the payment metadata so the webhook can apply the right upgrade.
+ */
+export type PaymentProduct = 'ERP_PRO' | 'PULSE'
+
+/** Status of a Moyasar payment (mirrors Moyasar's status field). */
+export type MoyasarPaymentStatus = 'initiated' | 'paid' | 'failed' | 'authorized' | 'captured' | 'refunded'
+
+/** Lightweight record of a pending / completed payment session. */
+export interface PaymentSession {
+  sessionId   : string            // Moyasar payment id
+  branchId    : string
+  product     : PaymentProduct
+  amountHalala: number            // 1 SAR = 100 halala
+  status      : MoyasarPaymentStatus
+  createdAt   : string
+  capturedAt  : string | null
+  callbackUrl : string
+}
+
+/** In-memory store for payment sessions (survives request; reset on cold start). */
+export const paymentSessions: PaymentSession[] = []
 
 // ─── License helper functions ─────────────────────────────────────────────────
 
