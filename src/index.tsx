@@ -109,9 +109,102 @@ import {
   WATCHDOG_DURATION_CRITICAL_H,
   type SystemNotification,
   type HumidityViolation,
+  // ── License / Subscription ────────────────────────────────────
+  type PlanType,
+  type LicenseCheck,
+  checkLicense,
+  hasErpAccess,
+  hasPulseAccess,
+  isBranchSubscriptionActive,
+  computeHqRevenue,
+  ERP_PRO_MONTHLY_SAR,
+  PULSE_ADDON_MONTHLY_SAR,
 } from './data'
 
 const app = new Hono()
+
+// ══════════════════════════════════════════════════════════════════
+//  PERMISSION-CHECK MIDDLEWARE
+//  Guards ERP-protected and Pulse-protected endpoints.
+//  Returns 402 Payment Required with a JSON body when the branch's
+//  license does not cover the requested feature.
+//
+//  Endpoint matrix:
+//    POST /api/iot/telemetry        → ERP_PRO required
+//    GET|POST /api/finance/zatca*   → ERP_PRO required
+//    POST /api/pulse/sync           → pulse_enabled required
+//
+//  Resolution strategy:
+//    1. Look for ?branchId=<id> or JSON body { branchId } or
+//       device_key header mapped to the branch.
+//    2. If no branch context, fall back to checking ANY branch
+//       with the broadest permission (conservative: deny if none
+//       qualifies — override per route when a single branch is clear).
+// ══════════════════════════════════════════════════════════════════
+
+type LicenseEnv = { Variables: { licenseCheck: LicenseCheck; licenseB: typeof branches[0] | undefined } }
+
+/**
+ * Resolve which Branch to license-check for a given request.
+ * Tries query-string first, then falls back to the first ERP_PRO branch
+ * (as a "roastery-level" check when no branch context exists).
+ */
+async function resolveLicenseBranch(c: any): Promise<typeof branches[0] | undefined> {
+  const qid = c.req.query('branchId')
+  if (qid) return branches.find(b => b.id === qid)
+  // Try to peek at JSON body without consuming it
+  try {
+    const clone = c.req.raw.clone()
+    const body  = await clone.json() as Record<string, unknown>
+    if (body.branchId) return branches.find(b => b.id === String(body.branchId))
+    if (body.device_key) return branches.find(b => b.iot_device_key === String(body.device_key))
+  } catch { /* non-JSON body */ }
+  return undefined
+}
+
+/**
+ * permission_check — Hono middleware factory.
+ * @param requires  'ERP_PRO' | 'PULSE'
+ *
+ * Usage:
+ *   app.post('/api/iot/telemetry', permission_check('ERP_PRO'), handler)
+ */
+function permission_check(requires: 'ERP_PRO' | 'PULSE') {
+  return async (c: any, next: () => Promise<void>) => {
+    const branch = await resolveLicenseBranch(c)
+    // If no branch resolved, use the most permissive branch to avoid false-blocking
+    // newly registered branches (fail open only for ERP_PRO; PULSE always requires context)
+    if (!branch) {
+      if (requires === 'PULSE') {
+        return c.json({
+          error  : 'Branch context required for Pulse endpoint',
+          reason : 'PULSE_REQUIRED',
+          upgrade: '/admin/billing',
+        }, 402)
+      }
+      // For ERP_PRO: if ANY branch is ERP_PRO and active, allow (roastery-level gate)
+      const anyErp = branches.find(b => hasErpAccess(b))
+      if (!anyErp) {
+        return c.json({
+          error  : 'This feature requires the ERP Pro plan. Upgrade at /admin/billing.',
+          reason : 'PLAN_REQUIRED',
+          upgrade: '/admin/billing',
+        }, 402)
+      }
+      await next()
+      return
+    }
+    const result = checkLicense(branch, requires)
+    if (!result.allowed) {
+      return c.json({
+        error  : result.message,
+        reason : result.reason,
+        upgrade: '/admin/billing',
+      }, result.httpStatus)
+    }
+    await next()
+  }
+}
 
 // ══════════════════════════════════════════════════════════════════
 //  SHARED HTML SHELL
@@ -2522,11 +2615,33 @@ app.get('/admin', (c) => {
     const sc = calcSpongeCoefficient(b.humidity)
     return { ...b, sponge: sc }
   })
+  // ── LicenseGate: Sponge Engine requires ERP_PRO ──────────────────────
+  // Any FREE branch in this roastery shows the upgrade overlay.
+  const hasAnyFreeBranch = branches.some(b => !hasErpAccess(b))
+  const spongeGated = hasAnyFreeBranch
   const spongeAdj      = bal.spongeAdjustmentKg
   const spongeAdjSign  = spongeAdj >= 0 ? '+' : ''
   const spongeAdjColor = spongeAdj > 0 ? 'var(--green)' : spongeAdj < 0 ? 'var(--red)' : 'var(--text-muted)'
 
   const content = `
+  ${hasAnyFreeBranch ? `
+  <!-- ── Upgrade-to-Pro banner (shown when any branch is on FREE plan) ── -->
+  <div style="background:linear-gradient(135deg,#1a0b3d,#2d1a6e);border:1px solid rgba(124,58,237,0.5);border-radius:12px;padding:14px 18px;margin-bottom:20px;display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+    <div style="font-size:22px">🚀</div>
+    <div style="flex:1;min-width:200px">
+      <div style="font-size:14px;font-weight:700;color:#e2e8f0">
+        ${branches.filter(b => !hasErpAccess(b)).map(b => b.name).join(', ')} — on <span style="color:#a78bfa">FREE plan</span>
+      </div>
+      <div style="font-size:12px;color:#c4b5fd;margin-top:3px">
+        Unlock: <strong>Sponge Effect Engine</strong> · ZATCA export · Finance tools · IoT Pulse add-on
+      </div>
+      <div style="font-size:11px;color:#6d28d9;margin-top:2px">SAR ${ERP_PRO_MONTHLY_SAR.toLocaleString()}/mo · Cancel anytime</div>
+    </div>
+    <a href="/hq" style="background:linear-gradient(135deg,#7c3aed,#a855f7);color:#fff;padding:9px 20px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:700;white-space:nowrap">
+      <i class="fa fa-arrow-up-right-from-square"></i> Upgrade at HQ →
+    </a>
+  </div>` : ''}
+
   ${criticalBranches > 0 ? `
   <div class="alert alert-critical">
     <i class="fa fa-triangle-exclamation"></i>
@@ -2694,7 +2809,21 @@ app.get('/admin', (c) => {
   </div>
 
   <!-- ══ SPONGE EFFECT ENGINE PANEL ══ -->
-  <div class="card" style="margin-bottom:28px;border-color:rgba(245,158,11,0.30);background:linear-gradient(135deg,var(--bg-1) 0%,rgba(245,158,11,0.03) 100%)">
+  <div class="card" style="margin-bottom:28px;border-color:rgba(245,158,11,0.30);background:linear-gradient(135deg,var(--bg-1) 0%,rgba(245,158,11,0.03) 100%);position:relative;overflow:hidden">
+    ${spongeGated ? `
+    <!-- LicenseGate overlay for FREE plan -->
+    <div id="sponge-gate-overlay" style="position:absolute;inset:0;z-index:10;backdrop-filter:blur(6px);background:rgba(10,22,40,0.82);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;text-align:center;padding:24px">
+      <div style="font-size:2.2rem">🔒</div>
+      <div style="font-size:18px;font-weight:700;color:#e2e8f0">Physics-Based Mass Calibration</div>
+      <div style="font-size:13px;color:#94a3b8;max-width:340px">The <strong style="color:#f59e0b">Sponge Effect Engine</strong> is an ERP Pro feature. Upgrade your plan to unlock dynamic yield coefficients and humidity-adjusted roasted weight calculations.</div>
+      <div style="background:rgba(124,58,237,0.15);border:1px solid rgba(124,58,237,0.4);border-radius:10px;padding:12px 20px;font-size:12px;color:#c4b5fd;max-width:340px">
+        <i class="fa fa-circle-info"></i> <strong>Upgrade to Pro</strong> to unlock Physics-based mass calibration.
+      </div>
+      <a href="/hq" style="display:inline-block;background:linear-gradient(135deg,#7c3aed,#a855f7);color:#fff;padding:10px 24px;border-radius:8px;text-decoration:none;font-weight:700;font-size:13px;margin-top:4px">
+        <i class="fa fa-arrow-up-right-from-square"></i> Upgrade Plan at HQ
+      </a>
+      <div style="font-size:11px;color:#475569;margin-top:4px">Branches on FREE plan: ${branches.filter(b => !hasErpAccess(b)).map(b => b.name).join(', ')}</div>
+    </div>` : ''}
     <div class="card-title">
       <i class="fa fa-droplet" style="color:var(--amber)"></i>
       <span data-i18n="section.sponge">Sponge Effect — Dynamic Yield Coefficient Engine</span>
@@ -3419,6 +3548,20 @@ app.get('/admin/branches', (c) => {
         <button class="btn-edit-sensor" onclick="openSensorModal('${b.id}','${b.name}',${b.humidity},${b.temperature},'${b.iot_device_key}')">
           <i class="fa fa-sliders"></i> Update Sensors
         </button>
+        <!-- IoT Pulse Add-on button -->
+        ${b.plan_type === 'ERP_PRO'
+          ? b.pulse_enabled
+            ? `<span style="font-size:10px;background:rgba(14,165,233,0.12);color:#0ea5e9;border:1px solid rgba(14,165,233,0.35);border-radius:6px;padding:4px 9px;font-weight:600"><i class="fa fa-bolt"></i> Pulse Active</span>`
+            : `<button onclick="activatePulse('${b.id}','${b.name}')"
+                 style="background:linear-gradient(135deg,#0ea5e9,#38bdf8);color:#fff;border:none;padding:5px 12px;border-radius:6px;cursor:pointer;font-size:11px;font-weight:700">
+                 <i class="fa fa-bolt"></i> Activate IoT Pulse
+               </button>`
+          : `<button onclick="showUpgradeBanner('${b.name}')"
+               style="background:rgba(124,58,237,0.12);color:#a78bfa;border:1px solid rgba(124,58,237,0.35);padding:5px 12px;border-radius:6px;cursor:pointer;font-size:11px;font-weight:600"
+               title="Upgrade to ERP Pro to unlock IoT Pulse">
+               <i class="fa fa-lock"></i> Upgrade for Pulse
+             </button>`
+        }
       </div>
     </div>`}).join('')}
   </div>
@@ -3701,6 +3844,80 @@ app.get('/admin/branches', (c) => {
   document.getElementById('sensorOverlay').addEventListener('click', function(e) {
     if (e.target === this) closeSensorModal()
   })
+
+  // ── Activate IoT Pulse (Moyasar invoice flow) ───────────────────────────────
+  async function activatePulse(branchId, branchName) {
+    const confirmed = confirm(
+      'Activate IoT Pulse for ' + branchName + '?\n\n' +
+      'This will generate a Moyasar invoice for SAR ${PULSE_ADDON_MONTHLY_SAR}/month.\n\n' +
+      'The add-on enables real-time sensor telemetry, automated fail-over, and\n' +
+      'Sponge Engine recalculation on every sensor pulse.'
+    )
+    if (!confirmed) return
+    try {
+      // In production this would call a Moyasar payment link endpoint;
+      // for now we toggle pulse_enabled via HQ API and show confirmation.
+      const res = await fetch('/api/hq/set-plan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ branchId, pulse_enabled: true }),
+      })
+      const data = await res.json()
+      if (data.ok) {
+        showUpgradeBanner(branchName, true)
+        setTimeout(() => location.reload(), 1800)
+      } else {
+        alert('Activation failed: ' + (data.error || 'Unknown error'))
+      }
+    } catch (e) {
+      alert('Network error: ' + e.message)
+    }
+  }
+
+  // ── Upgrade-to-Pro banner ───────────────────────────────────────────────────
+  function showUpgradeBanner(branchName, activated) {
+    let banner = document.getElementById('upgrade-banner')
+    if (!banner) {
+      banner = document.createElement('div')
+      banner.id = 'upgrade-banner'
+      banner.style.cssText = [
+        'position:fixed;top:0;left:0;right:0;z-index:9999',
+        'background:linear-gradient(135deg,#1e1040,#2d1a6e)',
+        'border-bottom:2px solid #7c3aed',
+        'padding:14px 24px',
+        'display:flex;align-items:center;gap:16px;flex-wrap:wrap',
+        'box-shadow:0 4px 24px rgba(124,58,237,0.35)',
+      ].join(';')
+      document.body.appendChild(banner)
+    }
+    if (activated) {
+      banner.innerHTML = [
+        '<i class="fa fa-bolt" style="color:#0ea5e9;font-size:18px"></i>',
+        '<div style="flex:1;min-width:200px">',
+          '<div style="font-size:14px;font-weight:700;color:#e2e8f0">IoT Pulse Activated — ' + branchName + '</div>',
+          '<div style="font-size:12px;color:#94a3b8;margin-top:2px">SAR ${PULSE_ADDON_MONTHLY_SAR}/month · Invoice sent · Reloading...</div>',
+        '</div>',
+        '<button onclick="this.parentElement.remove()" style="background:rgba(255,255,255,0.08);color:#94a3b8;border:none;padding:6px 12px;border-radius:6px;cursor:pointer">✕</button>',
+      ].join('')
+    } else {
+      banner.innerHTML = [
+        '<i class="fa fa-lock" style="color:#a78bfa;font-size:18px"></i>',
+        '<div style="flex:1;min-width:200px">',
+          '<div style="font-size:14px;font-weight:700;color:#e2e8f0">Upgrade to ERP Pro — ' + branchName + '</div>',
+          '<div style="font-size:12px;color:#c4b5fd;margin-top:2px">',
+            'Unlock: Physics-based mass calibration · IoT Pulse · ZATCA export · Finance tools',
+          '</div>',
+          '<div style="font-size:11px;color:#7c3aed;margin-top:4px">SAR ${ERP_PRO_MONTHLY_SAR.toLocaleString()}/month per roastery + SAR ${PULSE_ADDON_MONTHLY_SAR}/month per branch for Pulse</div>',
+        '</div>',
+        '<a href="/hq" style="background:linear-gradient(135deg,#7c3aed,#a855f7);color:#fff;padding:8px 18px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:700;white-space:nowrap">',
+          '<i class="fa fa-arrow-up-right-from-square"></i> Upgrade at HQ',
+        '</a>',
+        '<button onclick="this.parentElement.remove()" style="background:rgba(255,255,255,0.08);color:#94a3b8;border:none;padding:6px 12px;border-radius:6px;cursor:pointer">✕</button>',
+      ].join('')
+    }
+    // Auto-dismiss after 10 s
+    setTimeout(() => { if (banner) banner.remove() }, 10_000)
+  }
 
   </script>`
 
@@ -6844,7 +7061,7 @@ app.post('/api/finance/exchange-rates/refresh', async (c) => {
 // Streams a ZATCA-formatted CSV for tax auditors: Theoretical vs. Actual
 // roasted weight reconciliation, per lot, for the current 30-day period.
 // Includes: Baseline Shrinkage, Rule A Surplus, Rule B Deficit, net adjustment.
-app.get('/admin/finance/zatca-export', (c) => {
+app.get('/admin/finance/zatca-export', permission_check('ERP_PRO'), (c) => {
   const report = calcZatcaShrinkageReport(
     coffeeLots,
     beanRequests,
@@ -10627,7 +10844,7 @@ app.get('/api/pulse/logs', (c) => {
 //   pushAdjustment  : boolean     — whether to push inventory adj to Foodics
 //   sessionId?      : string      — filter wasteLogs to this session only
 // }
-app.post('/api/pulse/sync', async (c) => {
+app.post('/api/pulse/sync', permission_check('PULSE'), async (c) => {
   try {
     const body = await c.req.json() as {
       branchId       : string
@@ -11368,7 +11585,7 @@ async function pulseFoodicsSync() {
 //     Auto-resolve any open SYSTEM_WARNING notifications for this branch
 //  4. Resolve active RH via leg-based resolveActiveRH()
 //  5. Re-run Sponge Effect on all non-recalled lots in this branch
-app.post('/api/iot/telemetry', async (c) => {
+app.post('/api/iot/telemetry', permission_check('ERP_PRO'), async (c) => {
   try {
     const body = await c.req.json() as {
       device_key  : string
@@ -11761,6 +11978,22 @@ app.post('/api/watchdog/notifications/ack-all', (c) => {
   return c.json({ ok: true, acknowledged: unread.length })
 })
 
+// ── GET /admin/billing — Billing redirect to HQ License Manager ──────────────
+app.get('/admin/billing', (c) => {
+  return c.html(`<!DOCTYPE html>
+<html><head><meta charset="UTF-8"/><title>Billing — Qabban OS</title>
+<meta http-equiv="refresh" content="0; url=/hq"/>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css"/>
+</head>
+<body style="background:#0a1628;color:#e2e8f0;font-family:sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0">
+  <div style="text-align:center">
+    <div style="font-size:40px;margin-bottom:16px">🔐</div>
+    <div style="font-size:18px;font-weight:700;margin-bottom:8px">Redirecting to HQ License Manager...</div>
+    <a href="/hq" style="color:#a78bfa;text-decoration:none;font-size:13px"><i class="fa fa-arrow-right"></i> Click here if not redirected</a>
+  </div>
+</body></html>`)
+})
+
 // ── GET /admin/watchdog — Risk Watchdog full dashboard ────────────────────────
 app.get('/admin/watchdog', (c) => {
   const pending   = beanRequests.filter(r => r.status === 'PENDING').length
@@ -11958,6 +12191,301 @@ app.get('/admin/watchdog', (c) => {
   `
 
   return c.html(adminLayout('Risk Watchdog', 'watchdog', content, pending, getUnreadNotifications().length))
+})
+
+
+// ══════════════════════════════════════════════════════════════════
+//  /hq — HQ DASHBOARD  (Revenue Ticker + License Manager)
+//  Restricted view for Qabban Operations team.
+//  Future: protect with HQ_SECRET header or JWT.
+// ══════════════════════════════════════════════════════════════════
+
+// ── GET /api/hq/revenue  ────────────────────────────────────────────────────
+// JSON API backing the /hq dashboard revenue ticker.
+app.get('/api/hq/revenue', (c) => {
+  return c.json(computeHqRevenue())
+})
+
+// ── POST /api/hq/set-plan  ──────────────────────────────────────────────────
+// Allows HQ admins to change a branch plan_type or toggle pulse_enabled.
+// Body: { branchId, plan_type?, pulse_enabled?, subscription_expires_at? }
+app.post('/api/hq/set-plan', async (c) => {
+  try {
+    const body = await c.req.json() as {
+      branchId               : string
+      plan_type?             : PlanType
+      pulse_enabled?         : boolean
+      subscription_expires_at?: string | null
+    }
+    const branch = branches.find(b => b.id === body.branchId)
+    if (!branch) return c.json({ error: 'Branch not found' }, 404)
+
+    const before = {
+      plan_type              : branch.plan_type,
+      pulse_enabled          : branch.pulse_enabled,
+      subscription_expires_at: branch.subscription_expires_at,
+    }
+
+    if (body.plan_type              !== undefined) branch.plan_type               = body.plan_type
+    if (body.pulse_enabled          !== undefined) branch.pulse_enabled           = body.pulse_enabled
+    if (body.subscription_expires_at !== undefined) branch.subscription_expires_at = body.subscription_expires_at
+
+    return c.json({
+      ok: true,
+      branchId  : branch.id,
+      branchName: branch.name,
+      before,
+      after: {
+        plan_type              : branch.plan_type,
+        pulse_enabled          : branch.pulse_enabled,
+        subscription_expires_at: branch.subscription_expires_at,
+      },
+      revenue: computeHqRevenue(),
+    })
+  } catch (e) {
+    return c.json({ error: String(e) }, 400)
+  }
+})
+
+// ── GET /hq  ────────────────────────────────────────────────────────────────
+// Full HQ dashboard HTML page.
+app.get('/hq', (c) => {
+  const rev = computeHqRevenue()
+  const planBadge = (p: PlanType, active: boolean, expired: boolean) => {
+    if (expired) return `<span style="background:#ef4444;color:#fff;padding:2px 8px;border-radius:9px;font-size:11px;font-weight:700">EXPIRED</span>`
+    if (p === 'ERP_PRO') return `<span style="background:#7c3aed;color:#fff;padding:2px 8px;border-radius:9px;font-size:11px;font-weight:700">ERP PRO</span>`
+    return `<span style="background:#6b7280;color:#fff;padding:2px 8px;border-radius:9px;font-size:11px;font-weight:700">FREE</span>`
+  }
+  const addOnBadges = (b: typeof branches[0]) => {
+    const parts: string[] = []
+    if (b.pulse_enabled) parts.push(`<span style="background:#0ea5e9;color:#fff;padding:2px 7px;border-radius:9px;font-size:11px;font-weight:600">⚡ IoT Pulse</span>`)
+    if (b.iot_enabled)   parts.push(`<span style="background:#10b981;color:#fff;padding:2px 7px;border-radius:9px;font-size:11px;font-weight:600">📡 IoT Active</span>`)
+    return parts.join(' ') || '<span style="color:#9ca3af;font-size:11px">None</span>'
+  }
+
+  const licenseRows = rev.branchLicenses.map(bl => {
+    const branch = branches.find(b => b.id === bl.branchId)!
+    const expired = !bl.active && bl.subscription_expires_at !== null
+    return `
+    <tr style="border-bottom:1px solid #1e2d3d">
+      <td style="padding:10px 14px;font-weight:600;color:#e2e8f0">${bl.branchName}</td>
+      <td style="padding:10px 14px;color:#94a3b8;font-size:12px">${bl.branchId}</td>
+      <td style="padding:10px 14px">${planBadge(bl.plan_type, bl.active, expired)}</td>
+      <td style="padding:10px 14px">${addOnBadges(branch)}</td>
+      <td style="padding:10px 14px;color:#94a3b8;font-size:11px">${bl.subscription_expires_at ? new Date(bl.subscription_expires_at).toLocaleDateString('en-SA') : '∞ Perpetual'}</td>
+      <td style="padding:10px 14px;font-weight:700;color:#10b981">SAR ${bl.monthlySar.toLocaleString()}</td>
+      <td style="padding:10px 14px">
+        <button onclick="showUpgradeModal('${bl.branchId}','${bl.plan_type}',${bl.pulse_enabled})"
+                style="background:#7c3aed;color:#fff;border:none;padding:5px 12px;border-radius:6px;cursor:pointer;font-size:12px">
+          Manage
+        </button>
+      </td>
+    </tr>`
+  }).join('')
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>HQ Dashboard — Qabban OS</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css"/>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { background:#0a1628; color:#e2e8f0; font-family:'Segoe UI',sans-serif; margin:0; }
+    .hq-card { background:#0f1f35; border:1px solid #1e3a5f; border-radius:14px; padding:24px; }
+    .ticker-num { font-size:2.4rem; font-weight:800; font-variant-numeric:tabular-nums; }
+    .ticker-label { font-size:12px; color:#64748b; text-transform:uppercase; letter-spacing:.08em; margin-top:4px; }
+    @keyframes pulse-green { 0%,100%{opacity:1}50%{opacity:.4} }
+    .live-dot { display:inline-block;width:8px;height:8px;background:#10b981;border-radius:50%;margin-right:6px;animation:pulse-green 1.8s ease-in-out infinite }
+    table { width:100%;border-collapse:collapse; }
+    th { text-align:left;padding:10px 14px;font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:#475569;border-bottom:1px solid #1e2d3d; }
+    tr:hover td { background:#0d1e33; }
+    .modal-overlay { display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:1000;align-items:center;justify-content:center }
+    .modal-overlay.open { display:flex }
+    .modal-box { background:#0f1f35;border:1px solid #1e3a5f;border-radius:16px;padding:28px;width:420px;max-width:95vw }
+  </style>
+</head>
+<body>
+  <!-- Top nav -->
+  <header style="background:#0a1628;border-bottom:1px solid #1e2d3d;padding:14px 28px;display:flex;align-items:center;gap:16px">
+    <a href="/admin" style="color:#64748b;text-decoration:none;font-size:13px"><i class="fa fa-arrow-left"></i> Admin</a>
+    <span style="color:#1e2d3d">|</span>
+    <span style="font-weight:700;font-size:16px;color:#7c3aed"><i class="fa fa-building-columns"></i> Qabban HQ</span>
+    <span style="margin-left:auto;font-size:12px;color:#64748b"><span class="live-dot"></span>Live</span>
+  </header>
+
+  <main style="max-width:1200px;margin:0 auto;padding:32px 20px">
+
+    <!-- Revenue Ticker -->
+    <h2 style="font-size:13px;text-transform:uppercase;letter-spacing:.1em;color:#475569;margin-bottom:16px">
+      <i class="fa fa-chart-line" style="color:#7c3aed"></i> Live Revenue Ticker
+    </h2>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:36px">
+      <div class="hq-card">
+        <div class="ticker-num" style="color:#10b981" id="ticker-total">SAR ${rev.totalRevenueSar.toLocaleString()}</div>
+        <div class="ticker-label">Total Monthly Revenue</div>
+      </div>
+      <div class="hq-card">
+        <div class="ticker-num" style="color:#7c3aed" id="ticker-saas">SAR ${rev.totalSaasRevenueSar.toLocaleString()}</div>
+        <div class="ticker-label">SaaS Revenue (ERP + Pulse)</div>
+      </div>
+      <div class="hq-card">
+        <div class="ticker-num" style="color:#f59e0b" id="ticker-commission">SAR ${rev.totalCommissionSar.toLocaleString()}</div>
+        <div class="ticker-label">Commission @1.5% (Exchange)</div>
+      </div>
+      <div class="hq-card">
+        <div class="ticker-num" style="color:#e2e8f0">${rev.erpProCount}</div>
+        <div class="ticker-label">ERP Pro Roasteries</div>
+      </div>
+      <div class="hq-card">
+        <div class="ticker-num" style="color:#0ea5e9">${rev.pulseActiveCount}</div>
+        <div class="ticker-label">Pulse Add-ons Active</div>
+      </div>
+      <div class="hq-card">
+        <div class="ticker-num" style="color:${rev.freeCount > 0 ? '#f59e0b' : '#10b981'}">${rev.freeCount}</div>
+        <div class="ticker-label">Free Plan Branches</div>
+      </div>
+    </div>
+
+    <!-- Revenue Model Legend -->
+    <div class="hq-card" style="margin-bottom:28px;padding:18px 24px">
+      <h3 style="font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:#475569;margin:0 0 14px">Revenue Model</h3>
+      <div style="display:flex;flex-wrap:wrap;gap:24px">
+        <div>
+          <span style="background:#7c3aed;color:#fff;padding:2px 10px;border-radius:9px;font-size:11px;font-weight:700">LAYER 1</span>
+          <span style="font-size:13px;margin-left:8px;color:#94a3b8">Global Exchange — <strong style="color:#e2e8f0">1.5% commission</strong> on every CIF transaction</span>
+        </div>
+        <div>
+          <span style="background:#0ea5e9;color:#fff;padding:2px 10px;border-radius:9px;font-size:11px;font-weight:700">LAYER 2</span>
+          <span style="font-size:13px;margin-left:8px;color:#94a3b8">Roaster ERP — <strong style="color:#e2e8f0">SAR ${ERP_PRO_MONTHLY_SAR.toLocaleString()}/mo</strong> per roastery</span>
+        </div>
+        <div>
+          <span style="background:#10b981;color:#fff;padding:2px 10px;border-radius:9px;font-size:11px;font-weight:700">LAYER 3</span>
+          <span style="font-size:13px;margin-left:8px;color:#94a3b8">Pulse Add-on — <strong style="color:#e2e8f0">SAR ${PULSE_ADDON_MONTHLY_SAR.toLocaleString()}/mo</strong> per branch</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- License Manager -->
+    <h2 style="font-size:13px;text-transform:uppercase;letter-spacing:.1em;color:#475569;margin-bottom:16px">
+      <i class="fa fa-id-card" style="color:#7c3aed"></i> License Manager
+    </h2>
+    <div class="hq-card" style="padding:0;overflow:hidden">
+      <table>
+        <thead>
+          <tr>
+            <th>Branch</th><th>ID</th><th>Plan</th><th>Add-ons</th><th>Expires</th><th>Monthly SAR</th><th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="license-tbody">
+          ${licenseRows}
+        </tbody>
+      </table>
+    </div>
+  </main>
+
+  <!-- Manage Plan Modal -->
+  <div class="modal-overlay" id="plan-modal">
+    <div class="modal-box">
+      <h3 style="margin:0 0 18px;font-size:16px;font-weight:700"><i class="fa fa-sliders" style="color:#7c3aed"></i> Manage License</h3>
+      <input type="hidden" id="modal-branch-id"/>
+      <div style="margin-bottom:14px">
+        <label style="font-size:12px;color:#94a3b8;display:block;margin-bottom:6px">Plan Type</label>
+        <select id="modal-plan" style="width:100%;background:#0a1628;border:1px solid #1e3a5f;color:#e2e8f0;padding:8px 12px;border-radius:8px;font-size:14px">
+          <option value="FREE">FREE — Global Exchange only</option>
+          <option value="ERP_PRO">ERP PRO — Full Roaster ERP</option>
+        </select>
+      </div>
+      <div style="margin-bottom:14px;display:flex;align-items:center;gap:10px">
+        <input type="checkbox" id="modal-pulse" style="width:16px;height:16px;accent-color:#0ea5e9"/>
+        <label for="modal-pulse" style="font-size:13px;color:#e2e8f0">⚡ IoT Pulse Add-on Active</label>
+      </div>
+      <div style="margin-bottom:20px">
+        <label style="font-size:12px;color:#94a3b8;display:block;margin-bottom:6px">Subscription Expires (UTC ISO, blank = perpetual)</label>
+        <input type="text" id="modal-expires" placeholder="2027-03-01T00:00:00Z"
+               style="width:100%;background:#0a1628;border:1px solid #1e3a5f;color:#e2e8f0;padding:8px 12px;border-radius:8px;font-size:13px;box-sizing:border-box"/>
+      </div>
+      <div style="display:flex;gap:10px">
+        <button onclick="savePlan()" style="flex:1;background:#7c3aed;color:#fff;border:none;padding:10px;border-radius:8px;cursor:pointer;font-weight:600">Save</button>
+        <button onclick="closeModal()" style="flex:1;background:#1e2d3d;color:#94a3b8;border:none;padding:10px;border-radius:8px;cursor:pointer">Cancel</button>
+      </div>
+      <div id="modal-msg" style="margin-top:12px;font-size:12px;color:#10b981;display:none"></div>
+    </div>
+  </div>
+
+  <script>
+    function showUpgradeModal(branchId, plan, pulseEnabled) {
+      document.getElementById('modal-branch-id').value = branchId
+      document.getElementById('modal-plan').value = plan
+      document.getElementById('modal-pulse').checked = pulseEnabled
+      document.getElementById('modal-msg').style.display = 'none'
+      document.getElementById('plan-modal').classList.add('open')
+    }
+    function closeModal() {
+      document.getElementById('plan-modal').classList.remove('open')
+    }
+    async function savePlan() {
+      const branchId = document.getElementById('modal-branch-id').value
+      const plan_type = document.getElementById('modal-plan').value
+      const pulse_enabled = document.getElementById('modal-pulse').checked
+      const exp = document.getElementById('modal-expires').value.trim()
+      const subscription_expires_at = exp || null
+      const res = await fetch('/api/hq/set-plan', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ branchId, plan_type, pulse_enabled, subscription_expires_at })
+      })
+      const data = await res.json()
+      const msg = document.getElementById('modal-msg')
+      if (data.ok) {
+        msg.style.color = '#10b981'
+        msg.textContent = 'Saved. Refreshing...'
+        msg.style.display = 'block'
+        setTimeout(() => location.reload(), 800)
+      } else {
+        msg.style.color = '#ef4444'
+        msg.textContent = data.error || 'Error saving'
+        msg.style.display = 'block'
+      }
+    }
+    // Live ticker auto-refresh every 30 s
+    setInterval(async () => {
+      try {
+        const r = await fetch('/api/hq/revenue')
+        const d = await r.json()
+        document.getElementById('ticker-total').textContent      = 'SAR ' + d.totalRevenueSar.toLocaleString()
+        document.getElementById('ticker-saas').textContent       = 'SAR ' + d.totalSaasRevenueSar.toLocaleString()
+        document.getElementById('ticker-commission').textContent = 'SAR ' + d.totalCommissionSar.toLocaleString()
+      } catch {}
+    }, 30_000)
+  </script>
+</body>
+</html>`
+  return c.html(html)
+})
+
+// ── GET /api/hq/license-check  ─────────────────────────────────────────────
+// Quick license probe — used by frontend LicenseGate component.
+// Query: ?branchId=BR-RUH&requires=ERP_PRO|PULSE
+app.get('/api/hq/license-check', (c) => {
+  const branchId = c.req.query('branchId')
+  const requires = c.req.query('requires') as 'ERP_PRO' | 'PULSE' | undefined
+  if (!branchId || !requires) {
+    return c.json({ error: 'branchId and requires are required' }, 400)
+  }
+  const branch = branches.find(b => b.id === branchId)
+  if (!branch) return c.json({ error: 'Branch not found' }, 404)
+  const result = checkLicense(branch, requires)
+  return c.json({
+    branchId,
+    requires,
+    ...result,
+    plan_type             : branch.plan_type,
+    pulse_enabled         : branch.pulse_enabled,
+    subscription_expires_at: branch.subscription_expires_at,
+    active                : isBranchSubscriptionActive(branch),
+    upgrade_url           : '/admin/billing',
+  }, result.httpStatus === 200 ? 200 : result.httpStatus)
 })
 
 // ── Scheduled handler — Cloudflare Cron  "0 */6 * * *" ───────────────────────

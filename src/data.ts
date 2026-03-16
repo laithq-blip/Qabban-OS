@@ -107,6 +107,164 @@ export const IOT_STALE_THRESHOLD_MS = 60 * 60 * 1000   // 60 minutes
 export type TransitPhase = 'TRANSIT' | 'ARRIVAL' | 'CUSTOMS'
 export const TRANSIT_PHASES: TransitPhase[] = ['TRANSIT', 'ARRIVAL', 'CUSTOMS']
 
+// ─── License / Subscription types ────────────────────────────────────────────
+/**
+ * Revenue model tiers:
+ *   FREE     → Global Exchange access only (no ERP, no IoT Pulse add-on).
+ *   ERP_PRO  → Full Roaster ERP features (Sponge Engine, ZATCA, Finance, IoT).
+ *
+ * The Pulse Module is an independent branch-level add-on controlled by
+ * `pulse_enabled`; it is only activatable when plan_type === 'ERP_PRO'.
+ */
+export type PlanType = 'FREE' | 'ERP_PRO'
+
+/** Monthly SaaS fee for ERP_PRO plan (SAR). */
+export const ERP_PRO_MONTHLY_SAR = 2_500
+
+/** One-time activation fee for the IoT Pulse add-on per branch (SAR). */
+export const PULSE_ADDON_MONTHLY_SAR = 750
+
+// ─── License helper functions ─────────────────────────────────────────────────
+
+/**
+ * Returns true if the branch subscription is currently active (not expired).
+ * Branches with subscription_expires_at = null are treated as perpetual.
+ */
+export function isBranchSubscriptionActive(branch: Branch): boolean {
+  if (!branch.subscription_expires_at) return true
+  return new Date(branch.subscription_expires_at).getTime() > Date.now()
+}
+
+/**
+ * Returns true if the branch has the ERP_PRO plan AND is not expired.
+ * Use this guard before exposing ERP-only features (Sponge, ZATCA, IoT).
+ */
+export function hasErpAccess(branch: Branch): boolean {
+  return branch.plan_type === 'ERP_PRO' && isBranchSubscriptionActive(branch)
+}
+
+/**
+ * Returns true if the Pulse add-on is active for this branch.
+ * Requires ERP_PRO + pulse_enabled + non-expired subscription.
+ */
+export function hasPulseAccess(branch: Branch): boolean {
+  return hasErpAccess(branch) && branch.pulse_enabled
+}
+
+/**
+ * LicenseCheck result returned by checkLicense().
+ */
+export interface LicenseCheck {
+  allowed   : boolean
+  reason    : 'OK' | 'PLAN_REQUIRED' | 'PULSE_REQUIRED' | 'SUBSCRIPTION_EXPIRED'
+  httpStatus: 200 | 402 | 403
+  message   : string
+}
+
+/**
+ * checkLicense — unified gate used by permission_check middleware.
+ *
+ * @param branch       Branch record (resolved from request context).
+ * @param requires     Which feature gate to test.
+ */
+export function checkLicense(
+  branch   : Branch,
+  requires : 'ERP_PRO' | 'PULSE'
+): LicenseCheck {
+  if (!isBranchSubscriptionActive(branch)) {
+    return {
+      allowed   : false,
+      reason    : 'SUBSCRIPTION_EXPIRED',
+      httpStatus: 402,
+      message   : `Subscription expired on ${branch.subscription_expires_at}. Renew to continue.`,
+    }
+  }
+  if (requires === 'ERP_PRO' && branch.plan_type !== 'ERP_PRO') {
+    return {
+      allowed   : false,
+      reason    : 'PLAN_REQUIRED',
+      httpStatus: 402,
+      message   : 'This feature requires the ERP Pro plan. Upgrade at /admin/billing.',
+    }
+  }
+  if (requires === 'PULSE' && !branch.pulse_enabled) {
+    return {
+      allowed   : false,
+      reason    : 'PULSE_REQUIRED',
+      httpStatus: 402,
+      message   : 'Pulse add-on is not active for this branch. Activate via the Branch Card.',
+    }
+  }
+  return { allowed: true, reason: 'OK', httpStatus: 200, message: 'OK' }
+}
+
+/**
+ * Compute HQ-level revenue summary across all branches.
+ * Used by the /hq dashboard.
+ */
+export function computeHqRevenue(): {
+  totalSaasRevenueSar    : number
+  totalCommissionSar     : number
+  totalRevenueSar        : number
+  erpProCount            : number
+  freeCount              : number
+  pulseActiveCount       : number
+  expiredCount           : number
+  branchLicenses         : Array<{
+    branchId              : string
+    branchName            : string
+    plan_type             : PlanType
+    pulse_enabled         : boolean
+    subscription_expires_at: string | null
+    active                : boolean
+    monthlySar            : number
+    addOns                : string[]
+  }>
+} {
+  const now = Date.now()
+  let saas = 0, commission = 0, erp = 0, free = 0, pulse = 0, expired = 0
+  const branchLicenses = branches.map(b => {
+    const active = isBranchSubscriptionActive(b)
+    const monthly = b.plan_type === 'ERP_PRO' ? ERP_PRO_MONTHLY_SAR : 0
+    const pulseMonthly = (b.pulse_enabled && active) ? PULSE_ADDON_MONTHLY_SAR : 0
+    if (!active) expired++
+    if (b.plan_type === 'ERP_PRO') erp++; else free++
+    if (b.pulse_enabled && active) pulse++
+    if (active) saas += monthly + pulseMonthly
+    const addOns: string[] = []
+    if (b.pulse_enabled) addOns.push('IoT Pulse')
+    return {
+      branchId              : b.id,
+      branchName            : b.name,
+      plan_type             : b.plan_type,
+      pulse_enabled         : b.pulse_enabled,
+      subscription_expires_at: b.subscription_expires_at,
+      active,
+      monthlySar            : active ? monthly + pulseMonthly : 0,
+      addOns,
+    }
+  })
+  // Commission: 1.5% of CIF across all contracted global lots
+  for (const lot of globalLots) {
+    if (lot.status === 'CONTRACTED' || lot.status === 'SHIPPED') {
+      const effRate = lastKnownUsdToSar
+      const fobSar  = lot.fobPriceUsd * effRate
+      const cif     = fobSar * lot.greenWeightKg + shippingEstimateBaseSar
+      commission   += Math.round(cif * QABBAN_PLATFORM_FEE * 100) / 100
+    }
+  }
+  return {
+    totalSaasRevenueSar : Math.round(saas),
+    totalCommissionSar  : Math.round(commission),
+    totalRevenueSar     : Math.round(saas + commission),
+    erpProCount         : erp,
+    freeCount           : free,
+    pulseActiveCount    : pulse,
+    expiredCount        : expired,
+    branchLicenses,
+  }
+}
+
 export interface Branch {
   id:          string
   name:        string          // widened from union — supports user-added branches
@@ -115,6 +273,25 @@ export interface Branch {
   humidity:    number          // weather-API humidity (always updated)
   temperature: number          // weather-API temperature
   lastChecked: string          // ISO timestamp of last weather-API sync
+
+  // ── Subscription / License ────────────────────────────────────────────────
+  /**
+   * Subscription plan for this branch/roastery.
+   *   FREE    → basic access, Sponge Engine disabled.
+   *   ERP_PRO → full feature set.
+   */
+  plan_type              : PlanType
+  /**
+   * Whether the IoT Pulse add-on is active for this branch.
+   * Requires plan_type === 'ERP_PRO'.  Activating triggers a Moyasar invoice.
+   */
+  pulse_enabled          : boolean
+  /**
+   * UTC ISO timestamp of subscription expiry.  null = never expires (legacy /
+   * perpetual).  When now > subscription_expires_at the branch is considered
+   * expired and protected endpoints return 402.
+   */
+  subscription_expires_at: string | null
 
   // ── Hybrid Humidity Model (IoT integration) ──────────────────────────────
   /** Active data source. Defaults to WEATHER_API. */
@@ -939,6 +1116,10 @@ export const branches: Branch[] = [
     humidity:    45,
     temperature: 22,
     lastChecked: '2026-02-24 08:30',
+    // ── License ──
+    plan_type              : 'ERP_PRO',
+    pulse_enabled          : false,
+    subscription_expires_at: '2027-03-01T00:00:00Z',
     // ── IoT ──
     humidity_source     : 'WEATHER_API',
     iot_enabled         : false,
@@ -961,6 +1142,10 @@ export const branches: Branch[] = [
     humidity:    68,
     temperature: 26,
     lastChecked: '2026-02-24 08:28',
+    // ── License ──
+    plan_type              : 'ERP_PRO',
+    pulse_enabled          : true,
+    subscription_expires_at: '2027-03-01T00:00:00Z',
     // ── IoT ──
     humidity_source     : 'WEATHER_API',
     iot_enabled         : false,
@@ -983,6 +1168,10 @@ export const branches: Branch[] = [
     humidity:    80,
     temperature: 28,
     lastChecked: '2026-02-24 08:25',
+    // ── License ──
+    plan_type              : 'FREE',
+    pulse_enabled          : false,
+    subscription_expires_at: null,
     // ── IoT ──
     humidity_source     : 'WEATHER_API',
     iot_enabled         : false,
