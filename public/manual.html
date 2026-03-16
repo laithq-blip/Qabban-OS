@@ -420,6 +420,10 @@
   <a class="sidebar-link" href="#iot-toggle"><i class="fa fa-toggle-on"></i> IoT Source Toggle</a>
   <div class="sidebar-section">Risk Management</div>
   <a class="sidebar-link" href="#risk-watchdog"><i class="fa fa-triangle-exclamation" style="color:#f87171"></i> Risk Watchdog</a>
+  <div class="sidebar-section">Revenue & Licensing</div>
+  <a class="sidebar-link" href="#revenue-model"><i class="fa fa-layers" style="color:#a78bfa"></i> Revenue Model</a>
+  <a class="sidebar-link" href="#license-gate"><i class="fa fa-lock" style="color:#a78bfa"></i> LicenseGate</a>
+  <a class="sidebar-link" href="#hq-dashboard"><i class="fa fa-building-columns" style="color:#a78bfa"></i> HQ Dashboard</a>
   <div class="sidebar-section">Reference</div>
   <a class="sidebar-link" href="#api"><i class="fa fa-plug"></i> API Reference</a>
   <a class="sidebar-link" href="#constants"><i class="fa fa-sliders"></i> Constants & Config</a>
@@ -2066,7 +2070,197 @@ Dammam : dkey-dmm-2a3b4c5d-6e7f-8901-cdef-ab2345678901
 
     <div class="info-box info-red">
       <i class="fa fa-shield-halved"></i>
-      <strong>Security Note (v3.0):</strong> The Pulse and IoT endpoints currently have <strong>no server-side role enforcement</strong>. Access control relies on client-side navigation and device_key authentication for IoT. For production hardening, implement a JWT middleware that rejects Café-role tokens from hitting <code>/api/iot/telemetry</code> and <code>/api/pulse/*</code> admin routes.
+      <strong>Security Note (v3.0):</strong> The Pulse and IoT endpoints now have <strong>server-side permission_check middleware</strong> (v6.0) enforcing plan_type and pulse_enabled. The <code>/api/iot/telemetry</code> and <code>/admin/finance/zatca-export</code> endpoints return <code>402 Payment Required</code> for FREE-plan branches; <code>/api/pulse/sync</code> returns 402 when pulse_enabled is false. For full production hardening, additionally implement JWT middleware to verify caller identity.
+    </div>
+  </div>
+
+  <!-- 35. Revenue Model & Licensing -->
+  <div class="section" id="revenue-model">
+    <div class="section-header">
+      <span class="section-num">35</span>
+      <div>
+        <div class="section-title">Revenue Model — Three-Layer Architecture</div>
+        <div class="section-sub">Global Exchange · Roaster ERP · Pulse Add-on</div>
+      </div>
+    </div>
+
+    <p>Qabban OS monetises through three independent revenue streams, each targeting a different interaction type with the platform.</p>
+
+    <div class="sub-title">Revenue Layers</div>
+    <table>
+      <thead><tr><th>Layer</th><th>Product</th><th>Billing</th><th>Fee</th><th>Trigger</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><span style="background:#7c3aed;color:#fff;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700">LAYER 1</span></td>
+          <td><strong>Global Exchange</strong></td>
+          <td>Transactional</td>
+          <td><code>1.5% of CIF</code></td>
+          <td>Every contracted/shipped GlobalLot</td>
+        </tr>
+        <tr>
+          <td><span style="background:#0ea5e9;color:#fff;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700">LAYER 2</span></td>
+          <td><strong>Roaster ERP</strong></td>
+          <td>Monthly SaaS</td>
+          <td><code>SAR 2,500/mo</code></td>
+          <td>Per roastery with plan_type = ERP_PRO</td>
+        </tr>
+        <tr>
+          <td><span style="background:#10b981;color:#fff;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700">LAYER 3</span></td>
+          <td><strong>Pulse Add-on</strong></td>
+          <td>Branch-level add-on</td>
+          <td><code>SAR 750/mo</code></td>
+          <td>Per branch with pulse_enabled = true</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="sub-title">Branch Subscription Schema</div>
+    <p>Three new fields added to the <code>Branch</code> interface in v6.0:</p>
+    <table>
+      <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>plan_type</code></td><td><code>'FREE' | 'ERP_PRO'</code></td><td>Subscription tier. FREE = Global Exchange only. ERP_PRO = full feature set.</td></tr>
+        <tr><td><code>pulse_enabled</code></td><td><code>boolean</code></td><td>Whether the IoT Pulse add-on is active. Requires ERP_PRO.</td></tr>
+        <tr><td><code>subscription_expires_at</code></td><td><code>string | null</code></td><td>UTC ISO expiry timestamp. null = perpetual. Expired subscriptions return 402.</td></tr>
+      </tbody>
+    </table>
+
+    <div class="sub-title">Seed Data (Default Branch States)</div>
+    <table>
+      <thead><tr><th>Branch</th><th>Plan</th><th>Pulse</th><th>Monthly SAR</th></tr></thead>
+      <tbody>
+        <tr><td>Riyadh (BR-RUH)</td><td>ERP_PRO</td><td>❌</td><td>2,500</td></tr>
+        <tr><td>Jeddah (BR-JED)</td><td>ERP_PRO</td><td>✅</td><td>3,250</td></tr>
+        <tr><td>Dammam (BR-DMM)</td><td>FREE</td><td>❌</td><td>0</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 35b. LicenseGate -->
+  <div class="section" id="license-gate">
+    <div class="section-header">
+      <span class="section-num">35b</span>
+      <div>
+        <div class="section-title">LicenseGate — Feature Access Control</div>
+        <div class="section-sub">Frontend UI gates · Backend permission_check middleware · 402 enforcement</div>
+      </div>
+    </div>
+
+    <div class="sub-title">Backend: permission_check Middleware</div>
+    <p>A Hono middleware factory <code>permission_check(requires)</code> is applied to protected routes. It resolves the branch from the request (via <code>?branchId</code> query param or JSON body), calls <code>checkLicense(branch, requires)</code>, and returns <code>402 Payment Required</code> if the license check fails.</p>
+    <table>
+      <thead><tr><th>Endpoint</th><th>Method</th><th>Requires</th><th>Blocked Response</th></tr></thead>
+      <tbody>
+        <tr><td><code>/api/iot/telemetry</code></td><td>POST</td><td>ERP_PRO</td><td>402 PLAN_REQUIRED</td></tr>
+        <tr><td><code>/admin/finance/zatca-export</code></td><td>GET</td><td>ERP_PRO</td><td>402 PLAN_REQUIRED</td></tr>
+        <tr><td><code>/api/pulse/sync</code></td><td>POST</td><td>PULSE add-on</td><td>402 PULSE_REQUIRED</td></tr>
+      </tbody>
+    </table>
+
+    <div class="sub-title">402 Response Format</div>
+    <pre><code>{
+  "error":   "This feature requires the ERP Pro plan. Upgrade at /admin/billing.",
+  "reason":  "PLAN_REQUIRED",           // or PULSE_REQUIRED | SUBSCRIPTION_EXPIRED
+  "upgrade": "/admin/billing"
+}</code></pre>
+
+    <div class="sub-title">Frontend: LicenseGate Behaviors</div>
+    <table>
+      <thead><tr><th>Location</th><th>FREE Plan Behavior</th><th>ERP_PRO Behavior</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>Inventory Tab — Sponge Engine section</strong></td>
+          <td>Blurred overlay with lock icon: <em>"Upgrade to Pro to unlock Physics-based mass calibration."</em> Links to <code>/hq</code>.</td>
+          <td>Engine fully visible and functional.</td>
+        </tr>
+        <tr>
+          <td><strong>Branch Card footer</strong></td>
+          <td>Purple <button style="background:rgba(124,58,237,0.12);color:#a78bfa;border:1px solid rgba(124,58,237,0.35);padding:3px 10px;border-radius:6px;cursor:pointer;font-size:11px"><i class="fa fa-lock"></i> Upgrade for Pulse</button> button → triggers upgrade banner.</td>
+          <td>Cyan <button style="background:linear-gradient(135deg,#0ea5e9,#38bdf8);color:#fff;border:none;padding:3px 10px;border-radius:6px;font-size:11px"><i class="fa fa-bolt"></i> Activate IoT Pulse</button> button → calls <code>/api/hq/set-plan</code> and triggers Moyasar invoice.</td>
+        </tr>
+        <tr>
+          <td><strong>Admin portal top banner</strong></td>
+          <td>Purple gradient banner lists FREE branches with an <em>"Upgrade at HQ →"</em> link.</td>
+          <td>Banner hidden.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="sub-title">License Helper Functions (src/data.ts)</div>
+    <table>
+      <thead><tr><th>Function</th><th>Returns</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>isBranchSubscriptionActive(branch)</code></td><td>boolean</td><td>True if subscription not expired (null = perpetual).</td></tr>
+        <tr><td><code>hasErpAccess(branch)</code></td><td>boolean</td><td>ERP_PRO + not expired.</td></tr>
+        <tr><td><code>hasPulseAccess(branch)</code></td><td>boolean</td><td>ERP_PRO + pulse_enabled + not expired.</td></tr>
+        <tr><td><code>checkLicense(branch, requires)</code></td><td>LicenseCheck</td><td>Returns <code>{allowed, reason, httpStatus, message}</code>.</td></tr>
+        <tr><td><code>computeHqRevenue()</code></td><td>HqRevenue</td><td>Aggregates SaaS + commission revenue across all branches.</td></tr>
+      </tbody>
+    </table>
+
+    <div class="sub-title">License Probe API</div>
+    <pre><code>GET /api/hq/license-check?branchId=BR-DMM&amp;requires=ERP_PRO
+→ 402  { allowed: false, reason: "PLAN_REQUIRED", ... }
+
+GET /api/hq/license-check?branchId=BR-RUH&amp;requires=ERP_PRO
+→ 200  { allowed: true, reason: "OK", ... }</code></pre>
+  </div>
+
+  <!-- 35c. HQ Dashboard -->
+  <div class="section" id="hq-dashboard">
+    <div class="section-header">
+      <span class="section-num">35c</span>
+      <div>
+        <div class="section-title">HQ Dashboard — <code>/hq</code></div>
+        <div class="section-sub">Live Revenue Ticker · License Manager · Plan Administration</div>
+      </div>
+    </div>
+
+    <p>The HQ Dashboard at <code>/hq</code> is a restricted view for Qabban Operations. It provides real-time revenue visibility and plan management across all branches.</p>
+
+    <div class="sub-title">Revenue Ticker Cards</div>
+    <table>
+      <thead><tr><th>Card</th><th>Color</th><th>Data Source</th></tr></thead>
+      <tbody>
+        <tr><td>Total Monthly Revenue</td><td style="color:#10b981">Green</td><td>SaaS + Commission</td></tr>
+        <tr><td>SaaS Revenue</td><td style="color:#7c3aed">Purple</td><td>ERP_PRO × SAR 2,500 + Pulse × SAR 750</td></tr>
+        <tr><td>Commission @1.5%</td><td style="color:#f59e0b">Amber</td><td>1.5% × CIF for CONTRACTED/SHIPPED lots</td></tr>
+        <tr><td>ERP Pro Roasteries</td><td>White</td><td>Count of ERP_PRO + active branches</td></tr>
+        <tr><td>Pulse Add-ons Active</td><td style="color:#0ea5e9">Cyan</td><td>pulse_enabled + active branches</td></tr>
+        <tr><td>Free Plan Branches</td><td style="color:#f59e0b">Amber</td><td>FREE plan count (upgrade opportunity)</td></tr>
+      </tbody>
+    </table>
+
+    <div class="sub-title">License Manager Table</div>
+    <p>Lists all branches with: Plan badge, Add-on badges (IoT Pulse, IoT Active), subscription expiry, monthly SAR, and a <strong>Manage</strong> button that opens an in-page modal to change plan_type, toggle pulse_enabled, or update subscription_expires_at.</p>
+
+    <div class="sub-title">Live Ticker Auto-Refresh</div>
+    <p>The revenue ticker cards auto-refresh every <strong>30 seconds</strong> via <code>GET /api/hq/revenue</code> — no page reload required.</p>
+
+    <div class="sub-title">HQ API Endpoints</div>
+    <table>
+      <thead><tr><th>Method</th><th>Path</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td>GET</td><td><code>/hq</code></td><td>Full HQ dashboard HTML page.</td></tr>
+        <tr><td>GET</td><td><code>/api/hq/revenue</code></td><td>JSON revenue summary: totals, counts, branchLicenses array.</td></tr>
+        <tr><td>POST</td><td><code>/api/hq/set-plan</code></td><td>Update branch plan_type, pulse_enabled, or subscription_expires_at.</td></tr>
+        <tr><td>GET</td><td><code>/api/hq/license-check</code></td><td>Probe license for a branch + feature gate.</td></tr>
+        <tr><td>GET</td><td><code>/admin/billing</code></td><td>Redirect → /hq.</td></tr>
+      </tbody>
+    </table>
+
+    <div class="sub-title">set-plan Request Body</div>
+    <pre><code>POST /api/hq/set-plan
+{
+  "branchId"               : "BR-DMM",
+  "plan_type"              : "ERP_PRO",           // optional
+  "pulse_enabled"          : true,                 // optional
+  "subscription_expires_at": "2027-06-01T00:00:00Z" // optional, null = perpetual
+}</code></pre>
+
+    <div class="info-box">
+      <i class="fa fa-shield-halved"></i>
+      <strong>Security Note:</strong> The <code>/hq</code> and <code>/api/hq/*</code> endpoints currently have no authentication. For production, add an HQ_SECRET header check or JWT middleware to restrict access to operations staff only.
     </div>
   </div>
 
@@ -2074,7 +2268,7 @@ Dammam : dkey-dmm-2a3b4c5d-6e7f-8901-cdef-ab2345678901
   <!-- Footer -->
   <div style="background:#0a0a0f;border-top:1px solid var(--border);padding:32px 60px;text-align:center">
     <div style="color:var(--amber);font-family:var(--font-mono);font-weight:700;letter-spacing:3px;margin-bottom:8px">QABBAN OS</div>
-    <div style="color:var(--text-muted);font-size:12px">User Manual v5.0 · March 2026 · Qabban Global Exchange &amp; Loyalty Engine v6 · Risk Watchdog v2.0</div>
+    <div style="color:var(--text-muted);font-size:12px">User Manual v6.0 · March 2026 · Qabban Global Exchange &amp; Loyalty Engine v6 · Risk Watchdog v2.0 · Revenue Model v1.0</div>
     <div style="color:var(--text-muted);font-size:11px;margin-top:6px">Hono + TypeScript + Cloudflare Pages · ~12,000 lines · Bilingual EN/AR</div>
   </div>
 
