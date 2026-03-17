@@ -2233,15 +2233,20 @@ app.get('/', (c) => {
 // ══════════════════════════════════════════════════════════════════
 
 function adminLayout(pageTitle: string, activeNav: string, content: string, pendingCount = 0, watchdogCount = 0) {
+  // Compute plan gate once for nav rendering
+  const isFullyFree = branches.every(b => !hasErpAccess(b))   // ALL branches FREE
+  const anyPro      = branches.some(b => hasErpAccess(b))      // at least one ERP_PRO
+
+  // Nav links — proLocked=true means Finance/Pulse are gated on 100%-FREE roasteries
   const navLinks = [
-    { href: '/admin',           icon: 'fa-gauge',         label: 'Overview',        id: 'overview',   i18n: 'nav.overview'  },
-    { href: '/admin/inventory', icon: 'fa-boxes-stacked', label: 'Inventory',       id: 'inventory',  i18n: 'nav.inventory' },
-    { href: '/admin/branches',  icon: 'fa-building',      label: 'Branches',        id: 'branches',   i18n: 'nav.branches'  },
-    { href: '/admin/finance',   icon: 'fa-chart-line',    label: 'Finance',         id: 'finance',    i18n: 'fin.nav'       },
-    { href: '/admin/requests',  icon: 'fa-bell',          label: 'Bean Requests',   id: 'requests',   i18n: 'nav.requests'  },
-    { href: '/exchange',        icon: 'fa-globe',         label: 'Global Exchange', id: 'exchange',   i18n: 'nav.exchange'  },
-    { href: '/admin/pulse',     icon: 'fa-wave-square',   label: 'Pulse',           id: 'pulse',      i18n: 'nav.pulse'     },
-    { href: '/admin/watchdog',  icon: 'fa-shield-virus',  label: 'Risk Watchdog',   id: 'watchdog',   i18n: 'nav.watchdog'  },
+    { href: '/admin',           icon: 'fa-gauge',         label: 'Overview',        id: 'overview',   i18n: 'nav.overview',  proLocked: false },
+    { href: '/admin/inventory', icon: 'fa-boxes-stacked', label: 'Inventory',       id: 'inventory',  i18n: 'nav.inventory', proLocked: false },
+    { href: '/admin/branches',  icon: 'fa-building',      label: 'Branches',        id: 'branches',   i18n: 'nav.branches',  proLocked: false },
+    { href: '/admin/finance',   icon: 'fa-chart-line',    label: 'Finance',         id: 'finance',    i18n: 'fin.nav',       proLocked: isFullyFree },
+    { href: '/admin/requests',  icon: 'fa-bell',          label: 'Bean Requests',   id: 'requests',   i18n: 'nav.requests',  proLocked: false },
+    { href: '/exchange',        icon: 'fa-globe',         label: 'Global Exchange', id: 'exchange',   i18n: 'nav.exchange',  proLocked: false },
+    { href: '/admin/pulse',     icon: 'fa-wave-square',   label: 'Pulse',           id: 'pulse',      i18n: 'nav.pulse',     proLocked: isFullyFree },
+    { href: '/admin/watchdog',  icon: 'fa-shield-virus',  label: 'Risk Watchdog',   id: 'watchdog',   i18n: 'nav.watchdog',  proLocked: false },
   ]
   const body = `
   <header class="topbar">
@@ -2269,8 +2274,24 @@ function adminLayout(pageTitle: string, activeNav: string, content: string, pend
     <nav class="sidebar">
       <div class="sidebar-section">
         <div class="sidebar-label" data-i18n="nav.system">Navigation</div>
-        ${navLinks.map(l => `
-        <a href="${l.href}" class="sidebar-link ${activeNav === l.id ? 'active' : ''}">
+        ${navLinks.map(l => {
+          const isLocked  = l.proLocked
+          const isActive  = activeNav === l.id
+          // Locked nav items: grayed-out, not clickable, show PRO badge
+          if (isLocked) {
+            return `
+        <span class="sidebar-link" title="Requires Roaster Pro — click to upgrade"
+              onclick="if(typeof openPlanModal==='function')openPlanModal(null,'ERP_PRO')"
+              style="cursor:pointer;opacity:0.45;filter:grayscale(0.8);pointer-events:auto">
+          <i class="fa ${l.icon}"></i>
+          <span data-i18n="${l.i18n}" style="text-decoration:line-through;text-decoration-color:rgba(255,255,255,0.25)">${l.label}</span>
+          <span style="margin-left:auto;background:linear-gradient(90deg,#7c3aed,#a855f7);
+                       color:#fff;font-size:8px;font-weight:800;padding:2px 6px;border-radius:4px;
+                       font-family:'IBM Plex Mono',monospace;letter-spacing:.5px;white-space:nowrap">PRO</span>
+        </span>`
+          }
+          return `
+        <a href="${l.href}" class="sidebar-link ${isActive ? 'active' : ''}">
           <i class="fa ${l.icon}"${l.id === 'watchdog' && watchdogCount > 0 ? ' style="color:var(--red)"' : ''}></i> <span data-i18n="${l.i18n}">${l.label}</span>
           ${l.id === 'requests' && pendingCount > 0
             ? `<span style="margin-left:auto;background:var(--red);color:white;font-size:9px;padding:1px 5px;border-radius:9px;font-family:var(--font-mono)">${pendingCount}</span>`
@@ -2278,7 +2299,8 @@ function adminLayout(pageTitle: string, activeNav: string, content: string, pend
           ${l.id === 'watchdog' && watchdogCount > 0
             ? `<span style="margin-left:auto;background:var(--red);color:white;font-size:9px;padding:1px 5px;border-radius:9px;font-family:var(--font-mono)">${watchdogCount}</span>`
             : ''}
-        </a>`).join('')}
+        </a>`
+        }).join('')}
       </div>
       <div class="sidebar-section">
         <div class="sidebar-label" data-i18n="nav.system">System</div>
@@ -2323,10 +2345,16 @@ function adminLayout(pageTitle: string, activeNav: string, content: string, pend
   </div>
   <nav class="mobile-nav">
     <div class="mobile-nav-items">
-      ${navLinks.map(l => `
-      <a href="${l.href}" class="mobile-nav-item ${activeNav === l.id ? 'active' : ''}">
-        <i class="fa ${l.icon}"></i> <span data-i18n="${l.i18n}">${l.label}</span>
-      </a>`).join('')}
+      ${navLinks.map(l => l.proLocked
+        ? `<span class="mobile-nav-item" onclick="if(typeof openPlanModal==='function')openPlanModal(null,'ERP_PRO')"
+             style="cursor:pointer;opacity:0.4;filter:grayscale(1);position:relative">
+             <i class="fa ${l.icon}"></i> <span data-i18n="${l.i18n}">${l.label}</span>
+             <span style="position:absolute;top:0;right:0;background:#7c3aed;color:#fff;font-size:7px;font-weight:800;padding:1px 3px;border-radius:3px;font-family:monospace">PRO</span>
+           </span>`
+        : `<a href="${l.href}" class="mobile-nav-item ${activeNav === l.id ? 'active' : ''}">
+             <i class="fa ${l.icon}"></i> <span data-i18n="${l.i18n}">${l.label}</span>
+           </a>`
+      ).join('')}
     </div>
   </nav>`
   return shell(pageTitle, body)
@@ -2600,6 +2628,12 @@ app.get('/admin', (c) => {
   const optimalLots       = coffeeLots.filter(l => l.status === 'OPTIMAL').length
   const criticalBranches  = branches.filter(b => b.riskStatus === 'CRITICAL' || b.riskStatus === 'HIGH').length
 
+  // ── Payment success toast (redirected from Moyasar callback / dev-capture) ──
+  const paymentStatus  = c.req.query('payment')    // 'success'
+  const paymentProduct = c.req.query('product')    // 'ERP_PRO' | 'PULSE'
+  const paymentPlan    = c.req.query('plan')        // 'Roaster Pro' | 'IoT Pulse'
+  const paymentBranch  = c.req.query('branch')      // branch id
+
   // ── Live Balance: deduct all DISPATCHED orders from purchased totals ──
   const bal = calcLiveBalance(coffeeLots, beanRequests, branches)
 
@@ -2627,50 +2661,137 @@ app.get('/admin', (c) => {
   const spongeAdjColor = spongeAdj > 0 ? 'var(--green)' : spongeAdj < 0 ? 'var(--red)' : 'var(--text-muted)'
 
   const content = `
+  ${paymentStatus === 'success' ? `
+  <!-- ── Payment Success Toast ── -->
+  <div id="payment-success-toast"
+       style="position:fixed;top:16px;right:16px;z-index:9999;max-width:420px;
+              background:linear-gradient(135deg,#052e16,#14532d);
+              border:1px solid rgba(16,185,129,0.5);border-radius:14px;
+              padding:16px 20px;display:flex;align-items:flex-start;gap:14px;
+              box-shadow:0 8px 40px rgba(0,0,0,0.5),0 0 0 1px rgba(16,185,129,0.1);
+              animation:toast-in .35s cubic-bezier(.22,1,.36,1)">
+    <!-- Icon -->
+    <div style="width:40px;height:40px;background:rgba(16,185,129,0.15);border:1px solid rgba(16,185,129,0.3);
+                border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+        <path d="M4 10L8 14L16 6" stroke="#10b981" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
+    <!-- Text -->
+    <div style="flex:1">
+      <div style="font-size:13px;font-weight:800;color:#d1fae5;margin-bottom:3px">
+        Welcome to ${decodeURIComponent(paymentPlan ?? 'Roaster Pro')}!
+      </div>
+      <div style="font-size:12px;color:#6ee7b7;line-height:1.5">
+        ${paymentProduct === 'PULSE'
+          ? 'IoT Pulse add-on activated. Scale-to-POS reconciliation is now live.'
+          : 'Your Physics-based mass calibration is now active. ZATCA &amp; Finance tools are unlocked.'}
+      </div>
+    </div>
+    <!-- Close -->
+    <button onclick="this.closest('#payment-success-toast').remove()"
+            style="background:none;border:none;color:#6ee7b7;cursor:pointer;font-size:16px;
+                   padding:0;line-height:1;flex-shrink:0;opacity:0.7">✕</button>
+  </div>
+  <style>
+    @keyframes toast-in {
+      from { opacity:0; transform:translateX(40px) scale(.96) }
+      to   { opacity:1; transform:translateX(0) scale(1) }
+    }
+  </style>
+  <script>
+    // Auto-dismiss toast after 8 seconds
+    setTimeout(() => {
+      const t = document.getElementById('payment-success-toast');
+      if (t) { t.style.transition='opacity .4s,transform .4s'; t.style.opacity='0'; t.style.transform='translateX(30px)'; setTimeout(()=>t.remove(),400); }
+    }, 8000);
+    // Clean URL (remove payment query params without reload)
+    if (window.history && window.history.replaceState) {
+      window.history.replaceState({}, '', '/admin');
+    }
+  </script>` : ''}
+
   ${hasAnyFreeBranch ? `
   <!-- ── OverviewBanner: Upgrade-to-Pro (shown when any branch is on FREE plan) ── -->
   <div style="position:relative;overflow:hidden;background:linear-gradient(135deg,#0d0520 0%,#130833 40%,#0f1e3d 100%);
               border:1px solid rgba(139,92,246,0.35);border-radius:14px;
-              padding:16px 20px;margin-bottom:22px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;
+              padding:18px 22px;margin-bottom:22px;
               box-shadow:0 0 40px rgba(124,58,237,0.12),0 4px 24px rgba(0,0,0,0.4)">
-    <!-- Radial glow -->
-    <div style="position:absolute;top:-20px;left:-20px;width:200px;height:200px;
-                background:radial-gradient(circle,rgba(124,58,237,0.15) 0%,transparent 70%);
+    <!-- Radial glow left -->
+    <div style="position:absolute;top:-20px;left:-20px;width:220px;height:220px;
+                background:radial-gradient(circle,rgba(124,58,237,0.18) 0%,transparent 70%);
                 pointer-events:none"></div>
-    <!-- Ambient right glow -->
-    <div style="position:absolute;top:0;right:-10px;bottom:0;width:120px;
-                background:radial-gradient(ellipse at right,rgba(245,158,11,0.08) 0%,transparent 70%);
+    <!-- Amber glow right -->
+    <div style="position:absolute;top:0;right:-10px;bottom:0;width:150px;
+                background:radial-gradient(ellipse at right,rgba(245,158,11,0.10) 0%,transparent 70%);
                 pointer-events:none"></div>
-    <!-- Icon block -->
-    <div style="width:44px;height:44px;background:rgba(139,92,246,0.15);
-                border:1px solid rgba(139,92,246,0.3);border-radius:11px;
-                display:flex;align-items:center;justify-content:center;flex-shrink:0">
-      <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
-        <path d="M11 2L14 8.5H20.5L15.5 13L17.5 20L11 16L4.5 20L6.5 13L1.5 8.5H8L11 2Z"
-              fill="rgba(139,92,246,0.8)" stroke="#8b5cf6" stroke-width="0.5"/>
-      </svg>
+
+    <!-- Top row: label + CTA -->
+    <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:14px">
+      <!-- Icon -->
+      <div style="width:42px;height:42px;background:rgba(139,92,246,0.15);
+                  border:1px solid rgba(139,92,246,0.3);border-radius:10px;
+                  display:flex;align-items:center;justify-content:center;flex-shrink:0">
+        <svg width="20" height="20" viewBox="0 0 22 22" fill="none">
+          <path d="M11 2L14 8.5H20.5L15.5 13L17.5 20L11 16L4.5 20L6.5 13L1.5 8.5H8L11 2Z"
+                fill="rgba(139,92,246,0.8)" stroke="#8b5cf6" stroke-width="0.5"/>
+        </svg>
+      </div>
+      <!-- Headline -->
+      <div style="flex:1;min-width:200px">
+        <div style="font-size:14px;font-weight:800;color:#e2e8f0;margin-bottom:2px">
+          ${branches.filter(b => !hasErpAccess(b)).map(b => b.name).join(', ')}
+          <span style="background:rgba(139,92,246,0.15);color:#a78bfa;font-size:10px;font-weight:700;
+                       padding:2px 7px;border-radius:4px;margin-left:6px;font-family:'IBM Plex Mono',monospace;
+                       letter-spacing:.5px;border:1px solid rgba(139,92,246,0.25)">FREE PLAN</span>
+        </div>
+        <div style="font-size:11px;color:#6d28d9;font-family:'IBM Plex Mono',monospace">
+          Unlock Precision Physics · ZATCA · Finance Intelligence · Counter Intelligence (Pulse)
+        </div>
+      </div>
+      <!-- Primary CTA -->
+      <button onclick="openPlanModal(null,'ERP_PRO')"
+              style="position:relative;background:linear-gradient(135deg,#5b21b6,#7c3aed,#a855f7);
+                     color:#fff;border:none;padding:10px 22px;border-radius:9px;cursor:pointer;
+                     font-size:13px;font-weight:800;white-space:nowrap;
+                     box-shadow:0 4px 16px rgba(124,58,237,0.4);letter-spacing:.3px;
+                     font-family:'IBM Plex Mono',monospace">
+        Upgrade to Pro →
+      </button>
     </div>
-    <!-- Text -->
-    <div style="flex:1;min-width:220px">
-      <div style="font-size:13px;font-weight:800;color:#e2e8f0;margin-bottom:3px">
-        ${branches.filter(b => !hasErpAccess(b)).map(b => b.name).join(', ')}
-        <span style="color:#a78bfa;font-weight:600"> — Free Plan</span>
+
+    <!-- 3-tier feature row -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px">
+      <!-- Layer 1: FREE (current) -->
+      <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);
+                  border-radius:8px;padding:10px 12px">
+        <div style="font-size:9px;font-weight:700;color:#4ade80;font-family:'IBM Plex Mono',monospace;
+                    letter-spacing:1.5px;margin-bottom:6px">✓ FREE — ACTIVE</div>
+        <div style="font-size:11px;color:#94a3b8;line-height:1.6">
+          Global Exchange Hub<br>SPOT / FORWARD Market<br>Landed Price Calculator<br>Basic Inventory View
+        </div>
       </div>
-      <div style="font-size:12px;color:#7c3aed;margin-bottom:2px">
-        Unlock: <strong style="color:#a78bfa">Sponge Effect Engine</strong> · ZATCA export · Finance &amp; Margin · IoT Pulse
+      <!-- Layer 2: PRO -->
+      <div style="background:rgba(124,58,237,0.06);border:1px solid rgba(139,92,246,0.2);
+                  border-radius:8px;padding:10px 12px;cursor:pointer"
+           onclick="openPlanModal(null,'ERP_PRO')">
+        <div style="font-size:9px;font-weight:700;color:#a78bfa;font-family:'IBM Plex Mono',monospace;
+                    letter-spacing:1.5px;margin-bottom:6px">🔒 ROASTER PRO · SAR 1,200/mo</div>
+        <div style="font-size:11px;color:#6d28d9;line-height:1.6">
+          Sponge Effect Engine<br>ZATCA Phase-2 Invoicing<br>Financial Intelligence<br>SFDA Recall Vault
+        </div>
       </div>
-      <div style="font-size:11px;color:#4c1d95;font-family:'IBM Plex Mono',monospace">
-        SAR ${ERP_PRO_MONTHLY_SAR.toLocaleString()}/mo · Cancel anytime · ZATCA-compliant
+      <!-- Layer 3: PULSE -->
+      <div style="background:rgba(14,165,233,0.04);border:1px solid rgba(14,165,233,0.15);
+                  border-radius:8px;padding:10px 12px;cursor:pointer"
+           onclick="openPlanModal(null,'PULSE')">
+        <div style="font-size:9px;font-weight:700;color:#38bdf8;font-family:'IBM Plex Mono',monospace;
+                    letter-spacing:1.5px;margin-bottom:6px">⚡ IOT PULSE · SAR 500/mo/branch</div>
+        <div style="font-size:11px;color:#0369a1;line-height:1.6">
+          Scale-to-POS Reconciliation<br>IoT Weight Logging<br>Variance &amp; Loss Reports<br>Dial-in Mode
+        </div>
       </div>
     </div>
-    <button onclick="openPlanModal(null,'ERP_PRO')"
-            style="position:relative;background:linear-gradient(135deg,#5b21b6,#7c3aed,#a855f7);
-                   color:#fff;border:none;padding:10px 22px;border-radius:9px;cursor:pointer;
-                   font-size:13px;font-weight:800;white-space:nowrap;
-                   box-shadow:0 4px 16px rgba(124,58,237,0.35);letter-spacing:.3px;
-                   font-family:'IBM Plex Mono',monospace">
-      View Plans →
-    </button>
   </div>` : ''}
 
   ${criticalBranches > 0 ? `
@@ -2708,7 +2829,8 @@ app.get('/admin', (c) => {
   </div>
 
   <!-- ══ FINANCIAL IMPACT CARD ══ -->
-  <div class="card" style="margin-bottom:28px;border-color:rgba(245,158,11,0.35);background:linear-gradient(135deg,var(--bg-1) 0%,rgba(245,158,11,0.04) 100%)">
+  <div class="card" style="margin-bottom:28px;border-color:rgba(245,158,11,0.35);background:linear-gradient(135deg,var(--bg-1) 0%,rgba(245,158,11,0.04) 100%);position:relative;overflow:hidden;
+       ${spongeGated ? 'filter:grayscale(0.85) opacity(0.55);pointer-events:none' : ''}">
     <div class="card-title" style="margin-bottom:16px">
       <i class="fa fa-chart-line" style="color:var(--amber)"></i>
       <span data-i18n="fin.impact.card">Financial Impact</span>
@@ -2815,6 +2937,20 @@ app.get('/admin', (c) => {
     setInterval(poll, 10000);
   })();
   </script>
+
+  ${spongeGated ? `
+  <!-- FeatureGate click-shield over QFI card -->
+  <div onclick="openPlanModal(null,'ERP_PRO')"
+       style="position:relative;margin:-28px 0 28px;height:28px;cursor:pointer;
+              display:flex;align-items:center;justify-content:center;
+              background:linear-gradient(90deg,transparent,rgba(245,158,11,0.06),transparent);
+              border-radius:0 0 10px 10px;pointer-events:auto">
+    <span style="font-size:11px;color:#78350f;font-family:'IBM Plex Mono',monospace;
+                 background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.2);
+                 padding:3px 14px;border-radius:20px">
+      🔒 Requires Roaster Pro — click to upgrade
+    </span>
+  </div>` : ''}
 
   <!-- Live balance breakdown banner -->
   <div style="background:var(--bg-2);border:1px solid var(--border);border-left:3px solid var(--amber);border-radius:var(--radius);padding:12px 16px;margin-bottom:16px;display:flex;flex-wrap:wrap;gap:24px;align-items:center">
@@ -6378,6 +6514,97 @@ app.get('/admin/inventory', (c) => {
 // ── GET /admin/finance ──────────────────────────────────────────
 app.get('/admin/finance', (c) => {
   const pendingCount = beanRequests.filter(r => r.status === 'PENDING').length
+
+  // ── FeatureGate: Finance requires ERP_PRO on at least one branch ──────────
+  const isFullyFree = branches.every(b => !hasErpAccess(b))
+  if (isFullyFree) {
+    const gateContent = `
+  <!-- FeatureGate: Financial Intelligence — PRO required -->
+  <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;
+              min-height:60vh;text-align:center;padding:48px 24px">
+
+    <!-- Blurred preview cards behind overlay -->
+    <div style="position:relative;width:100%;max-width:760px;margin-bottom:32px">
+      <!-- Ghost stat cards -->
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px;
+                  filter:blur(6px) grayscale(1);opacity:0.25;pointer-events:none;user-select:none">
+        ${['🥉 Bronze — Portfolio Value','🥈 Silver — Portfolio Value','🥇 Gold — Portfolio Value'].map(lbl => `
+        <div style="background:var(--bg-2);border:1px solid var(--border);border-radius:10px;padding:16px">
+          <div style="font-size:11px;color:var(--text-muted);margin-bottom:8px">${lbl}</div>
+          <div style="font-size:28px;font-weight:700;color:var(--text-sec)">████</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:4px">SAR ████</div>
+        </div>`).join('')}
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px;
+                  filter:blur(6px) grayscale(1);opacity:0.25;pointer-events:none;user-select:none">
+        ${['ZATCA Phase-2 Export','Sponge Shrinkage Report','QFI Margin Intelligence','Environmental P&L'].map(lbl => `
+        <div style="background:var(--bg-2);border:1px solid var(--border);border-radius:10px;padding:14px">
+          <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px">${lbl}</div>
+          <div style="height:40px;background:rgba(255,255,255,0.05);border-radius:6px"></div>
+        </div>`).join('')}
+      </div>
+
+      <!-- Lock icon centred over cards -->
+      <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none">
+        <div style="background:rgba(6,14,30,0.82);backdrop-filter:blur(4px);border-radius:20px;padding:20px 28px;
+                    border:1px solid rgba(245,158,11,0.2);box-shadow:0 8px 40px rgba(0,0,0,0.5)">
+          <svg width="40" height="40" viewBox="0 0 40 40" fill="none" style="display:block;margin:0 auto 8px">
+            <rect x="6" y="17" width="28" height="19" rx="4" fill="rgba(245,158,11,0.1)" stroke="#f59e0b" stroke-width="1.5"/>
+            <path d="M13 17V13C13 9.13 16.13 6 20 6C23.87 6 27 9.13 27 13V17" stroke="#f59e0b" stroke-width="2" stroke-linecap="round"/>
+            <circle cx="20" cy="26.5" r="3" fill="#f59e0b" opacity="0.8"/>
+          </svg>
+        </div>
+      </div>
+    </div>
+
+    <!-- Gate message -->
+    <div style="max-width:480px">
+      <div style="font-size:11px;font-family:'IBM Plex Mono',monospace;letter-spacing:3px;
+                  color:#f59e0b;text-transform:uppercase;margin-bottom:10px">
+        ⬡ ROASTER PRO · REQUIRED
+      </div>
+      <h2 style="font-size:24px;font-weight:800;color:#f1f5f9;margin:0 0 12px;letter-spacing:-.5px">
+        Financial Intelligence
+      </h2>
+      <p style="font-size:14px;color:#64748b;margin:0 0 8px;line-height:1.7">
+        Unlock <strong style="color:#f59e0b">ZATCA Phase-2 invoicing</strong>, bulk shrinkage reports,
+        QFI margin intelligence, SFDA Recall Vault, and environmental P&L — all gated behind the
+        <strong style="color:#f59e0b">Roaster Pro</strong> plan.
+      </p>
+      <div style="display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin:18px 0 24px">
+        ${['ZATCA e-Invoice Export','Bulk Shrinkage Reports','QFI Margin Intelligence','SFDA Recall Vault','Sponge Effect Engine','Environmental P&L'].map(f =>
+          `<span style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2);
+                        color:#92400e;font-size:11px;padding:4px 10px;border-radius:20px;
+                        font-family:'IBM Plex Mono',monospace">${f}</span>`
+        ).join('')}
+      </div>
+      <button onclick="if(typeof openPlanModal==='function')openPlanModal(null,'ERP_PRO')"
+              style="background:linear-gradient(135deg,#78350f,#d97706,#f59e0b);color:#1c0800;
+                     border:none;padding:13px 32px;border-radius:11px;cursor:pointer;
+                     font-weight:900;font-size:14px;letter-spacing:.5px;
+                     box-shadow:0 6px 24px rgba(245,158,11,0.35);
+                     font-family:'IBM Plex Mono',monospace">
+        Upgrade to Pro — SAR 1,200/mo
+      </button>
+      <div style="font-size:11px;color:#334155;margin-top:12px;font-family:'IBM Plex Mono',monospace">
+        Cancel anytime · ZATCA-compliant · Includes all 3 branches
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // inject plan modal if branches tab was not visited yet
+    if (typeof openPlanModal === 'undefined') {
+      (function() {
+        var s = document.createElement('script');
+        s.textContent = 'window._planModalPending = true';
+        document.head.appendChild(s);
+      })();
+    }
+  </script>`
+    return c.html(adminLayout('Financial Intelligence', 'finance', gateContent, pendingCount, getUnreadNotifications().length))
+  }
+
   const bal          = calcLiveBalance(coffeeLots, beanRequests, branches)
   // Compute per-tier portfolios so the Finance summary cards start with the right values
   const portBronze   = calcPortfolioFinancials(coffeeLots, bal, branches, undefined, tierMargins.Bronze)
@@ -11350,6 +11577,100 @@ app.get('/api/pulse/reconciliations', (c) => {
 
 // ── GET /admin/pulse — Pulse Dashboard ───────────────────────────
 app.get('/admin/pulse', (c) => {
+  const pendingCountPulse = beanRequests.filter(r => r.status === 'PENDING').length
+
+  // ── FeatureGate: IoT Pulse requires at least one branch with pulse_enabled ──
+  const hasAnyPulse = branches.some(b => hasPulseAccess(b))
+  const hasAnyErp   = branches.some(b => hasErpAccess(b))
+  if (!hasAnyPulse) {
+    const pulseGateContent = `
+  <!-- FeatureGate: IoT Pulse — PULSE add-on required -->
+  <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;
+              min-height:60vh;text-align:center;padding:48px 24px">
+
+    <!-- Blurred preview cards -->
+    <div style="position:relative;width:100%;max-width:760px;margin-bottom:32px">
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px;
+                  filter:blur(6px) grayscale(1);opacity:0.25;pointer-events:none;user-select:none">
+        ${['⚡ Scale Readings','🔄 POS Reconciliation','📊 Waste Variance'].map(lbl => `
+        <div style="background:var(--bg-2);border:1px solid var(--border);border-radius:10px;padding:16px">
+          <div style="font-size:11px;color:var(--text-muted);margin-bottom:8px">${lbl}</div>
+          <div style="font-size:28px;font-weight:700;color:var(--text-sec)">████</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:4px">████ g</div>
+        </div>`).join('')}
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px;
+                  filter:blur(6px) grayscale(1);opacity:0.25;pointer-events:none;user-select:none">
+        ${['IoT Weight Logs','Daily Reconciliation','POS Variance Report','Financial Loss Tracker'].map(lbl => `
+        <div style="background:var(--bg-2);border:1px solid var(--border);border-radius:10px;padding:14px">
+          <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px">${lbl}</div>
+          <div style="height:40px;background:rgba(255,255,255,0.05);border-radius:6px"></div>
+        </div>`).join('')}
+      </div>
+      <!-- Lock icon centred over cards -->
+      <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none">
+        <div style="background:rgba(6,14,30,0.82);backdrop-filter:blur(4px);border-radius:20px;padding:20px 28px;
+                    border:1px solid rgba(14,165,233,0.25);box-shadow:0 8px 40px rgba(0,0,0,0.5)">
+          <svg width="40" height="40" viewBox="0 0 40 40" fill="none" style="display:block;margin:0 auto 8px">
+            <rect x="6" y="17" width="28" height="19" rx="4" fill="rgba(14,165,233,0.1)" stroke="#0ea5e9" stroke-width="1.5"/>
+            <path d="M13 17V13C13 9.13 16.13 6 20 6C23.87 6 27 9.13 27 13V17" stroke="#0ea5e9" stroke-width="2" stroke-linecap="round"/>
+            <circle cx="20" cy="26.5" r="3" fill="#0ea5e9" opacity="0.8"/>
+          </svg>
+          <div style="font-size:11px;color:#0ea5e9;font-family:'IBM Plex Mono',monospace;letter-spacing:1px">PULSE LOCKED</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Gate message -->
+    <div style="max-width:480px">
+      <div style="font-size:11px;font-family:'IBM Plex Mono',monospace;letter-spacing:3px;
+                  color:#0ea5e9;text-transform:uppercase;margin-bottom:10px">
+        ⚡ IOT PULSE · ADD-ON REQUIRED
+      </div>
+      <h2 style="font-size:24px;font-weight:800;color:#f1f5f9;margin:0 0 12px;letter-spacing:-.5px">
+        Counter Intelligence
+      </h2>
+      <p style="font-size:14px;color:#64748b;margin:0 0 8px;line-height:1.7">
+        Unlock <strong style="color:#0ea5e9">Scale-to-POS Reconciliation</strong>, real-time IoT weight logging,
+        daily variance reports, and financial loss tracking — per branch, per brew session.
+        Requires <strong style="color:#a78bfa">Roaster Pro</strong> + the <strong style="color:#0ea5e9">IoT Pulse</strong> add-on.
+      </p>
+      <div style="display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin:18px 0 24px">
+        ${['Scale-to-POS Sync','IoT Weight Logs','Dial-in Mode','Variance Reports','Financial Loss Tracker','Daily Reconciliation'].map(f =>
+          `<span style="background:rgba(14,165,233,0.08);border:1px solid rgba(14,165,233,0.2);
+                        color:#0c4a6e;font-size:11px;padding:4px 10px;border-radius:20px;
+                        font-family:'IBM Plex Mono',monospace">${f}</span>`
+        ).join('')}
+      </div>
+      ${hasAnyErp
+        ? `<button onclick="if(typeof openPlanModal==='function')openPlanModal(null,'PULSE')"
+                style="background:linear-gradient(135deg,#0c4a6e,#0284c7,#0ea5e9);color:#fff;
+                       border:none;padding:13px 32px;border-radius:11px;cursor:pointer;
+                       font-weight:900;font-size:14px;letter-spacing:.5px;
+                       box-shadow:0 6px 24px rgba(14,165,233,0.35);
+                       font-family:'IBM Plex Mono',monospace">
+            Activate IoT Pulse — SAR 500/mo per branch
+          </button>
+          <div style="font-size:11px;color:#334155;margin-top:12px;font-family:'IBM Plex Mono',monospace">
+            Per branch · Cancel anytime · Real-time sync
+          </div>`
+        : `<button onclick="if(typeof openPlanModal==='function')openPlanModal(null,'ERP_PRO')"
+                style="background:linear-gradient(135deg,#78350f,#d97706,#f59e0b);color:#1c0800;
+                       border:none;padding:13px 32px;border-radius:11px;cursor:pointer;
+                       font-weight:900;font-size:14px;letter-spacing:.5px;
+                       box-shadow:0 6px 24px rgba(245,158,11,0.35);
+                       font-family:'IBM Plex Mono',monospace">
+            Start with Roaster Pro — SAR 1,200/mo
+          </button>
+          <div style="font-size:11px;color:#334155;margin-top:12px;font-family:'IBM Plex Mono',monospace">
+            Includes Sponge Engine · ZATCA · Finance · Then add Pulse per branch
+          </div>`
+      }
+    </div>
+  </div>`
+    return c.html(adminLayout('Qabban Pulse — Counter Intelligence', 'pulse', pulseGateContent, pendingCountPulse, getUnreadNotifications().length))
+  }
+
   // Snapshot numbers for the top cards
   const totalWasteLogs = wasteLogs.length
   const totalIotGrams  = Math.round(wasteLogs.reduce((s, l) => s + l.weightGrams, 0) * 10) / 10
@@ -12502,27 +12823,9 @@ app.get('/api/payments/dev-capture', async (c) => {
   session.status    = 'captured'
   session.capturedAt = new Date().toISOString()
 
-  // Show a success page
-  return c.html(`<!DOCTYPE html>
-<html><head><meta charset="UTF-8"/>
-<title>Payment Success — Qabban OS</title>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css"/>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
-</head>
-<body style="background:#080e1e;color:#e2e8f0;font-family:'Segoe UI',sans-serif;
-             display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0">
-  <div style="text-align:center;max-width:420px;padding:32px">
-    <div style="font-size:56px;margin-bottom:16px">✅</div>
-    <h1 style="font-size:22px;font-weight:800;color:#f59e0b;margin:0 0 8px">Payment Successful</h1>
-    <p style="color:#94a3b8;margin-bottom:4px">${result.message}</p>
-    <p style="font-size:12px;color:#475569;margin-bottom:28px">Session ID: ${sessionId}</p>
-    <a href="/admin" style="background:linear-gradient(135deg,#92400e,#f59e0b);color:#1c1008;
-       padding:12px 28px;border-radius:9px;text-decoration:none;font-weight:800;font-size:14px">
-      <i class="fa fa-arrow-left"></i> Back to Dashboard
-    </a>
-  </div>
-  <script>setTimeout(() => location.href='/admin', 4000)</script>
-</body></html>`)
+  // Redirect to dashboard with success toast params
+  const productLabel = product === 'PULSE' ? 'IoT+Pulse' : 'Roaster+Pro'
+  return c.redirect(`/admin?payment=success&product=${encodeURIComponent(product!)}&plan=${productLabel}&branch=${encodeURIComponent(branchId!)}`, 302)
 })
 
 // ── POST /api/payments/webhook ────────────────────────────────────────────────
@@ -12603,26 +12906,23 @@ app.get('/api/payments/callback', async (c) => {
     const session = paymentSessions.find(s => s.sessionId === paymentId)
     if (session) { session.status = 'captured'; session.capturedAt = new Date().toISOString() }
 
+    // Redirect to dashboard with success toast (brief interstitial for SAMA/Moyasar compliance)
+    const productLabel = product === 'PULSE' ? 'IoT+Pulse' : 'Roaster+Pro'
     return c.html(`<!DOCTYPE html>
 <html><head><meta charset="UTF-8"/><title>Payment Success — Qabban OS</title>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
+<meta http-equiv="refresh" content="2;url=/admin?payment=success&product=${encodeURIComponent(product)}&plan=${productLabel}&branch=${encodeURIComponent(branchId)}"/>
 </head>
-<body style="background:#080e1e;color:#e2e8f0;font-family:'Segoe UI',sans-serif;
+<body style="background:#06101e;color:#e2e8f0;font-family:'IBM Plex Mono',monospace;
              display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0">
-  <div style="text-align:center;max-width:440px;padding:32px">
-    <div style="font-size:3.5rem;margin-bottom:18px">🎉</div>
-    <h1 style="font-size:24px;font-weight:800;color:#f59e0b;margin:0 0 10px">
-      Welcome to ${product === 'PULSE' ? 'IoT Pulse' : 'Roaster Pro'}!
-    </h1>
-    <p style="color:#94a3b8;margin-bottom:6px">${result.message}</p>
-    <p style="font-size:12px;color:#475569;margin-bottom:28px">Payment ID: ${paymentId ?? '—'}</p>
-    <a href="/admin" style="background:linear-gradient(135deg,#92400e,#f59e0b);color:#1c1008;
-       padding:12px 28px;border-radius:9px;text-decoration:none;font-weight:800;font-size:14px">
-      <i class="fa fa-rocket"></i> Open Dashboard
-    </a>
+  <div style="text-align:center;padding:32px">
+    <div style="width:56px;height:56px;border:2px solid rgba(245,158,11,0.2);border-top-color:#f59e0b;
+                border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 20px"></div>
+    <div style="font-size:13px;color:#f59e0b;letter-spacing:2px">ACTIVATING YOUR PLAN…</div>
+    <div style="font-size:11px;color:#334155;margin-top:8px">Redirecting to dashboard</div>
   </div>
-  <script>setTimeout(() => location.href='/admin', 5000)</script>
+  <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
+  <script>setTimeout(() => location.href='/admin?payment=success&product=${encodeURIComponent(product)}&plan=${productLabel}&branch=${encodeURIComponent(branchId)}', 1800)</script>
 </body></html>`)
   }
 
