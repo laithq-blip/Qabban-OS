@@ -241,6 +241,7 @@ export function computeHqRevenue(): {
     plan_type             : PlanType
     pulse_enabled         : boolean
     subscription_expires_at: string | null
+    subscription_status   : 'ACTIVE' | 'INACTIVE' | 'EXPIRED' | 'CANCELLED'
     active                : boolean
     monthlySar            : number
     addOns                : string[]
@@ -264,6 +265,7 @@ export function computeHqRevenue(): {
       plan_type             : b.plan_type,
       pulse_enabled         : b.pulse_enabled,
       subscription_expires_at: b.subscription_expires_at,
+      subscription_status   : b.subscription_status,
       active,
       monthlySar            : active ? monthly + pulseMonthly : 0,
       addOns,
@@ -317,6 +319,14 @@ export interface Branch {
    * expired and protected endpoints return 402.
    */
   subscription_expires_at: string | null
+  /**
+   * Lifecycle status of the subscription.
+   *   ACTIVE    → payment captured, features unlocked.
+   *   INACTIVE  → no paid subscription (FREE tier default).
+   *   EXPIRED   → subscription_expires_at is in the past.
+   *   CANCELLED → manually cancelled by admin.
+   */
+  subscription_status: 'ACTIVE' | 'INACTIVE' | 'EXPIRED' | 'CANCELLED'
 
   // ── Hybrid Humidity Model (IoT integration) ──────────────────────────────
   /** Active data source. Defaults to WEATHER_API. */
@@ -1145,6 +1155,7 @@ export const branches: Branch[] = [
     plan_type              : 'ERP_PRO',
     pulse_enabled          : false,
     subscription_expires_at: '2027-03-01T00:00:00Z',
+    subscription_status    : 'ACTIVE',
     // ── IoT ──
     humidity_source     : 'WEATHER_API',
     iot_enabled         : false,
@@ -1171,6 +1182,7 @@ export const branches: Branch[] = [
     plan_type              : 'ERP_PRO',
     pulse_enabled          : true,
     subscription_expires_at: '2027-03-01T00:00:00Z',
+    subscription_status    : 'ACTIVE',
     // ── IoT ──
     humidity_source     : 'WEATHER_API',
     iot_enabled         : false,
@@ -1197,6 +1209,7 @@ export const branches: Branch[] = [
     plan_type              : 'FREE',
     pulse_enabled          : false,
     subscription_expires_at: null,
+    subscription_status    : 'INACTIVE',
     // ── IoT ──
     humidity_source     : 'WEATHER_API',
     iot_enabled         : false,

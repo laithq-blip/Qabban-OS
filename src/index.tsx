@@ -2628,20 +2628,48 @@ app.get('/admin', (c) => {
 
   const content = `
   ${hasAnyFreeBranch ? `
-  <!-- ── Upgrade-to-Pro banner (shown when any branch is on FREE plan) ── -->
-  <div style="background:linear-gradient(135deg,#1a0b3d,#2d1a6e);border:1px solid rgba(124,58,237,0.5);border-radius:12px;padding:14px 18px;margin-bottom:20px;display:flex;align-items:center;gap:14px;flex-wrap:wrap">
-    <div style="font-size:22px">🚀</div>
-    <div style="flex:1;min-width:200px">
-      <div style="font-size:14px;font-weight:700;color:#e2e8f0">
-        ${branches.filter(b => !hasErpAccess(b)).map(b => b.name).join(', ')} — on <span style="color:#a78bfa">FREE plan</span>
-      </div>
-      <div style="font-size:12px;color:#c4b5fd;margin-top:3px">
-        Unlock: <strong>Sponge Effect Engine</strong> · ZATCA export · Finance tools · IoT Pulse add-on
-      </div>
-      <div style="font-size:11px;color:#6d28d9;margin-top:2px">SAR ${ERP_PRO_MONTHLY_SAR.toLocaleString()}/mo · Cancel anytime</div>
+  <!-- ── OverviewBanner: Upgrade-to-Pro (shown when any branch is on FREE plan) ── -->
+  <div style="position:relative;overflow:hidden;background:linear-gradient(135deg,#0d0520 0%,#130833 40%,#0f1e3d 100%);
+              border:1px solid rgba(139,92,246,0.35);border-radius:14px;
+              padding:16px 20px;margin-bottom:22px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;
+              box-shadow:0 0 40px rgba(124,58,237,0.12),0 4px 24px rgba(0,0,0,0.4)">
+    <!-- Radial glow -->
+    <div style="position:absolute;top:-20px;left:-20px;width:200px;height:200px;
+                background:radial-gradient(circle,rgba(124,58,237,0.15) 0%,transparent 70%);
+                pointer-events:none"></div>
+    <!-- Ambient right glow -->
+    <div style="position:absolute;top:0;right:-10px;bottom:0;width:120px;
+                background:radial-gradient(ellipse at right,rgba(245,158,11,0.08) 0%,transparent 70%);
+                pointer-events:none"></div>
+    <!-- Icon block -->
+    <div style="width:44px;height:44px;background:rgba(139,92,246,0.15);
+                border:1px solid rgba(139,92,246,0.3);border-radius:11px;
+                display:flex;align-items:center;justify-content:center;flex-shrink:0">
+      <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+        <path d="M11 2L14 8.5H20.5L15.5 13L17.5 20L11 16L4.5 20L6.5 13L1.5 8.5H8L11 2Z"
+              fill="rgba(139,92,246,0.8)" stroke="#8b5cf6" stroke-width="0.5"/>
+      </svg>
     </div>
-    <button onclick="openPlanModal(null,'ERP_PRO')" style="background:linear-gradient(135deg,#7c3aed,#a855f7);color:#fff;border:none;padding:9px 20px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:700;white-space:nowrap">
-      <i class="fa fa-rocket"></i> View Plans →
+    <!-- Text -->
+    <div style="flex:1;min-width:220px">
+      <div style="font-size:13px;font-weight:800;color:#e2e8f0;margin-bottom:3px">
+        ${branches.filter(b => !hasErpAccess(b)).map(b => b.name).join(', ')}
+        <span style="color:#a78bfa;font-weight:600"> — Free Plan</span>
+      </div>
+      <div style="font-size:12px;color:#7c3aed;margin-bottom:2px">
+        Unlock: <strong style="color:#a78bfa">Sponge Effect Engine</strong> · ZATCA export · Finance &amp; Margin · IoT Pulse
+      </div>
+      <div style="font-size:11px;color:#4c1d95;font-family:'IBM Plex Mono',monospace">
+        SAR ${ERP_PRO_MONTHLY_SAR.toLocaleString()}/mo · Cancel anytime · ZATCA-compliant
+      </div>
+    </div>
+    <button onclick="openPlanModal(null,'ERP_PRO')"
+            style="position:relative;background:linear-gradient(135deg,#5b21b6,#7c3aed,#a855f7);
+                   color:#fff;border:none;padding:10px 22px;border-radius:9px;cursor:pointer;
+                   font-size:13px;font-weight:800;white-space:nowrap;
+                   box-shadow:0 4px 16px rgba(124,58,237,0.35);letter-spacing:.3px;
+                   font-family:'IBM Plex Mono',monospace">
+      View Plans →
     </button>
   </div>` : ''}
 
@@ -2814,18 +2842,24 @@ app.get('/admin', (c) => {
   <!-- ══ SPONGE EFFECT ENGINE PANEL ══ -->
   <div class="card" style="margin-bottom:28px;border-color:rgba(245,158,11,0.30);background:linear-gradient(135deg,var(--bg-1) 0%,rgba(245,158,11,0.03) 100%);position:relative;overflow:hidden">
     ${spongeGated ? `
-    <!-- LicenseGate overlay for FREE plan -->
-    <div id="sponge-gate-overlay" style="position:absolute;inset:0;z-index:10;backdrop-filter:blur(6px);background:rgba(10,22,40,0.82);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;text-align:center;padding:24px">
-      <div style="font-size:2.2rem">🔒</div>
-      <div style="font-size:18px;font-weight:700;color:#e2e8f0">Physics-Based Mass Calibration</div>
-      <div style="font-size:13px;color:#94a3b8;max-width:340px">The <strong style="color:#f59e0b">Sponge Effect Engine</strong> is an ERP Pro feature. Upgrade your plan to unlock dynamic yield coefficients and humidity-adjusted roasted weight calculations.</div>
-      <div style="background:rgba(124,58,237,0.15);border:1px solid rgba(124,58,237,0.4);border-radius:10px;padding:12px 20px;font-size:12px;color:#c4b5fd;max-width:340px">
-        <i class="fa fa-circle-info"></i> <strong>Upgrade to Pro</strong> to unlock Physics-based mass calibration.
+    <!-- LicenseGate overlay for FREE plan — links to PlanSelectionModal -->
+    <div id="sponge-gate-overlay" style="position:absolute;inset:0;z-index:10;backdrop-filter:blur(7px) saturate(1.2);background:rgba(6,14,30,0.85);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;text-align:center;padding:28px">
+      <div style="width:56px;height:56px;background:rgba(245,158,11,0.1);border:1.5px solid rgba(245,158,11,0.25);border-radius:16px;display:flex;align-items:center;justify-content:center;margin-bottom:4px">
+        <svg width="26" height="26" viewBox="0 0 26 26" fill="none">
+          <rect x="4" y="11" width="18" height="13" rx="3" stroke="#f59e0b" stroke-width="1.5" fill="rgba(245,158,11,0.08)"/>
+          <path d="M8.5 11V8C8.5 5.5 10.2 3.5 13 3.5C15.8 3.5 17.5 5.5 17.5 8V11" stroke="#f59e0b" stroke-width="1.5" stroke-linecap="round"/>
+          <circle cx="13" cy="17.5" r="2" fill="#f59e0b" opacity="0.7"/>
+        </svg>
       </div>
-      <button onclick="openPlanModal(null,'ERP_PRO')" style="display:inline-block;background:linear-gradient(135deg,#7c3aed,#a855f7);color:#fff;border:none;padding:10px 24px;border-radius:8px;cursor:pointer;font-weight:700;font-size:13px;margin-top:4px">
-        <i class="fa fa-rocket"></i> View Plans
+      <div style="font-size:17px;font-weight:800;color:#f1f5f9;letter-spacing:-.3px">Physics-Based Mass Calibration</div>
+      <div style="font-size:12.5px;color:#64748b;max-width:360px;line-height:1.6">The <strong style="color:#f59e0b">Sponge Effect Engine</strong> is an ERP Pro feature. Upgrade to unlock dynamic yield coefficients and humidity-adjusted roasted weight calculations.</div>
+      <div style="background:rgba(245,158,11,0.07);border:1px solid rgba(245,158,11,0.2);border-radius:10px;padding:10px 18px;font-size:11.5px;color:#92400e;max-width:360px;font-family:'IBM Plex Mono',monospace">
+        Upgrade to Pro to unlock Physics‑based mass calibration.
+      </div>
+      <button onclick="openPlanModal(null,'ERP_PRO')" style="background:linear-gradient(135deg,#78350f,#d97706,#f59e0b);color:#1c0800;border:none;padding:11px 26px;border-radius:10px;cursor:pointer;font-weight:900;font-size:13px;letter-spacing:.5px;box-shadow:0 4px 18px rgba(245,158,11,0.3);font-family:'IBM Plex Mono',monospace">
+        View Plans — from SAR 1,200/mo
       </button>
-      <div style="font-size:11px;color:#475569;margin-top:4px">Branches on FREE plan: ${branches.filter(b => !hasErpAccess(b)).map(b => b.name).join(', ')}</div>
+      <div style="font-size:11px;color:#1e3a5f;margin-top:2px;font-family:'IBM Plex Mono',monospace">Free plan branches: ${branches.filter(b => !hasErpAccess(b)).map(b => b.name).join(', ')}</div>
     </div>` : ''}
     <div class="card-title">
       <i class="fa fa-droplet" style="color:var(--amber)"></i>
@@ -3856,150 +3890,273 @@ app.get('/admin/branches', (c) => {
   ;(function injectPlanModal() {
     if (document.getElementById('plan-select-overlay')) return
     document.body.insertAdjacentHTML('beforeend', \`
-    <!-- Plan Selection Modal -->
+    <!-- Plan Selection Modal — PlanSelectionModal v2 -->
     <div id="plan-select-overlay"
          style="display:none;position:fixed;inset:0;z-index:10000;
-                background:rgba(5,10,20,0.88);backdrop-filter:blur(8px);
+                background:rgba(3,7,18,0.92);backdrop-filter:blur(12px) saturate(1.4);
                 align-items:center;justify-content:center">
+
+      <!-- Radial ambient glow behind modal -->
+      <div style="position:absolute;inset:0;pointer-events:none;
+                  background:radial-gradient(ellipse 60% 50% at 50% 50%,rgba(245,158,11,0.06) 0%,transparent 70%)"></div>
+
       <div id="plan-select-box"
-           style="background:linear-gradient(160deg,#080e1e 0%,#0d1827 60%,#111827 100%);
-                  border:1px solid rgba(245,158,11,0.18);
-                  border-radius:20px;width:580px;max-width:95vw;
-                  box-shadow:0 0 80px rgba(245,158,11,0.08),0 32px 64px rgba(0,0,0,0.6);
+           style="background:linear-gradient(165deg,#06101e 0%,#0a1628 55%,#0d1f38 100%);
+                  border:1px solid rgba(245,158,11,0.22);
+                  border-radius:22px;width:620px;max-width:96vw;
+                  box-shadow:0 0 0 1px rgba(255,255,255,0.03),
+                             0 0 60px rgba(245,158,11,0.1),
+                             0 40px 80px rgba(0,0,0,0.7);
                   overflow:hidden;position:relative">
 
-        <!-- Ambient glow bar -->
-        <div style="height:3px;background:linear-gradient(90deg,transparent,rgba(245,158,11,0.6),#7c3aed,transparent)"></div>
+        <!-- Top amber glow bar with animated shimmer -->
+        <div style="height:2px;background:linear-gradient(90deg,transparent 0%,rgba(245,158,11,0.8) 30%,rgba(139,92,246,0.9) 60%,rgba(245,158,11,0.4) 85%,transparent 100%);position:relative">
+          <div class="pm-shimmer"></div>
+        </div>
 
         <!-- Header -->
         <div style="padding:28px 32px 0;display:flex;align-items:flex-start;justify-content:space-between">
           <div>
-            <div style="font-size:11px;font-family:'Courier New',monospace;letter-spacing:3px;
-                        color:var(--amber,#f59e0b);text-transform:uppercase;margin-bottom:6px">
-              ⬡ QABBAN OS · SUBSCRIPTION
+            <div style="font-size:10px;font-family:'IBM Plex Mono',monospace;letter-spacing:3.5px;
+                        color:#f59e0b;text-transform:uppercase;margin-bottom:8px;
+                        display:flex;align-items:center;gap:8px">
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                <path d="M6 1L7.5 4.5H11L8.5 7L9.5 11L6 8.5L2.5 11L3.5 7L1 4.5H4.5L6 1Z" fill="#f59e0b" opacity=".9"/>
+              </svg>
+              QABBAN OS · SUBSCRIPTION
             </div>
-            <h2 style="margin:0;font-size:22px;font-weight:800;color:#f1f5f9;letter-spacing:-0.5px">
-              Choose Your Plan
+            <h2 style="margin:0;font-size:23px;font-weight:800;color:#f8fafc;letter-spacing:-0.6px;
+                       font-family:'Inter','Segoe UI',sans-serif">
+              Unlock Your Roastery
             </h2>
-            <p style="margin:6px 0 0;font-size:13px;color:#64748b">
-              Precision tools for specialty coffee operations
+            <p style="margin:7px 0 0;font-size:13px;color:#475569;font-style:italic">
+              Precision physics &amp; counter intelligence for specialty coffee
             </p>
           </div>
           <button id="plan-modal-close"
-                  style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.08);
-                         color:#64748b;width:32px;height:32px;border-radius:8px;cursor:pointer;
-                         font-size:16px;display:flex;align-items:center;justify-content:center">✕</button>
+                  style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);
+                         color:#475569;width:34px;height:34px;border-radius:9px;cursor:pointer;
+                         font-size:15px;display:flex;align-items:center;justify-content:center;
+                         transition:all .15s"
+                  onmouseover="this.style.background='rgba(255,255,255,0.09)';this.style.color='#94a3b8'"
+                  onmouseout="this.style.background='rgba(255,255,255,0.04)';this.style.color='#475569'">✕</button>
         </div>
 
         <!-- Plan cards -->
-        <div style="padding:24px 32px;display:grid;grid-template-columns:1fr 1fr;gap:16px" id="plan-cards">
+        <div style="padding:24px 32px 20px;display:grid;grid-template-columns:1fr 1fr;gap:18px" id="plan-cards">
 
-          <!-- Roaster Pro card -->
+          <!-- ══ Roaster Pro card ══ -->
           <div class="pm-card pm-card-pro" data-product="ERP_PRO"
-               style="border:2px solid rgba(245,158,11,0.25);border-radius:14px;
-                      padding:22px 20px;cursor:pointer;position:relative;
-                      background:rgba(245,158,11,0.04);transition:all .2s">
-            <div style="position:absolute;top:-10px;left:50%;transform:translateX(-50%);
-                        background:linear-gradient(135deg,#92400e,#f59e0b);
-                        color:#fff;font-size:10px;font-weight:700;letter-spacing:1px;
-                        padding:3px 12px;border-radius:20px;white-space:nowrap">
-              MOST POPULAR
+               style="border:1.5px solid rgba(245,158,11,0.28);border-radius:16px;
+                      padding:24px 20px;cursor:pointer;position:relative;
+                      background:linear-gradient(145deg,rgba(245,158,11,0.05) 0%,rgba(245,158,11,0.02) 100%);
+                      transition:all .22s cubic-bezier(.22,1,.36,1)">
+            <!-- POPULAR badge -->
+            <div style="position:absolute;top:-11px;left:50%;transform:translateX(-50%);
+                        background:linear-gradient(90deg,#78350f,#d97706,#f59e0b);
+                        color:#1c0a00;font-size:9.5px;font-weight:800;letter-spacing:1.5px;
+                        padding:3px 13px;border-radius:20px;white-space:nowrap;
+                        font-family:'IBM Plex Mono',monospace">
+              ✦ MOST POPULAR
             </div>
-            <!-- Icon -->
-            <div style="width:48px;height:48px;background:rgba(245,158,11,0.12);
-                        border:1px solid rgba(245,158,11,0.3);border-radius:12px;
+
+            <!-- SVG Icon: Flask/Physics for Sponge Engine -->
+            <div style="width:50px;height:50px;background:rgba(245,158,11,0.1);
+                        border:1px solid rgba(245,158,11,0.25);border-radius:13px;
                         display:flex;align-items:center;justify-content:center;
-                        font-size:22px;margin-bottom:16px">⚗️</div>
-            <div style="font-size:15px;font-weight:700;color:#f1f5f9;margin-bottom:4px">
+                        margin-bottom:18px;box-shadow:0 0 20px rgba(245,158,11,0.08)">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <!-- Precision Physics / Sponge Engine icon: abstract atom/wave -->
+                <circle cx="12" cy="12" r="3" fill="#f59e0b" opacity="0.9"/>
+                <ellipse cx="12" cy="12" rx="9" ry="4" stroke="#f59e0b" stroke-width="1.5" fill="none" opacity="0.6"/>
+                <ellipse cx="12" cy="12" rx="9" ry="4" stroke="#f59e0b" stroke-width="1.5" fill="none" opacity="0.4"
+                         transform="rotate(60 12 12)"/>
+                <ellipse cx="12" cy="12" rx="9" ry="4" stroke="#f59e0b" stroke-width="1.5" fill="none" opacity="0.4"
+                         transform="rotate(120 12 12)"/>
+              </svg>
+            </div>
+
+            <div style="font-size:16px;font-weight:800;color:#f1f5f9;margin-bottom:3px;
+                        font-family:'Inter','Segoe UI',sans-serif">
               Roaster Pro
             </div>
-            <div style="font-size:11px;color:#78716c;margin-bottom:16px;line-height:1.5">
-              Precision Physics Engine
+            <div style="font-size:11px;color:#854d0e;margin-bottom:16px;line-height:1.5;
+                        font-family:'IBM Plex Mono',monospace;letter-spacing:.5px">
+              PRECISION PHYSICS ENGINE
             </div>
-            <div style="margin-bottom:18px">
-              <span style="font-size:28px;font-weight:800;color:#f59e0b">SAR 1,200</span>
-              <span style="font-size:12px;color:#64748b">/month</span>
+            <div style="margin-bottom:20px;display:flex;align-items:baseline;gap:5px">
+              <span style="font-size:30px;font-weight:900;color:#f59e0b;letter-spacing:-1px">SAR 1,200</span>
+              <span style="font-size:12px;color:#57534e">/month</span>
             </div>
-            <ul style="list-style:none;margin:0;padding:0;font-size:12px;color:#94a3b8;display:grid;gap:7px">
-              <li><span style="color:#f59e0b;margin-right:6px">⬡</span> Sponge Effect Engine</li>
-              <li><span style="color:#f59e0b;margin-right:6px">⬡</span> ZATCA e-Invoice Export</li>
-              <li><span style="color:#f59e0b;margin-right:6px">⬡</span> Finance & Margin Intelligence</li>
-              <li><span style="color:#f59e0b;margin-right:6px">⬡</span> IoT Sensor Integration</li>
-              <li><span style="color:#f59e0b;margin-right:6px">⬡</span> Risk Watchdog Escalation</li>
+            <ul style="list-style:none;margin:0;padding:0;font-size:12px;color:#94a3b8;display:grid;gap:8px">
+              <li style="display:flex;align-items:center;gap:8px">
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                  <path d="M2.5 7L5.5 10L11.5 4" stroke="#f59e0b" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+                Sponge Effect Engine
+              </li>
+              <li style="display:flex;align-items:center;gap:8px">
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                  <path d="M2.5 7L5.5 10L11.5 4" stroke="#f59e0b" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+                ZATCA e-Invoice Export
+              </li>
+              <li style="display:flex;align-items:center;gap:8px">
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                  <path d="M2.5 7L5.5 10L11.5 4" stroke="#f59e0b" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+                Finance &amp; Margin Intelligence
+              </li>
+              <li style="display:flex;align-items:center;gap:8px">
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                  <path d="M2.5 7L5.5 10L11.5 4" stroke="#f59e0b" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+                IoT Sensor Integration
+              </li>
+              <li style="display:flex;align-items:center;gap:8px">
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                  <path d="M2.5 7L5.5 10L11.5 4" stroke="#f59e0b" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+                Risk Watchdog Escalation
+              </li>
             </ul>
             <button class="pm-subscribe-btn" data-product="ERP_PRO"
-                    style="width:100%;margin-top:20px;padding:11px;
-                           background:linear-gradient(135deg,#92400e,#d97706,#f59e0b);
-                           color:#1c1008;font-weight:800;font-size:13px;
-                           border:none;border-radius:9px;cursor:pointer;letter-spacing:.3px">
+                    style="width:100%;margin-top:22px;padding:12px;
+                           background:linear-gradient(135deg,#78350f 0%,#d97706 50%,#f59e0b 100%);
+                           color:#1c0a00;font-weight:900;font-size:13px;
+                           border:none;border-radius:10px;cursor:pointer;letter-spacing:.5px;
+                           box-shadow:0 4px 20px rgba(245,158,11,0.25);
+                           font-family:'IBM Plex Mono',monospace">
               Subscribe — SAR 1,200/mo
             </button>
           </div>
 
-          <!-- IoT Pulse card -->
+          <!-- ══ IoT Pulse card ══ -->
           <div class="pm-card pm-card-pulse" data-product="PULSE"
-               style="border:2px solid rgba(14,165,233,0.2);border-radius:14px;
-                      padding:22px 20px;cursor:pointer;position:relative;
-                      background:rgba(14,165,233,0.03);transition:all .2s">
-            <!-- Icon -->
-            <div style="width:48px;height:48px;background:rgba(14,165,233,0.1);
-                        border:1px solid rgba(14,165,233,0.3);border-radius:12px;
+               style="border:1.5px solid rgba(14,165,233,0.22);border-radius:16px;
+                      padding:24px 20px;cursor:pointer;position:relative;
+                      background:linear-gradient(145deg,rgba(14,165,233,0.04) 0%,rgba(14,165,233,0.01) 100%);
+                      transition:all .22s cubic-bezier(.22,1,.36,1)">
+
+            <!-- SVG Icon: Radar/Counter Intelligence for Pulse -->
+            <div style="width:50px;height:50px;background:rgba(14,165,233,0.09);
+                        border:1px solid rgba(14,165,233,0.22);border-radius:13px;
                         display:flex;align-items:center;justify-content:center;
-                        font-size:22px;margin-bottom:16px">📡</div>
-            <div style="font-size:15px;font-weight:700;color:#f1f5f9;margin-bottom:4px">
+                        margin-bottom:18px;box-shadow:0 0 20px rgba(14,165,233,0.07)">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <!-- Counter Intelligence / Radar / Scale icon -->
+                <circle cx="12" cy="12" r="2.5" fill="#0ea5e9" opacity="0.95"/>
+                <circle cx="12" cy="12" r="5.5" stroke="#0ea5e9" stroke-width="1.2" fill="none" opacity="0.55"/>
+                <circle cx="12" cy="12" r="9" stroke="#0ea5e9" stroke-width="1" fill="none" opacity="0.3"/>
+                <line x1="12" y1="3" x2="12" y2="7" stroke="#0ea5e9" stroke-width="1.5" opacity="0.7"/>
+                <line x1="12" y1="17" x2="12" y2="21" stroke="#0ea5e9" stroke-width="1.5" opacity="0.7"/>
+                <line x1="3" y1="12" x2="7" y2="12" stroke="#0ea5e9" stroke-width="1.5" opacity="0.7"/>
+                <line x1="17" y1="12" x2="21" y2="12" stroke="#0ea5e9" stroke-width="1.5" opacity="0.7"/>
+              </svg>
+            </div>
+
+            <div style="font-size:16px;font-weight:800;color:#f1f5f9;margin-bottom:3px;
+                        font-family:'Inter','Segoe UI',sans-serif">
               IoT Pulse
             </div>
-            <div style="font-size:11px;color:#78716c;margin-bottom:16px;line-height:1.5">
-              Counter Intelligence Add-on
+            <div style="font-size:11px;color:#0c4a6e;margin-bottom:16px;line-height:1.5;
+                        font-family:'IBM Plex Mono',monospace;letter-spacing:.5px">
+              COUNTER INTELLIGENCE ADD-ON
             </div>
-            <div style="margin-bottom:18px">
-              <span style="font-size:28px;font-weight:800;color:#0ea5e9">SAR 500</span>
-              <span style="font-size:12px;color:#64748b">/mo · per branch</span>
+            <div style="margin-bottom:20px;display:flex;align-items:baseline;gap:5px">
+              <span style="font-size:30px;font-weight:900;color:#0ea5e9;letter-spacing:-1px">SAR 500</span>
+              <span style="font-size:12px;color:#334155">/mo · per branch</span>
             </div>
-            <ul style="list-style:none;margin:0;padding:0;font-size:12px;color:#94a3b8;display:grid;gap:7px">
-              <li><span style="color:#0ea5e9;margin-right:6px">◈</span> Scale-to-POS Reconciliation</li>
-              <li><span style="color:#0ea5e9;margin-right:6px">◈</span> Live RH Sensor Feed</li>
-              <li><span style="color:#0ea5e9;margin-right:6px">◈</span> Auto-failover to Weather API</li>
-              <li><span style="color:#0ea5e9;margin-right:6px">◈</span> Hardware Disconnect Alerts</li>
-              <li><span style="color:#0ea5e9;margin-right:6px">◈</span> Sponge Re-trigger on Pulse</li>
+            <ul style="list-style:none;margin:0;padding:0;font-size:12px;color:#94a3b8;display:grid;gap:8px">
+              <li style="display:flex;align-items:center;gap:8px">
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                  <path d="M2.5 7L5.5 10L11.5 4" stroke="#0ea5e9" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+                Scale-to-POS Reconciliation
+              </li>
+              <li style="display:flex;align-items:center;gap:8px">
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                  <path d="M2.5 7L5.5 10L11.5 4" stroke="#0ea5e9" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+                Live RH Sensor Feed
+              </li>
+              <li style="display:flex;align-items:center;gap:8px">
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                  <path d="M2.5 7L5.5 10L11.5 4" stroke="#0ea5e9" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+                Auto-failover to Weather API
+              </li>
+              <li style="display:flex;align-items:center;gap:8px">
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                  <path d="M2.5 7L5.5 10L11.5 4" stroke="#0ea5e9" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+                Hardware Disconnect Alerts
+              </li>
+              <li style="display:flex;align-items:center;gap:8px">
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                  <path d="M2.5 7L5.5 10L11.5 4" stroke="#0ea5e9" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+                Sponge Re-trigger on Pulse
+              </li>
             </ul>
-            <div style="font-size:10px;color:#475569;margin:10px 0 -4px;text-align:center">
-              Requires Roaster Pro
+            <div style="font-size:10px;color:#1e3a5f;margin:12px 0 -2px;text-align:center;
+                        font-family:'IBM Plex Mono',monospace">
+              ⚠ Requires Roaster Pro
             </div>
             <button class="pm-subscribe-btn" data-product="PULSE"
-                    style="width:100%;margin-top:10px;padding:11px;
-                           background:linear-gradient(135deg,#0c4a6e,#0369a1,#0ea5e9);
-                           color:#fff;font-weight:800;font-size:13px;
-                           border:none;border-radius:9px;cursor:pointer;letter-spacing:.3px">
+                    style="width:100%;margin-top:12px;padding:12px;
+                           background:linear-gradient(135deg,#0c4a6e 0%,#0369a1 50%,#0ea5e9 100%);
+                           color:#fff;font-weight:900;font-size:13px;
+                           border:none;border-radius:10px;cursor:pointer;letter-spacing:.5px;
+                           box-shadow:0 4px 20px rgba(14,165,233,0.2);
+                           font-family:'IBM Plex Mono',monospace">
               Activate — SAR 500/mo
             </button>
           </div>
         </div>
 
         <!-- Footer trust bar -->
-        <div style="padding:14px 32px 24px;display:flex;align-items:center;justify-content:center;
-                    gap:20px;border-top:1px solid rgba(255,255,255,0.04)">
-          <span style="font-size:11px;color:#475569;display:flex;align-items:center;gap:5px">
-            <i class="fa fa-lock" style="color:#64748b"></i> Secured by Moyasar
+        <div style="padding:12px 32px 22px;display:flex;align-items:center;justify-content:center;
+                    gap:22px;border-top:1px solid rgba(255,255,255,0.04)">
+          <span style="font-size:11px;color:#334155;display:flex;align-items:center;gap:6px">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+              <path d="M6 1L10.5 3V6.5C10.5 8.7 8.5 10.5 6 11C3.5 10.5 1.5 8.7 1.5 6.5V3L6 1Z"
+                    stroke="#475569" stroke-width="1" fill="rgba(71,85,105,0.15)"/>
+              <path d="M4 6L5.5 7.5L8.5 4.5" stroke="#475569" stroke-width="1.2" stroke-linecap="round"/>
+            </svg>
+            Secured by Moyasar
           </span>
-          <span style="color:#1e2d3d">·</span>
-          <span style="font-size:11px;color:#475569">Cancel anytime</span>
-          <span style="color:#1e2d3d">·</span>
-          <span style="font-size:11px;color:#475569">
-            <i class="fa fa-shield-halved" style="color:#64748b"></i> ZATCA-compliant invoices
+          <span style="color:#1e2d3d;font-size:16px">·</span>
+          <span style="font-size:11px;color:#334155">Cancel anytime</span>
+          <span style="color:#1e2d3d;font-size:16px">·</span>
+          <span style="font-size:11px;color:#334155;display:flex;align-items:center;gap:5px">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+              <rect x="1" y="4" width="10" height="7" rx="1.5" stroke="#475569" stroke-width="1"/>
+              <path d="M4 4V3C4 1.9 4.9 1 6 1C7.1 1 8 1.9 8 3V4" stroke="#475569" stroke-width="1"/>
+            </svg>
+            ZATCA-compliant
           </span>
         </div>
 
         <!-- Loading state overlay -->
         <div id="plan-modal-loading"
-             style="display:none;position:absolute;inset:0;border-radius:20px;
-                    background:rgba(8,14,30,0.92);align-items:center;justify-content:center;
-                    flex-direction:column;gap:16px;z-index:10">
-          <div style="width:44px;height:44px;border:3px solid rgba(245,158,11,0.2);
-                      border-top-color:#f59e0b;border-radius:50%;
-                      animation:pm-spin 0.8s linear infinite"></div>
-          <div style="font-size:13px;color:#94a3b8" id="plan-modal-loading-msg">
-            Creating payment session…
+             style="display:none;position:absolute;inset:0;border-radius:22px;
+                    background:rgba(6,16,30,0.94);backdrop-filter:blur(4px);
+                    align-items:center;justify-content:center;
+                    flex-direction:column;gap:18px;z-index:10">
+          <div style="position:relative;width:52px;height:52px">
+            <div style="position:absolute;inset:0;border:2px solid rgba(245,158,11,0.12);
+                        border-top-color:#f59e0b;border-radius:50%;
+                        animation:pm-spin 0.9s linear infinite"></div>
+            <div style="position:absolute;inset:6px;border:2px solid rgba(139,92,246,0.15);
+                        border-bottom-color:#8b5cf6;border-radius:50%;
+                        animation:pm-spin 1.3s linear infinite reverse"></div>
+          </div>
+          <div>
+            <div style="font-size:14px;color:#e2e8f0;font-weight:600;text-align:center;margin-bottom:4px"
+                 id="plan-modal-loading-msg">Creating payment session…</div>
+            <div style="font-size:11px;color:#334155;text-align:center;
+                        font-family:'IBM Plex Mono',monospace">Connecting to Moyasar</div>
           </div>
         </div>
 
@@ -4008,10 +4165,23 @@ app.get('/admin/branches', (c) => {
 
     <style>
       @keyframes pm-spin { to { transform:rotate(360deg) } }
-      .pm-card:hover { transform:translateY(-3px);box-shadow:0 8px 32px rgba(0,0,0,0.4) }
-      .pm-card-pro:hover  { border-color:rgba(245,158,11,0.55)!important }
-      .pm-card-pulse:hover{ border-color:rgba(14,165,233,0.45)!important }
-      .pm-subscribe-btn:hover { filter:brightness(1.12) }
+      @keyframes pm-shimmer {
+        0%   { left:-100% }
+        100% { left:200% }
+      }
+      .pm-shimmer {
+        position:absolute;inset-block:0;left:-100%;width:60%;
+        background:linear-gradient(90deg,transparent,rgba(255,255,255,0.35),transparent);
+        animation:pm-shimmer 2.5s ease-in-out infinite;
+      }
+      .pm-card { will-change:transform }
+      .pm-card:hover { transform:translateY(-4px);box-shadow:0 12px 40px rgba(0,0,0,0.5) }
+      .pm-card-pro:hover  { border-color:rgba(245,158,11,0.6)!important;
+                            background:linear-gradient(145deg,rgba(245,158,11,0.08) 0%,rgba(245,158,11,0.03) 100%)!important }
+      .pm-card-pulse:hover{ border-color:rgba(14,165,233,0.5)!important;
+                            background:linear-gradient(145deg,rgba(14,165,233,0.07) 0%,rgba(14,165,233,0.02) 100%)!important }
+      .pm-subscribe-btn { transition:filter .15s,transform .1s }
+      .pm-subscribe-btn:hover { filter:brightness(1.15) }
       .pm-subscribe-btn:active { transform:scale(.97) }
     </style>
     \`)
@@ -12499,10 +12669,13 @@ function applyPlanUpgrade(branchId: string, product: PaymentProduct): {
   if (product === 'ERP_PRO') {
     branch.plan_type               = 'ERP_PRO'
     branch.subscription_expires_at = expires
+    branch.subscription_status     = 'ACTIVE'
     return {
       ok     : true,
       message: `${branch.name} upgraded to Roaster Pro. Subscription active until ${expires.slice(0,10)}.`,
       branchId, product,
+      plan_type          : branch.plan_type,
+      subscription_status: branch.subscription_status,
     }
   }
 
@@ -12511,12 +12684,15 @@ function applyPlanUpgrade(branchId: string, product: PaymentProduct): {
       // Auto-upgrade to ERP_PRO first
       branch.plan_type               = 'ERP_PRO'
       branch.subscription_expires_at = expires
+      branch.subscription_status     = 'ACTIVE'
     }
     branch.pulse_enabled = true
     return {
       ok     : true,
       message: `IoT Pulse add-on activated for ${branch.name}. Scale-to-POS reconciliation is now live.`,
       branchId, product,
+      plan_type          : branch.plan_type,
+      subscription_status: branch.subscription_status,
     }
   }
 
@@ -13015,6 +13191,7 @@ app.get('/api/hq/license-check', (c) => {
     plan_type             : branch.plan_type,
     pulse_enabled         : branch.pulse_enabled,
     subscription_expires_at: branch.subscription_expires_at,
+    subscription_status   : branch.subscription_status,
     active                : isBranchSubscriptionActive(branch),
     upgrade_url           : '/admin/billing',
   }, result.httpStatus === 200 ? 200 : result.httpStatus)
