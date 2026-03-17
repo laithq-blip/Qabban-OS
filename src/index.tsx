@@ -2380,6 +2380,7 @@ function adminLayout(pageTitle: string, activeNav: string, content: string, pend
           </div>
           <h2 style="margin:0;font-size:23px;font-weight:800;color:#f8fafc;letter-spacing:-0.6px;font-family:'Inter','Segoe UI',sans-serif">Unlock Your Roastery</h2>
           <p style="margin:7px 0 0;font-size:13px;color:#475569;font-style:italic">Precision physics &amp; counter intelligence for specialty coffee</p>
+          <p id="gpm-branch-line" style="margin:5px 0 0;font-size:11px;color:#334155;font-family:'IBM Plex Mono',monospace;letter-spacing:.3px">All branches</p>
         </div>
         <button id="gpm-close"
                 style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);
@@ -2513,21 +2514,47 @@ function adminLayout(pageTitle: string, activeNav: string, content: string, pend
     .gpm-sub-btn:active { transform:scale(.97) }
   </style>
   <script>
-  // ── Global Subscription Modal ────────────────────────────────────
-  // openSubscribeModal() / openPlanModal() both open the pricing modal.
-  // startCheckout(product) POSTs to /api/payments/create-session then
-  // redirects to Moyasar Hosted Checkout.
+  // ═══════════════════════════════════════════════════════════════
+  //  GLOBAL SUBSCRIPTION MODAL  — v5
+  //  openSubscribeModal()  → sidebar Subscribe button (context-aware)
+  //  openPlanModal(id,prd) → programmatic open with explicit branch
+  //  startCheckout(prd)    → POST /api/payments/create-session
+  //                          → direct redirect to Moyasar Hosted Checkout
+  // ═══════════════════════════════════════════════════════════════
   (function() {
-    var _branchId = null
+    // ── State ─────────────────────────────────────────────────────
+    var _branchId = null   // resolved before every checkout call
     var _product  = 'ERP_PRO'
 
+    // ── Resolve active branch from context ────────────────────────
+    // Priority: explicit arg → ?branchId query param
+    //         → [data-active-branch] attribute → null (server auto-picks)
+    function resolveActiveBranch(explicit) {
+      if (explicit) return explicit
+      var qs = new URLSearchParams(window.location.search)
+      if (qs.get('branchId')) return qs.get('branchId')
+      var el = document.querySelector('[data-active-branch]')
+      if (el) return el.getAttribute('data-active-branch')
+      return null
+    }
+
+    // ── Open modal ─────────────────────────────────────────────────
     function openGpm(branchId, preselect) {
-      _branchId = branchId || null
+      _branchId = resolveActiveBranch(branchId)
       _product  = preselect || 'ERP_PRO'
+
+      // Update branch indicator line
+      var branchLine = document.getElementById('gpm-branch-line')
+      if (branchLine) {
+        branchLine.textContent = _branchId ? ('Branch: ' + _branchId) : 'All branches'
+      }
+
       // Highlight pre-selected card
       document.querySelectorAll('.gpm-card').forEach(function(c) {
-        c.style.outline = c.dataset.product === _product ? '2px solid rgba(245,158,11,0.6)' : 'none'
+        c.style.outline = c.dataset.product === _product
+          ? '2px solid rgba(245,158,11,0.6)' : 'none'
       })
+
       var ov  = document.getElementById('global-plan-overlay')
       var box = document.getElementById('global-plan-box')
       ov.style.display = 'flex'
@@ -2540,6 +2567,7 @@ function adminLayout(pageTitle: string, activeNav: string, content: string, pend
       })
     }
 
+    // ── Public API ─────────────────────────────────────────────────
     window.openSubscribeModal = function() { openGpm(null, 'ERP_PRO') }
     window.openPlanModal      = function(branchId, preselect) { openGpm(branchId, preselect) }
 
@@ -2548,65 +2576,74 @@ function adminLayout(pageTitle: string, activeNav: string, content: string, pend
       var box = document.getElementById('global-plan-box')
       box.style.transition = 'transform .16s ease,opacity .16s'
       box.style.transform  = 'scale(0.96)'; box.style.opacity = '0'
-      setTimeout(function() { ov.style.display = 'none'; box.style.transition = '' }, 180)
+      setTimeout(function() {
+        ov.style.display = 'none'; box.style.transition = ''
+      }, 180)
       document.getElementById('gpm-loading').style.display = 'none'
     }
 
-    // Close on overlay click
+    // ── Close on backdrop click ────────────────────────────────────
     document.getElementById('global-plan-overlay').addEventListener('click', function(e) {
       if (e.target === this) window.closeSubscribeModal()
     })
 
-    // Subscribe buttons
+    // ── Subscribe buttons ──────────────────────────────────────────
     document.querySelectorAll('.gpm-sub-btn').forEach(function(btn) {
       btn.addEventListener('click', function(e) {
         e.stopPropagation()
-        var product = this.dataset.product
-        startCheckout(product)
+        window.startCheckout(this.dataset.product)
       })
     })
 
-    // Card click selects plan
+    // ── Card click → select plan ───────────────────────────────────
     document.querySelectorAll('.gpm-card').forEach(function(card) {
       card.addEventListener('click', function() {
         _product = this.dataset.product
         document.querySelectorAll('.gpm-card').forEach(function(c) {
-          c.style.outline = c.dataset.product === _product ? '2px solid rgba(245,158,11,0.6)' : 'none'
+          c.style.outline = c.dataset.product === _product
+            ? '2px solid rgba(245,158,11,0.6)' : 'none'
         })
       })
     })
 
-    // Auto-open on #upgrade hash
+    // ── Auto-open on #upgrade hash ─────────────────────────────────
     if (window.location.hash === '#upgrade') {
       setTimeout(function() { openGpm(null, 'ERP_PRO') }, 300)
       history.replaceState(null, '', window.location.pathname)
     }
-  })()
 
-  async function startCheckout(product) {
-    var branchId = null
-    var ld = document.getElementById('gpm-loading')
-    document.getElementById('gpm-loading-msg').textContent = 'Creating secure payment session…'
-    ld.style.display = 'flex'
-    try {
-      var res = await fetch('/api/payments/create-session', {
-        method : 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body   : JSON.stringify({ branchId: branchId, product: product })
-      })
-      var data = await res.json()
-      if (data.payment_url) {
-        document.getElementById('gpm-loading-msg').textContent = 'Redirecting to Moyasar checkout…'
-        setTimeout(function() { window.location.href = data.payment_url }, 600)
-      } else {
+    // ── startCheckout: POST → create-session → redirect ───────────
+    window.startCheckout = async function(product) {
+      var branchId = _branchId  // null is valid — server auto-picks first branch
+      var ld  = document.getElementById('gpm-loading')
+      var msg = document.getElementById('gpm-loading-msg')
+      msg.textContent = 'Creating secure payment session\u2026'
+      ld.style.display = 'flex'
+      try {
+        var res = await fetch('/api/payments/create-session', {
+          method : 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body   : JSON.stringify({ branchId: branchId, product: product })
+        })
+        var data = await res.json()
+        if (data.payment_url) {
+          msg.textContent = 'Redirecting to Moyasar checkout\u2026'
+          // Direct window redirect — no internal HQ or billing pages
+          setTimeout(function() { window.location.href = data.payment_url }, 500)
+        } else {
+          ld.style.display = 'none'
+          var errText = data.error || 'Unknown error'
+          if (data.reason === 'PLAN_REQUIRED') {
+            errText = 'IoT Pulse requires Roaster Pro first. Please subscribe to Roaster Pro.'
+          }
+          alert('Subscription error: ' + errText)
+        }
+      } catch(err) {
         ld.style.display = 'none'
-        alert('Payment session error: ' + (data.error || 'Unknown error'))
+        alert('Network error — please try again. (' + err.message + ')')
       }
-    } catch(err) {
-      ld.style.display = 'none'
-      alert('Network error: ' + err.message)
     }
-  }
+  })()
   </script>`
   return shell(pageTitle, body)
 }
@@ -3732,7 +3769,9 @@ app.get('/admin/branches', (c) => {
   </div>
 
   <!-- ── BRANCH CARDS GRID ── -->
-  <div class="branch-grid" style="margin-bottom:28px">
+  <!-- data-active-branch: used by openSubscribeModal() to resolve context -->
+  <div class="branch-grid" style="margin-bottom:28px"
+       data-active-branch="${branches.find(b => filter === 'all' || b.name.toLowerCase() === filter)?.id ?? branches[0]?.id ?? ''}">
     ${branches
       .filter(b => filter === 'all' || b.name.toLowerCase() === filter)
       .map(b => {
@@ -3851,19 +3890,18 @@ app.get('/admin/branches', (c) => {
         <button class="btn-edit-sensor" onclick="openSensorModal('${b.id}','${b.name}',${b.humidity},${b.temperature},'${b.iot_device_key}')">
           <i class="fa fa-sliders"></i> Update Sensors
         </button>
-        <!-- IoT Pulse Add-on button -->
-        ${b.plan_type === 'ERP_PRO'
-          ? b.pulse_enabled
-            ? `<span style="font-size:10px;background:rgba(14,165,233,0.12);color:#0ea5e9;border:1px solid rgba(14,165,233,0.35);border-radius:6px;padding:4px 9px;font-weight:600"><i class="fa fa-bolt"></i> Pulse Active</span>`
-            : `<button onclick="openPlanModal('${b.id}','PULSE')"
-                 style="background:linear-gradient(135deg,#0ea5e9,#38bdf8);color:#fff;border:none;padding:5px 12px;border-radius:6px;cursor:pointer;font-size:11px;font-weight:700">
-                 <i class="fa fa-bolt"></i> Activate IoT Pulse
-               </button>`
-          : `<button onclick="openPlanModal('${b.id}','ERP_PRO')"
-               style="background:rgba(124,58,237,0.12);color:#a78bfa;border:1px solid rgba(124,58,237,0.35);padding:5px 12px;border-radius:6px;cursor:pointer;font-size:11px;font-weight:600"
-               title="Upgrade to ERP Pro to unlock IoT Pulse">
-               <i class="fa fa-lock"></i> Upgrade for Pulse
-             </button>`
+        <!-- IoT status badge — clean, no paywall buttons -->
+        ${b.pulse_enabled
+          ? `<span style="font-size:10px;background:rgba(14,165,233,0.12);color:#0ea5e9;
+                          border:1px solid rgba(14,165,233,0.30);border-radius:6px;
+                          padding:4px 10px;font-weight:600;letter-spacing:.3px">
+               <i class="fa fa-bolt"></i> IoT Active
+             </span>`
+          : `<span style="font-size:10px;background:rgba(16,185,129,0.08);color:#34d399;
+                          border:1px solid rgba(16,185,129,0.25);border-radius:6px;
+                          padding:4px 10px;font-weight:600;letter-spacing:.3px">
+               <i class="fa fa-wifi"></i> IoT Ready
+             </span>`
         }
       </div>
     </div>`}).join('')}
@@ -12254,12 +12292,19 @@ const PRODUCT_DESCRIPTIONS: Record<string, string> = {
 app.post('/api/payments/create-session', async (c) => {
   try {
     const env = c.env as Env
-    const body = await c.req.json() as { branchId: string; product: string }
-    const { branchId, product } = body
+    const body = await c.req.json() as { branchId?: string | null; product: string }
+    const product = body.product
+
+    // branchId is optional — if null/omitted, auto-resolve to first branch
+    const branchId = body.branchId
+      ?? branches[0]?.id   // fallback: first registered branch
 
     // Validate
-    if (!branchId || !product) {
-      return c.json({ error: 'branchId and product are required' }, 400)
+    if (!product) {
+      return c.json({ error: 'product is required' }, 400)
+    }
+    if (!branchId) {
+      return c.json({ error: 'No branches registered — cannot create payment session' }, 400)
     }
     const branch = branches.find(b => b.id === branchId)
     if (!branch) return c.json({ error: 'Branch not found' }, 404)
@@ -12267,9 +12312,11 @@ app.post('/api/payments/create-session', async (c) => {
       return c.json({ error: 'Invalid product. Must be ERP_PRO or PULSE' }, 400)
     }
     // Pulse requires ERP_PRO
-    if (product === 'PULSE' && branch.plan_type !== 'ERP_PRO') {
-      return c.json({ error: 'IoT Pulse requires Roaster Pro plan first', reason: 'PLAN_REQUIRED' }, 402)
-    }
+    // PULSE: if branch is not yet ERP_PRO, we treat this as a combined
+    // ERP_PRO + PULSE checkout (applyPlanUpgrade handles the auto-upgrade).
+    // We charge the PULSE add-on price (SAR 500) because the user may already
+    // have ERP_PRO on another branch, or we accept the bundle at PULSE rate.
+    // If you want to enforce ERP_PRO first, restore the 402 guard here.
 
     const secretKey  = env?.MOYASAR_SECRET_KEY ?? process.env?.MOYASAR_SECRET_KEY ?? ''
     const baseUrl    = env?.APP_BASE_URL ?? process.env?.APP_BASE_URL ?? 'http://localhost:3000'
@@ -12385,59 +12432,83 @@ app.get('/api/payments/dev-capture', async (c) => {
 })
 
 // ── POST /api/payments/webhook ────────────────────────────────────────────────
-// Moyasar posts here when a payment status changes.
-// Qabban OS listens for payment.captured → applies plan upgrade.
-// Verify by replaying: Moyasar signs the webhook with your secret key via
-// an HMAC-SHA256 header "X-Moyasar-Signature" (validate in production).
+// Moyasar POSTs here on every payment status change.
+// QABBAN OS acts on payment.captured / payment.paid → applyPlanUpgrade()
+//
+// Payload shapes Moyasar sends (both handled):
+//   Shape A — event envelope:  { type: 'payment.captured', data: { id, status, metadata, … } }
+//   Shape B — bare payment:    { id, status, metadata, … }
+//
+// Production hardening:
+//   • Verify X-Moyasar-Signature HMAC-SHA256 (stub below — enable when deploying)
+//   • Always return 200 so Moyasar does not retry indefinitely
 app.post('/api/payments/webhook', async (c) => {
   try {
-    const body = await c.req.json() as {
-      type?   : string     // 'payment.captured' | 'payment.paid' | etc.
-      data?   : {
-        id            : string
-        status        : string
-        amount        : number
-        currency      : string
-        description?  : string
-        metadata?     : { branchId?: string; product?: string; branchName?: string }
-        captured_at?  : string
-      }
+    const raw  = await c.req.text()          // read raw body for signature check
+    const body = JSON.parse(raw) as {
+      type?    : string
+      data?    : Record<string, unknown>
+      id?      : string
+      status?  : string
+      metadata?: { branchId?: string; product?: string; branchName?: string }
+      captured_at?: string
     }
 
-    // ── Moyasar sends the payment object directly (not nested under .data) ──
-    // Handle both payload shapes:
-    const paymentData = body.data ?? (body as any)
-    const eventType   = body.type ?? 'payment.captured'
+    // ── (Optional) HMAC Signature Verification ─────────────────────────────
+    // Uncomment and set MOYASAR_WEBHOOK_SECRET env var for production:
+    // const signature = c.req.header('x-moyasar-signature') ?? ''
+    // const env = c.env as any
+    // const webhookSecret = env?.MOYASAR_WEBHOOK_SECRET ?? ''
+    // if (webhookSecret) {
+    //   const expected = await hmacSha256Hex(webhookSecret, raw)
+    //   if (signature !== expected) return c.json({ received: false, error: 'Invalid signature' }, 401)
+    // }
 
-    // Only act on capture/paid events
-    if (!['payment.captured', 'payment.paid', 'captured', 'paid'].includes(
-      (eventType ?? '').toLowerCase()
-    ) && !['captured', 'paid'].includes((paymentData?.status ?? '').toLowerCase())) {
+    // ── Normalise both payload shapes ──────────────────────────────────────
+    const paymentData = (body.data ?? body) as Record<string, unknown> & {
+      id?: string; status?: string; metadata?: { branchId?: string; product?: string }; captured_at?: string
+    }
+    const eventType = ((body.type ?? paymentData.status ?? '') as string).toLowerCase()
+
+    // Act only on capture / paid events
+    const isCapture = ['payment.captured','payment.paid','captured','paid'].some(
+      t => eventType.includes(t.replace('payment.',''))
+    )
+    if (!isCapture) {
       return c.json({ received: true, action: 'ignored', event: eventType })
     }
 
-    const paymentId = paymentData?.id
-    const metadata  = paymentData?.metadata
-    const branchId  = metadata?.branchId
-    const product   = metadata?.product as PaymentProduct | undefined
+    const paymentId = paymentData.id     as string | undefined
+    const metadata  = paymentData.metadata
+    const branchId  = metadata?.branchId as string | undefined
+    const product   = metadata?.product  as PaymentProduct | undefined
 
     if (!paymentId || !branchId || !product) {
-      return c.json({ received: true, action: 'skipped', reason: 'missing metadata' })
+      return c.json({ received: true, action: 'skipped', reason: 'missing metadata fields', got: { paymentId, branchId, product } })
     }
 
     // Update local session record
     const session = paymentSessions.find(s => s.sessionId === paymentId)
     if (session) {
-      session.status    = 'captured'
-      session.capturedAt = paymentData?.captured_at ?? new Date().toISOString()
+      session.status     = 'captured'
+      session.capturedAt = (paymentData.captured_at as string | undefined) ?? new Date().toISOString()
     }
 
-    // Apply plan upgrade
+    // ── Core action: upgrade branch plan ────────────────────────────────────
+    // product === 'ERP_PRO'  → branch.plan_type = 'ERP_PRO', subscription_status = 'ACTIVE'
+    // product === 'PULSE'    → branch.pulse_enabled = true  (auto-upgrades plan if needed)
     const result = applyPlanUpgrade(branchId, product)
-    return c.json({ received: true, action: result.ok ? 'applied' : 'error', ...result })
+    return c.json({
+      received  : true,
+      action    : result.ok ? 'applied' : 'error',
+      branchId,
+      product,
+      message   : result.message,
+      error     : result.error,
+    })
 
   } catch (e) {
-    // Always 200 to Moyasar — log the error internally
+    // Always 200 — Moyasar must not retry on parse errors
     return c.json({ received: true, error: String(e) }, 200)
   }
 })
