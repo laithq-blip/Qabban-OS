@@ -4811,6 +4811,9 @@ app.post('/admin/inventory/add', async (c) => {
 app.get('/admin/inventory', (c) => {
   const pendingCount = beanRequests.filter(r => r.status === 'PENDING').length
 
+  // ── Feature gating: Recall Vault requires ERP_PRO ─────────────
+  const isInventoryFullyFree = branches.every(b => !hasErpAccess(b))
+
   // ── Live Balance ──────────────────────────────────────────────
   const bal            = calcLiveBalance(coffeeLots, beanRequests, branches)
   const totalShrinkage = bal.liveGreenKg - bal.liveRoastedKg   // shrinkage on live stock only
@@ -6241,9 +6244,47 @@ app.get('/admin/inventory', (c) => {
   </div>
   <!-- ══ end FIFO ══ -->
 
-  <div class="card">
-    <div class="card-title">Full Inventory Ledger — Live Balances</div>
-    <div class="table-wrap">
+  <!-- ── Inventory Ledger Card — grayscale when fully FREE ── -->
+  <div class="card" style="${isInventoryFullyFree ? 'position:relative' : ''}">
+    <div class="card-title">Full Inventory Ledger — Live Balances
+      <span style="margin-left:auto;font-size:10px;color:var(--text-muted);font-family:var(--font-mono);font-weight:400;letter-spacing:0">
+        SFDA Recall column requires
+        <span onclick="if(typeof openPlanModal==='function')openPlanModal(null,'ERP_PRO')"
+              style="background:linear-gradient(90deg,rgba(124,58,237,0.2),rgba(168,85,247,0.15));
+                     color:#a78bfa;border:1px solid rgba(124,58,237,0.3);
+                     padding:1px 7px;border-radius:3px;cursor:pointer;
+                     font-size:9px;font-weight:800;letter-spacing:.5px;
+                     font-family:'IBM Plex Mono',monospace">
+          🔒 PRO
+        </span>
+      </span>
+    </div>
+    ${isInventoryFullyFree ? `
+    <!-- ── FeatureGate overlay — Inventory Ledger locked for FREE plan ── -->
+    <div onclick="if(typeof openPlanModal==='function')openPlanModal(null,'ERP_PRO')"
+         style="position:relative;padding:32px 24px;text-align:center;cursor:pointer;
+                background:rgba(124,58,237,0.04);border:1px dashed rgba(124,58,237,0.25);
+                border-radius:var(--radius);margin-bottom:16px;
+                display:flex;align-items:center;justify-content:center;gap:16px">
+      <svg width="22" height="22" viewBox="0 0 12 12" fill="none" style="flex-shrink:0">
+        <rect x="1.5" y="5" width="9" height="6.5" rx="1.5" fill="rgba(124,58,237,0.15)" stroke="#7c3aed" stroke-width="1.2"/>
+        <path d="M3.5 5V3.5C3.5 2.12 4.62 1 6 1C7.38 1 8.5 2.12 8.5 3.5V5" stroke="#7c3aed" stroke-width="1.2" stroke-linecap="round"/>
+      </svg>
+      <div>
+        <div style="font-family:var(--font-mono);font-size:12px;font-weight:700;color:#a78bfa;margin-bottom:4px">
+          SFDA Recall Vault — Roaster Pro Required
+        </div>
+        <div style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted)">
+          Upgrade to unlock SFDA recall initiation, Recall Vault audit trail and per-lot compliance tracking.
+        </div>
+      </div>
+      <button style="margin-left:auto;padding:7px 18px;background:linear-gradient(135deg,rgba(124,58,237,0.2),rgba(168,85,247,0.12));
+                     color:#a78bfa;border:1px solid rgba(124,58,237,0.40);border-radius:var(--radius);
+                     font-family:var(--font-mono);font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;flex-shrink:0">
+        Upgrade to Pro — SAR 1,200/mo
+      </button>
+    </div>` : ''}
+    <div class="table-wrap" style="${isInventoryFullyFree ? 'filter:grayscale(1) opacity(0.45);pointer-events:none' : ''}">
       <table class="inv-table">
         <thead>
           <tr>
@@ -6263,6 +6304,9 @@ app.get('/admin/inventory', (c) => {
             const hasWatchdogAlert = systemNotifications.some(
               n => n.lotId === l.id && n.status === 'UNREAD' && n.type === 'HUMIDITY_VIOLATION'
             )
+            // ── FeatureGate: Recall Vault requires ERP_PRO on the lot's branch ─
+            const lotBranch = branches.find(b => b.name === l.branch)
+            const recallGated = lotBranch ? !hasErpAccess(lotBranch) : true
             return `
           <tr class="${isRecalled ? 'tr-recalled' : ''}${hasWatchdogAlert ? ' tr-watchdog-alert' : ''}">
             <td class="mono" style="color:${isRecalled ? 'var(--red)' : 'var(--amber)'}">
@@ -6320,14 +6364,31 @@ app.get('/admin/inventory', (c) => {
               ${isRecalled
                 ? `<div style="font-family:var(--font-mono);font-size:9px;color:var(--red);border:1px solid rgba(239,68,68,0.4);padding:3px 7px;border-radius:2px;white-space:nowrap"><i class="fa fa-ban"></i> RECALLED</div>
                    ${l.recallInfo ? `<div style="font-size:10px;color:var(--text-muted);margin-top:4px;max-width:140px;white-space:normal;line-height:1.3">${l.recallInfo.instructions}</div>` : ''}`
-                : `<button
-                    onclick="openRecallModal('${l.id}','${l.origin.replace(/'/g, "\\'")}')"
-                    style="font-family:var(--font-mono);font-size:10px;padding:5px 10px;background:rgba(239,68,68,0.12);color:var(--red);border:1px solid rgba(239,68,68,0.35);border-radius:var(--radius);cursor:pointer;white-space:nowrap;transition:all .2s"
-                    onmouseover="this.style.background='rgba(239,68,68,0.25)'"
-                    onmouseout="this.style.background='rgba(239,68,68,0.12)'"
-                  >
-                    <i class="fa fa-triangle-exclamation"></i> INITIATE RECALL
-                  </button>`
+                : recallGated
+                  ? `<!-- FeatureGate: SFDA Recall Vault requires ERP_PRO -->
+                     <button
+                       onclick="if(typeof openPlanModal==='function')openPlanModal(null,'ERP_PRO')"
+                       title="SFDA Recall Vault — Roaster Pro required"
+                       style="font-family:var(--font-mono);font-size:10px;padding:5px 10px;
+                              background:rgba(124,58,237,0.08);color:#7c3aed;
+                              border:1px solid rgba(124,58,237,0.25);border-radius:var(--radius);
+                              cursor:pointer;white-space:nowrap;opacity:0.7;
+                              display:flex;align-items:center;gap:5px"
+                     >
+                       <svg width="11" height="11" viewBox="0 0 12 12" fill="none">
+                         <rect x="1.5" y="5" width="9" height="6.5" rx="1.5" fill="rgba(124,58,237,0.15)" stroke="#7c3aed" stroke-width="1"/>
+                         <path d="M3.5 5V3.5C3.5 2.12 4.62 1 6 1C7.38 1 8.5 2.12 8.5 3.5V5" stroke="#7c3aed" stroke-width="1" stroke-linecap="round"/>
+                       </svg>
+                       PRO
+                     </button>`
+                  : `<button
+                      onclick="openRecallModal('${l.id}','${l.origin.replace(/'/g, "\\'")}')"
+                      style="font-family:var(--font-mono);font-size:10px;padding:5px 10px;background:rgba(239,68,68,0.12);color:var(--red);border:1px solid rgba(239,68,68,0.35);border-radius:var(--radius);cursor:pointer;white-space:nowrap;transition:all .2s"
+                      onmouseover="this.style.background='rgba(239,68,68,0.25)'"
+                      onmouseout="this.style.background='rgba(239,68,68,0.12)'"
+                    >
+                      <i class="fa fa-triangle-exclamation"></i> INITIATE RECALL
+                    </button>`
               }
             </td>
           </tr>`
@@ -6618,9 +6679,37 @@ app.get('/admin/finance', (c) => {
   const spongeKgSign  = portfolio.totalSpongeKgDelta >= 0 ? '+' : ''
   const spongeKgColor = portfolio.totalSpongeKgDelta > 0 ? 'var(--green)' : portfolio.totalSpongeKgDelta < 0 ? 'var(--red)' : 'var(--text-muted)'
 
+  // ── Partial-free: some branches are FREE, some are PRO ─────────
+  const freeBranchesOnFinance = branches.filter(b => !hasErpAccess(b))
+  const hasPartialFree        = freeBranchesOnFinance.length > 0   // at least one is free
+
   const content = `
   <div class="page-title" style="margin-bottom:4px" data-i18n="fin.page.title">Financial Intelligence</div>
   <div class="page-sub" style="margin-bottom:24px" data-i18n="fin.page.sub">True costs · Wholesale pricing · Environmental P&L</div>
+
+  ${hasPartialFree ? `
+  <!-- ── Partial-FREE notice banner ── -->
+  <div style="display:flex;align-items:center;gap:14px;padding:12px 18px;margin-bottom:20px;
+              background:rgba(124,58,237,0.07);border:1px solid rgba(124,58,237,0.25);
+              border-radius:var(--radius);font-family:var(--font-mono)">
+    <svg width="16" height="16" viewBox="0 0 12 12" fill="none" style="flex-shrink:0">
+      <rect x="1.5" y="5" width="9" height="6.5" rx="1.5" fill="rgba(124,58,237,0.15)" stroke="#7c3aed" stroke-width="1"/>
+      <path d="M3.5 5V3.5C3.5 2.12 4.62 1 6 1C7.38 1 8.5 2.12 8.5 3.5V5" stroke="#7c3aed" stroke-width="1" stroke-linecap="round"/>
+    </svg>
+    <div>
+      <span style="color:#a78bfa;font-weight:700;font-size:11px">PARTIAL PRO ACCESS</span>
+      <span style="color:var(--text-muted);font-size:10px;margin-left:8px">
+        ${freeBranchesOnFinance.map(b => b.name).join(', ')} ${freeBranchesOnFinance.length === 1 ? 'is' : 'are'} on the FREE plan —
+        ZATCA export and Recall Vault are restricted for those branches.
+      </span>
+    </div>
+    <button onclick="openPlanModal(null,'ERP_PRO')"
+      style="margin-left:auto;padding:5px 14px;background:rgba(124,58,237,0.12);color:#a78bfa;
+             border:1px solid rgba(124,58,237,0.35);border-radius:var(--radius);
+             font-family:var(--font-mono);font-size:10px;font-weight:700;cursor:pointer;white-space:nowrap">
+      Upgrade to Pro →
+    </button>
+  </div>` : ''}
 
   <!-- ── Portfolio Summary Cards ── -->
   <div class="stat-grid" style="margin-bottom:28px">
@@ -6955,6 +7044,21 @@ app.get('/admin/finance', (c) => {
         CSV · UTF-8 · ${rpt.totalLotsReported} lots<br>
         Rule A/B evaporation reconciliation · Gold-tier pricing · ${rpt.reportDate}
       </div>
+      ${hasPartialFree ? `
+      <!-- PRO lock badge for ZATCA export — partial FREE plan -->
+      <button onclick="openPlanModal(null,'ERP_PRO')"
+        title="ZATCA export includes only ERP PRO branches — upgrade to include all branches"
+        style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;
+               background:rgba(124,58,237,0.08);color:#a78bfa;
+               border:1px solid rgba(124,58,237,0.30);border-radius:var(--radius);
+               font-family:var(--font-mono);font-size:10px;font-weight:700;cursor:pointer;
+               filter:none;opacity:0.9">
+        <svg width="11" height="11" viewBox="0 0 12 12" fill="none">
+          <rect x="1.5" y="5" width="9" height="6.5" rx="1.5" fill="rgba(124,58,237,0.15)" stroke="#a78bfa" stroke-width="1"/>
+          <path d="M3.5 5V3.5C3.5 2.12 4.62 1 6 1C7.38 1 8.5 2.12 8.5 3.5V5" stroke="#a78bfa" stroke-width="1" stroke-linecap="round"/>
+        </svg>
+        PRO — ${freeBranchesOnFinance.map(b => b.name).join(', ')} excluded
+      </button>` : ''}
     </div>
 
     <!-- Audit notes -->
@@ -13204,13 +13308,24 @@ app.get('/admin/watchdog', (c) => {
 
 // ══════════════════════════════════════════════════════════════════
 //  /hq — HQ DASHBOARD  (Revenue Ticker + License Manager)
-//  Restricted view for Qabban Operations team.
-//  Future: protect with HQ_SECRET header or JWT.
+//  Restricted view for Qabban Operations team ONLY.
+//  All routes below require the X-HQ-Token header or ?hq_token query param.
+//  Regular roastery users are blocked with 403 / redirected to /admin.
 // ══════════════════════════════════════════════════════════════════
+
+// ── HQ auth helper (reused by all /api/hq/* routes) ─────────────
+function isHqAuthorized(c: Parameters<Parameters<typeof app.get>[1]>[0]): boolean {
+  const secret = (c.env as any)?.HQ_SECRET ?? 'qabban-hq-internal-2026'
+  return (
+    c.req.header('x-hq-token') === secret ||
+    c.req.query('hq_token')    === secret
+  )
+}
 
 // ── GET /api/hq/revenue  ────────────────────────────────────────────────────
 // JSON API backing the /hq dashboard revenue ticker.
 app.get('/api/hq/revenue', (c) => {
+  if (!isHqAuthorized(c)) return c.json({ error: 'Forbidden — HQ access required' }, 403)
   return c.json(computeHqRevenue())
 })
 
@@ -13218,6 +13333,7 @@ app.get('/api/hq/revenue', (c) => {
 // Allows HQ admins to change a branch plan_type or toggle pulse_enabled.
 // Body: { branchId, plan_type?, pulse_enabled?, subscription_expires_at? }
 app.post('/api/hq/set-plan', async (c) => {
+  if (!isHqAuthorized(c)) return c.json({ error: 'Forbidden — HQ access required' }, 403)
   try {
     const body = await c.req.json() as {
       branchId               : string
@@ -13256,8 +13372,22 @@ app.post('/api/hq/set-plan', async (c) => {
 })
 
 // ── GET /hq  ────────────────────────────────────────────────────────────────
-// Full HQ dashboard HTML page.
+// Platform-owner only — customers are silently redirected to /admin.
+// In production this would check a session/JWT role claim.
+// Guard: block unless the request carries the internal header or secret token.
 app.get('/hq', (c) => {
+  // ── CUSTOMER GUARD ──────────────────────────────────────────────────────
+  // Regular roastery admins must never reach this page.
+  // Accept only requests that carry X-HQ-Token (internal tooling) or
+  // the HQ_SECRET env var query param.  All other visitors → /admin.
+  const hqSecret  = (c.env as any)?.HQ_SECRET ?? 'qabban-hq-internal-2026'
+  const tokenHdr  = c.req.header('x-hq-token')  ?? ''
+  const tokenQs   = c.req.query('hq_token')      ?? ''
+  const isInternal = tokenHdr === hqSecret || tokenQs === hqSecret
+  if (!isInternal) {
+    return c.redirect('/admin', 302)
+  }
+
   const rev = computeHqRevenue()
   const planBadge = (p: PlanType, active: boolean, expired: boolean) => {
     if (expired) return `<span style="background:#ef4444;color:#fff;padding:2px 8px;border-radius:9px;font-size:11px;font-weight:700">EXPIRED</span>`
@@ -13476,6 +13606,7 @@ app.get('/hq', (c) => {
 // Quick license probe — used by frontend LicenseGate component.
 // Query: ?branchId=BR-RUH&requires=ERP_PRO|PULSE
 app.get('/api/hq/license-check', (c) => {
+  if (!isHqAuthorized(c)) return c.json({ error: 'Forbidden — HQ access required' }, 403)
   const branchId = c.req.query('branchId')
   const requires = c.req.query('requires') as 'ERP_PRO' | 'PULSE' | undefined
   if (!branchId || !requires) {
