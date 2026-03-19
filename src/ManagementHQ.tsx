@@ -109,40 +109,89 @@ function alertIcon(type: string): string {
   return `<span style="color:#60a5fa">ℹ</span>`
 }
 
-// ── Stacked Bar Chart (pure SVG, no external lib) ──────────────────────────
+// ── Stacked Bar Chart — Warm/Cool gradient fills, SVG glow filter ──────────
 
 function stackedBarChart(): string {
-  const W = 520, H = 180, PADDING_L = 52, PADDING_B = 30, PADDING_TOP = 18, PADDING_R = 20
+  const W = 540, H = 210, PADDING_L = 56, PADDING_B = 34, PADDING_TOP = 22, PADDING_R = 20
   const chartW = W - PADDING_L - PADDING_R
   const chartH = H - PADDING_B - PADDING_TOP
 
   const maxVal = Math.max(...DUMMY_CHART_MONTHS.map(d => d.sub + d.txn))
-  const barW   = Math.floor(chartW / DUMMY_CHART_MONTHS.length) - 8
+  const barW   = Math.floor(chartW / DUMMY_CHART_MONTHS.length) - 10
   const yScale = (v: number) => chartH - (v / maxVal) * chartH
 
+  // SVG defs: linear gradients + glow filters
+  const defs = `
+    <defs>
+      <!-- SaaS: Safety Amber gradient — bright top to rich base -->
+      <linearGradient id="grad-saas" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%"   stop-color="#FFD54F" stop-opacity="1"/>
+        <stop offset="100%" stop-color="#FFB300" stop-opacity="0.95"/>
+      </linearGradient>
+      <!-- Commission: Digital Cyan gradient — electric top to teal base -->
+      <linearGradient id="grad-txn" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%"   stop-color="#00E5FF" stop-opacity="1"/>
+        <stop offset="100%" stop-color="#00ACC1" stop-opacity="0.9"/>
+      </linearGradient>
+      <!-- Amber glow filter for SaaS segment -->
+      <filter id="glow-amber" x="-20%" y="-20%" width="140%" height="140%">
+        <feGaussianBlur stdDeviation="3" result="blur"/>
+        <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+      </filter>
+      <!-- Cyan glow filter for Commission segment -->
+      <filter id="glow-cyan" x="-20%" y="-20%" width="140%" height="140%">
+        <feGaussianBlur stdDeviation="2.5" result="blur"/>
+        <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+      </filter>
+    </defs>`
+
   const bars = DUMMY_CHART_MONTHS.map((d, i) => {
-    const x    = PADDING_L + i * (chartW / DUMMY_CHART_MONTHS.length) + 4
+    const x    = PADDING_L + i * (chartW / DUMMY_CHART_MONTHS.length) + 5
     const hSub = (d.sub / maxVal) * chartH
     const hTxn = (d.txn / maxVal) * chartH
     const ySub = PADDING_TOP + yScale(d.sub + d.txn)
-    const yTxn = PADDING_TOP + yScale(d.txn)
+    // Commission sits at the bottom of each bar
+    const yTxnTop = PADDING_TOP + chartH - hTxn
+    const barRadius = 3
+    // SaaS segment (top portion, amber) — rounded top corners only
+    const saasPath = `
+      M ${x + barRadius} ${ySub.toFixed(1)}
+      H ${(x + barW - barRadius).toFixed(1)}
+      Q ${(x + barW).toFixed(1)} ${ySub.toFixed(1)} ${(x + barW).toFixed(1)} ${(+ySub + barRadius).toFixed(1)}
+      V ${(+ySub + hSub).toFixed(1)}
+      H ${x}
+      V ${(+ySub + barRadius).toFixed(1)}
+      Q ${x} ${ySub.toFixed(1)} ${(x + barRadius).toFixed(1)} ${ySub.toFixed(1)} Z`
+    // Commission segment (bottom portion, cyan) — rounded bottom corners only
+    const txnPath = `
+      M ${x} ${yTxnTop.toFixed(1)}
+      H ${(x + barW).toFixed(1)}
+      V ${(yTxnTop + hTxn - barRadius).toFixed(1)}
+      Q ${(x + barW).toFixed(1)} ${(yTxnTop + hTxn).toFixed(1)} ${(x + barW - barRadius).toFixed(1)} ${(yTxnTop + hTxn).toFixed(1)}
+      H ${(x + barRadius).toFixed(1)}
+      Q ${x} ${(yTxnTop + hTxn).toFixed(1)} ${x} ${(yTxnTop + hTxn - barRadius).toFixed(1)} Z`
     return `
-      <rect x="${x}" y="${ySub.toFixed(1)}" width="${barW}" height="${hSub.toFixed(1)}" fill="#f59e0b" rx="2" opacity=".9"/>
-      <rect x="${x}" y="${(PADDING_TOP + chartH - hTxn).toFixed(1)}" width="${barW}" height="${hTxn.toFixed(1)}" fill="#ca8a04" rx="2" opacity=".8"/>
-      <text x="${(x + barW / 2).toFixed(1)}" y="${H - 8}" text-anchor="middle" fill="#6b7280" font-size="11" font-family="monospace">${d.month}</text>`
+      <path d="${txnPath}" fill="url(#grad-txn)" filter="url(#glow-cyan)" opacity=".88"/>
+      <path d="${saasPath}" fill="url(#grad-saas)" filter="url(#glow-amber)" opacity=".95"/>
+      <text x="${(x + barW / 2).toFixed(1)}" y="${H - 10}" text-anchor="middle"
+            fill="#6b7280" font-size="11" font-weight="600" font-family="monospace">${d.month}</text>`
   }).join('')
 
-  // Y-axis gridlines
+  // Y-axis gridlines + labels
   const grids = [0, 0.25, 0.5, 0.75, 1].map(frac => {
     const y   = PADDING_TOP + chartH * (1 - frac)
     const val = Math.round(maxVal * frac / 1000)
+    const isTop = frac === 1
     return `
-      <line x1="${PADDING_L}" y1="${y.toFixed(1)}" x2="${W - PADDING_R}" y2="${y.toFixed(1)}" stroke="rgba(255,255,255,.04)" stroke-width="1"/>
-      <text x="${PADDING_L - 6}" y="${(y + 4).toFixed(1)}" text-anchor="end" fill="#4b5563" font-size="10" font-family="monospace">${val}k</text>`
+      <line x1="${PADDING_L}" y1="${y.toFixed(1)}" x2="${W - PADDING_R}" y2="${y.toFixed(1)}"
+            stroke="${isTop ? 'rgba(255,255,255,.07)' : 'rgba(255,255,255,.03)'}" stroke-width="${isTop ? 1 : 0.75}" stroke-dasharray="${isTop ? '' : '3 4'}"/>
+      <text x="${PADDING_L - 8}" y="${(y + 4).toFixed(1)}" text-anchor="end"
+            fill="${isTop ? '#9ca3af' : '#4b5563'}" font-size="10" font-family="monospace">${val}k</text>`
   }).join('')
 
   return `
     <svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block;overflow:visible">
+      ${defs}
       ${grids}
       ${bars}
     </svg>`
@@ -224,8 +273,11 @@ export function renderManagementHQ(): string {
   --hq-surface-2 : #161616;
   --hq-border    : rgba(255, 179, 0, 0.10);
   --hq-border-hi : rgba(255, 179, 0, 0.25);
-  --hq-amber     : #F59E0B;
-  --hq-gold      : #CA8A04;
+  --hq-amber     : #FFB300;   /* Safety Amber — SaaS Fixed Anchor */
+  --hq-amber-hi  : #FFD54F;   /* Amber highlight */
+  --hq-gold      : #E65100;   /* Warm accent */
+  --hq-cyan      : #00E5FF;   /* Digital Cyan — Marketplace Velocity */
+  --hq-cyan-dim  : #00ACC1;   /* Cyan base */
   --hq-green     : #10B981;
   --hq-red       : #EF4444;
   --hq-purple    : #7C3AED;
@@ -456,13 +508,51 @@ body {
 }
 .hq-chart-legend {
   display: flex;
-  gap: 18px;
-  margin-top: 10px;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 16px;
 }
-.hq-legend-dot { width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; margin-top: 3px; }
-.hq-legend-label { font-size: 11px; color: var(--hq-text-muted); }
+/* Legend pill — 10% opacity background "capsule" per spec */
+.hq-legend-pill {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 9px;
+  border: 1px solid transparent;
+  transition: border-color .2s;
+}
+.hq-legend-pill--amber {
+  background: rgba(255, 179, 0, 0.08);
+  border-color: rgba(255, 179, 0, 0.14);
+}
+.hq-legend-pill--amber:hover { border-color: rgba(255, 179, 0, 0.30); }
+.hq-legend-pill--cyan {
+  background: rgba(0, 229, 255, 0.06);
+  border-color: rgba(0, 229, 255, 0.12);
+}
+.hq-legend-pill--cyan:hover { border-color: rgba(0, 229, 255, 0.28); }
+.hq-legend-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  flex-shrink: 0;
+  margin-top: 3px;
+}
+.hq-legend-copy { display: flex; flex-direction: column; gap: 2px; }
+.hq-legend-title {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .02em;
+}
+.hq-legend-desc {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--hq-text-muted);
+  line-height: 1.4;
+}
 
-/* ── Donut placeholder ── */
+/* ── Donut ── */
 .hq-donut-wrap {
   display: flex;
   flex-direction: column;
@@ -470,18 +560,40 @@ body {
   justify-content: center;
   gap: 14px;
 }
+/* Donut glow pulse animation */
+@keyframes hq-donut-glow-amber {
+  0%,100% { filter: drop-shadow(0 0 4px rgba(255,179,0,.45)); }
+  50%      { filter: drop-shadow(0 0 10px rgba(255,179,0,.80)); }
+}
+@keyframes hq-donut-glow-cyan {
+  0%,100% { filter: drop-shadow(0 0 4px rgba(0,229,255,.35)); }
+  50%      { filter: drop-shadow(0 0 9px rgba(0,229,255,.70)); }
+}
+.hq-donut-amber { animation: hq-donut-glow-amber 2.8s ease-in-out infinite; }
+.hq-donut-cyan  { animation: hq-donut-glow-cyan  3.2s ease-in-out infinite; }
 .hq-donut-legend-row {
   display: flex;
   align-items: center;
   gap: 8px;
   width: 100%;
+  padding: 6px 8px;
+  border-radius: 7px;
+  border: 1px solid transparent;
+}
+.hq-donut-legend-row--amber {
+  background: rgba(255, 179, 0, 0.07);
+  border-color: rgba(255, 179, 0, 0.13);
+}
+.hq-donut-legend-row--cyan {
+  background: rgba(0, 229, 255, 0.06);
+  border-color: rgba(0, 229, 255, 0.11);
 }
 .hq-donut-legend-bar {
-  flex: 1;
-  height: 3px;
-  border-radius: 2px;
+  width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0;
 }
-.hq-donut-legend-val { font-size: 12px; font-weight: 700; font-family: var(--hq-mono); }
+.hq-donut-legend-val { font-size: 13px; font-weight: 800; font-family: var(--hq-mono); }
+.hq-donut-legend-label { font-size: 10px; font-weight: 700; flex: 1; }
+.hq-donut-legend-sub   { font-size: 9px; color: var(--hq-text-muted); display: block; font-weight: 600; margin-top: 1px; }
 
 /* ── License / Registry Table ── */
 .hq-table-wrap {
@@ -534,7 +646,7 @@ table.hq-table {
   letter-spacing: .03em;
 }
 .hq-badge-green  { background: rgba(16,185,129,.12);  color: #10b981; border: 1px solid rgba(16,185,129,.25); }
-.hq-badge-amber  { background: rgba(245,158,11,.12);  color: #f59e0b; border: 1px solid rgba(245,158,11,.25); }
+.hq-badge-amber  { background: rgba(255,179,0,.12);   color: #FFB300; border: 1px solid rgba(255,179,0,.25); }
 .hq-badge-red    { background: rgba(239,68,68,.12);   color: #ef4444; border: 1px solid rgba(239,68,68,.25); }
 .hq-badge-muted  { background: rgba(107,114,128,.10); color: #6b7280; border: 1px solid rgba(107,114,128,.2); }
 .hq-badge-purple { background: rgba(124,58,237,.12);  color: #a78bfa; border: 1px solid rgba(124,58,237,.25); }
@@ -627,7 +739,7 @@ table.hq-table {
         <span class="hq-trend hq-trend--up">${DUMMY_KPI.mrrTrend} MoM</span>
         <span class="hq-kpi-sub">Subscription revenue</span>
       </div>
-      <div class="hq-kpi-spark">${sparkline(MRR_SPARK, '#f59e0b')}</div>
+      <div class="hq-kpi-spark">${sparkline(MRR_SPARK, '#FFB300')}</div>
     </div>
 
     <!-- Commission -->
@@ -639,7 +751,7 @@ table.hq-table {
         <span class="hq-trend hq-trend--up">${DUMMY_KPI.commTrend} MoM</span>
         <span class="hq-kpi-sub">1.5% platform fee on CIF</span>
       </div>
-      <div class="hq-kpi-spark">${sparkline(COMM_SPARK, '#10b981')}</div>
+      <div class="hq-kpi-spark">${sparkline(COMM_SPARK, '#00E5FF')}</div>
     </div>
 
     <!-- Active Licenses -->
@@ -708,64 +820,138 @@ table.hq-table {
 
   <div class="hq-chart-wrap hq-mb32">
 
-    <!-- Stacked Bar Chart -->
+    <!-- ── Stacked Bar Chart — Warm/Cool dual stream ── -->
     <div class="hq-card">
       <div class="hq-chart-title">
-        <i class="fa fa-layer-group" style="color:var(--hq-amber)"></i>
-        Monthly Revenue Split — Subscription vs Transaction Fees
-        <span style="font-size:10px;color:var(--hq-text-muted);margin-left:auto">Oct 2025 → Mar 2026</span>
+        <i class="fa fa-layer-group" style="color:#FFB300"></i>
+        Monthly Revenue Split — SaaS Anchor vs Marketplace Velocity
+        <span style="font-size:10px;color:var(--hq-text-muted);margin-left:auto;font-family:monospace">Oct 2025 → Mar 2026</span>
       </div>
       ${stackedBarChart()}
-      <div class="hq-chart-legend" style="margin-top:14px">
-        <div style="display:flex;align-items:center;gap:7px">
-          <div class="hq-legend-dot" style="background:#f59e0b"></div>
-          <span class="hq-legend-label">Subscription Revenue (Roaster Pro + IoT Pulse)</span>
+
+      <!-- Legend pills -->
+      <div class="hq-chart-legend">
+
+        <!-- Stream 1: SaaS — Safety Amber -->
+        <div class="hq-legend-pill hq-legend-pill--amber">
+          <div class="hq-legend-swatch" style="background:linear-gradient(to bottom,#FFD54F,#FFB300);box-shadow:0 0 6px rgba(255,179,0,.5)"></div>
+          <div class="hq-legend-copy">
+            <span class="hq-legend-title" style="color:#FFB300">
+              SaaS Revenue <span style="font-weight:500;opacity:.7">(Fixed Anchor)</span>
+            </span>
+            <span class="hq-legend-desc">
+              Predictable MRR from Roastery Pro &amp; IoT Pulse nodes.
+            </span>
+          </div>
         </div>
-        <div style="display:flex;align-items:center;gap:7px">
-          <div class="hq-legend-dot" style="background:#ca8a04"></div>
-          <span class="hq-legend-label">Transaction Fees (1.5% Exchange Commission)</span>
+
+        <!-- Stream 2: Commission — Digital Cyan -->
+        <div class="hq-legend-pill hq-legend-pill--cyan">
+          <div class="hq-legend-swatch" style="background:linear-gradient(to bottom,#00E5FF,#00ACC1);box-shadow:0 0 6px rgba(0,229,255,.45)"></div>
+          <div class="hq-legend-copy">
+            <span class="hq-legend-title" style="color:#00E5FF">
+              Marketplace Velocity <span style="font-weight:500;opacity:.7">(Variable Fees)</span>
+            </span>
+            <span class="hq-legend-desc">
+              1.5% success fee on global CIF trade volume.
+            </span>
+          </div>
         </div>
+
       </div>
     </div>
 
-    <!-- Revenue Mix Donut (SVG) -->
-    <div class="hq-card">
+    <!-- ── Revenue Mix Ratio Donut ── -->
+    <div class="hq-card" style="display:flex;flex-direction:column">
       <div class="hq-chart-title">
-        <i class="fa fa-circle-half-stroke" style="color:var(--hq-amber)"></i>
-        Revenue Mix
+        <i class="fa fa-circle-half-stroke" style="color:#FFB300"></i>
+        Revenue Mix Ratio
+        <span style="font-size:9px;font-weight:600;color:var(--hq-text-muted);margin-left:auto;letter-spacing:.05em">WARM vs COOL</span>
       </div>
-      <div class="hq-donut-wrap">
-        <svg viewBox="0 0 120 120" width="120" height="120">
-          <!-- Sub 70% -->
-          <circle cx="60" cy="60" r="46" fill="none" stroke="#1a1a1a" stroke-width="18"/>
-          <circle cx="60" cy="60" r="46" fill="none" stroke="#f59e0b" stroke-width="18"
-                  stroke-dasharray="${(0.70 * 2 * Math.PI * 46).toFixed(1)} ${(2 * Math.PI * 46).toFixed(1)}"
-                  stroke-dashoffset="${(0.25 * 2 * Math.PI * 46).toFixed(1)}"
-                  opacity=".9"/>
-          <!-- Txn 30% -->
-          <circle cx="60" cy="60" r="46" fill="none" stroke="#ca8a04" stroke-width="18"
-                  stroke-dasharray="${(0.30 * 2 * Math.PI * 46).toFixed(1)} ${(2 * Math.PI * 46).toFixed(1)}"
-                  stroke-dashoffset="${(-0.45 * 2 * Math.PI * 46).toFixed(1)}"
-                  opacity=".85"/>
-          <text x="60" y="56" text-anchor="middle" fill="#e2e8f0" font-size="13" font-weight="800" font-family="monospace">70%</text>
-          <text x="60" y="70" text-anchor="middle" fill="#6b7280" font-size="9" font-family="monospace">SaaS</text>
-        </svg>
-        <div style="width:100%">
-          <div class="hq-donut-legend-row">
-            <div class="hq-donut-legend-bar" style="background:#f59e0b"></div>
-            <span class="hq-donut-legend-val" style="color:#f59e0b">70%</span>
-            <span style="font-size:11px;color:var(--hq-text-muted);margin-left:4px">Subscriptions</span>
-          </div>
-          <div class="hq-donut-legend-row" style="margin-top:8px">
-            <div class="hq-donut-legend-bar" style="background:#ca8a04"></div>
-            <span class="hq-donut-legend-val" style="color:#ca8a04">30%</span>
-            <span style="font-size:11px;color:var(--hq-text-muted);margin-left:4px">Commission</span>
-          </div>
+      <div class="hq-donut-wrap" style="flex:1">
+
+        <!-- SVG Donut with glow segments -->
+        <div style="position:relative;width:130px;height:130px">
+          <svg viewBox="0 0 130 130" width="130" height="130" style="display:block">
+            <defs>
+              <!-- Amber glow -->
+              <filter id="df-amber" x="-30%" y="-30%" width="160%" height="160%">
+                <feGaussianBlur in="SourceGraphic" stdDeviation="3.5" result="blur"/>
+                <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+              </filter>
+              <!-- Cyan glow -->
+              <filter id="df-cyan" x="-30%" y="-30%" width="160%" height="160%">
+                <feGaussianBlur in="SourceGraphic" stdDeviation="3" result="blur"/>
+                <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+              </filter>
+              <!-- Amber arc gradient -->
+              <linearGradient id="dg-amber" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%"   stop-color="#FFD54F"/>
+                <stop offset="100%" stop-color="#FFB300"/>
+              </linearGradient>
+              <!-- Cyan arc gradient -->
+              <linearGradient id="dg-cyan" x1="1" y1="0" x2="0" y2="1">
+                <stop offset="0%"   stop-color="#00E5FF"/>
+                <stop offset="100%" stop-color="#00ACC1"/>
+              </linearGradient>
+            </defs>
+            <!-- Track -->
+            <circle cx="65" cy="65" r="50" fill="none" stroke="#1c1c1c" stroke-width="16"/>
+            <!-- SaaS 70% — Amber arc (starts at top = -90°) -->
+            <circle cx="65" cy="65" r="50" fill="none" stroke="url(#dg-amber)" stroke-width="16"
+                    stroke-dasharray="${(0.70 * 2 * Math.PI * 50).toFixed(1)} ${(2 * Math.PI * 50).toFixed(1)}"
+                    stroke-dashoffset="${(0.25 * 2 * Math.PI * 50).toFixed(1)}"
+                    stroke-linecap="round"
+                    class="hq-donut-amber"/>
+            <!-- Commission 30% — Cyan arc -->
+            <circle cx="65" cy="65" r="50" fill="none" stroke="url(#dg-cyan)" stroke-width="14"
+                    stroke-dasharray="${(0.295 * 2 * Math.PI * 50).toFixed(1)} ${(2 * Math.PI * 50).toFixed(1)}"
+                    stroke-dashoffset="${(-0.452 * 2 * Math.PI * 50).toFixed(1)}"
+                    stroke-linecap="round"
+                    class="hq-donut-cyan"/>
+            <!-- Center labels -->
+            <text x="65" y="59" text-anchor="middle" fill="#FFB300"
+                  font-size="16" font-weight="800" font-family="monospace">70%</text>
+            <text x="65" y="72" text-anchor="middle" fill="#94a3b8"
+                  font-size="8.5" font-weight="700" font-family="monospace" letter-spacing=".08em">FIXED</text>
+            <text x="65" y="82" text-anchor="middle" fill="#00E5FF"
+                  font-size="8" font-weight="700" font-family="monospace">/&nbsp;30% PULSE</text>
+          </svg>
         </div>
-        <div style="text-align:center;width:100%;padding-top:6px;border-top:1px solid var(--hq-border)">
-          <div style="font-size:10px;color:var(--hq-text-muted)">Total MRR</div>
-          <div style="font-size:1.2rem;font-weight:800;color:var(--hq-amber);font-family:monospace">SAR ${fmt(DUMMY_KPI.mrr + DUMMY_KPI.commission)}</div>
+
+        <!-- Donut legend rows -->
+        <div style="width:100%;display:flex;flex-direction:column;gap:8px">
+
+          <div class="hq-donut-legend-row hq-donut-legend-row--amber">
+            <div class="hq-donut-legend-bar" style="background:linear-gradient(90deg,#FFD54F,#FFB300);box-shadow:0 0 5px rgba(255,179,0,.5)"></div>
+            <span class="hq-donut-legend-val" style="color:#FFB300">70%</span>
+            <div style="flex:1">
+              <span class="hq-donut-legend-label" style="color:#FFB300">SaaS Fixed</span>
+              <span class="hq-donut-legend-sub">Roaster Pro + IoT Pulse</span>
+            </div>
+          </div>
+
+          <div class="hq-donut-legend-row hq-donut-legend-row--cyan">
+            <div class="hq-donut-legend-bar" style="background:linear-gradient(90deg,#00E5FF,#00ACC1);box-shadow:0 0 5px rgba(0,229,255,.4)"></div>
+            <span class="hq-donut-legend-val" style="color:#00E5FF">30%</span>
+            <div style="flex:1">
+              <span class="hq-donut-legend-label" style="color:#00E5FF">Marketplace</span>
+              <span class="hq-donut-legend-sub">1.5% CIF velocity</span>
+            </div>
+          </div>
+
         </div>
+
+        <!-- Total MRR footer -->
+        <div style="text-align:center;width:100%;padding:10px 0 0;border-top:1px solid var(--hq-border)">
+          <div style="font-size:9px;text-transform:uppercase;letter-spacing:.1em;color:var(--hq-text-muted);font-weight:700">Total Revenue</div>
+          <div style="font-size:1.3rem;font-weight:800;font-family:monospace;margin-top:3px">
+            <span style="color:#FFB300">SAR</span>
+            <span style="color:#e2e8f0"> ${fmt(DUMMY_KPI.mrr + DUMMY_KPI.commission)}</span>
+          </div>
+          <div style="font-size:9px;color:var(--hq-text-muted);margin-top:2px">MRR + Commission</div>
+        </div>
+
       </div>
     </div>
 
