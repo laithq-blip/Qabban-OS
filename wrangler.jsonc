@@ -1,33 +1,9 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "webapp",
+  "name": "qabban-os",
   "compatibility_date": "2026-02-24",
   "pages_build_output_dir": "./dist",
   "compatibility_flags": [
     "nodejs_compat"
-  ],
-
-  // ── Risk Watchdog: cron trigger every 6 hours ─────────────────────────────
-  // Runs checkHumidityViolations() to detect sustained >70 % RH over 48 h.
-  // NOTE: Cron triggers are supported in Cloudflare Workers (wrangler.toml "triggers")
-  // but NOT directly in Pages. For Pages, the cron is handled via a dedicated
-  // scheduled handler exported from src/index.tsx and invoked by Cloudflare's
-  // cron scheduler when deployed as a Worker alongside Pages.
-  "triggers": {
-    "crons": ["0 */6 * * *"]
-  }
-
-  // "vars": {
-  //   "WHATSAPP_TOKEN": "",
-  //   "WHATSAPP_PHONE_ID": ""
-  // },
-  // "kv_namespaces": [
-  //   { "binding": "MY_KV_NAMESPACE", "id": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" }
-  // ],
-  // "r2_buckets": [
-  //   { "binding": "MY_BUCKET", "bucket_name": "my-bucket" }
-  // ],
-  // "d1_databases": [
-  //   { "binding": "MY_DB", "database_name": "my-database", "database_id": "" }
-  // ]
+  ]
 }

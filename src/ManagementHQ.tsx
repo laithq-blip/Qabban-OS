@@ -365,6 +365,170 @@ body {
 }
 .hq-admin-link:hover { border-color: var(--hq-border-hi); color: var(--hq-text-sec); }
 
+/* ── Global Tonnage Ticker ── */
+.hq-ticker-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  padding: 5px 14px;
+  border: 1px solid rgba(255, 179, 0, 0.18);
+  border-radius: 9px;
+  background: rgba(255, 179, 0, 0.05);
+  position: relative;
+  overflow: hidden;
+}
+/* Ambient glow underlay */
+.hq-ticker-wrap::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: 9px;
+  background: radial-gradient(ellipse at center, rgba(255,179,0,.12) 0%, transparent 70%);
+  pointer-events: none;
+}
+.hq-ticker-label {
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: rgba(255,179,0,.55);
+  font-family: var(--hq-mono);
+  line-height: 1;
+}
+.hq-ticker-value {
+  font-family: var(--hq-mono);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  color: #FFB300;
+  line-height: 1;
+  /* Amber text glow — simulates LCD/digital ledger */
+  text-shadow:
+    0 0 8px  rgba(255, 179, 0, 0.70),
+    0 0 20px rgba(255, 179, 0, 0.35),
+    0 0 40px rgba(255, 179, 0, 0.15);
+  white-space: nowrap;
+}
+.hq-ticker-unit {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .1em;
+  color: rgba(255,179,0,.50);
+  font-family: var(--hq-mono);
+  margin-left: 3px;
+}
+/* Rolling digit flash on update */
+@keyframes hq-digit-flash {
+  0%   { opacity: 1; }
+  15%  { opacity: 0.3; color: #FFD54F; }
+  30%  { opacity: 1; }
+  100% { opacity: 1; }
+}
+.hq-ticker-value.hq-ticker-flash {
+  animation: hq-digit-flash 0.45s ease-out;
+}
+
+/* ── Geospatial Sentinel Widget ── */
+.hq-sentinel-wrap {
+  padding: 14px 0 4px;
+  border-top: 1px solid var(--hq-border);
+}
+.hq-sentinel-title {
+  font-size: 8.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .13em;
+  color: var(--hq-text-muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.hq-sentinel-title i { font-size: 9px; }
+/* Two-tone split bar */
+.hq-sentinel-bar-track {
+  height: 8px;
+  border-radius: 5px;
+  background: rgba(255,255,255,.05);
+  overflow: hidden;
+  display: flex;
+  position: relative;
+  box-shadow: inset 0 1px 2px rgba(0,0,0,.4);
+}
+.hq-sentinel-bar-amber {
+  height: 100%;
+  width: 74%;
+  background: linear-gradient(90deg, #FFD54F, #FFB300);
+  box-shadow: 0 0 8px rgba(255,179,0,.55), 0 0 2px rgba(255,179,0,.9);
+  border-radius: 5px 0 0 5px;
+  position: relative;
+  transition: width 1.2s cubic-bezier(.4,0,.2,1);
+}
+.hq-sentinel-bar-amber::after {
+  content: '';
+  position: absolute;
+  top: 0; right: 0;
+  width: 2px;
+  height: 100%;
+  background: rgba(255,255,255,.45);
+}
+.hq-sentinel-bar-cyan {
+  height: 100%;
+  width: 26%;
+  background: linear-gradient(90deg, #00E5FF, #00ACC1);
+  box-shadow: 0 0 8px rgba(0,229,255,.45), 0 0 2px rgba(0,229,255,.8);
+  border-radius: 0 5px 5px 0;
+  transition: width 1.2s cubic-bezier(.4,0,.2,1);
+}
+/* Lock legends */
+.hq-sentinel-legs {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+}
+.hq-sentinel-leg {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 10px;
+}
+.hq-sentinel-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+.hq-sentinel-leg-label {
+  color: var(--hq-text-sec);
+  font-weight: 600;
+  flex: 1;
+}
+.hq-sentinel-leg-pct {
+  font-family: var(--hq-mono);
+  font-size: 10px;
+  font-weight: 800;
+}
+/* Info callout */
+.hq-sentinel-callout {
+  margin-top: 10px;
+  padding: 7px 10px;
+  background: rgba(0,229,255,.04);
+  border: 1px solid rgba(0,229,255,.12);
+  border-left: 2px solid #00E5FF;
+  border-radius: 6px;
+  font-size: 9px;
+  color: rgba(0,229,255,.70);
+  font-weight: 600;
+  line-height: 1.45;
+  font-family: var(--hq-mono);
+}
+.hq-sentinel-callout strong {
+  color: #00E5FF;
+  font-weight: 800;
+}
+
 /* ── Section headings ── */
 .hq-section-label {
   font-size: 10px;
@@ -711,6 +875,14 @@ table.hq-table {
   <div class="hq-topbar-sep"></div>
   <span class="hq-topbar-tag">God View</span>
   <div class="hq-topbar-right">
+    <!-- ── Global Tonnage Ticker ── -->
+    <div class="hq-ticker-wrap" title="Total green + roasted coffee volume under Qabban OS management">
+      <span class="hq-ticker-label">Total Volume Managed</span>
+      <span class="hq-ticker-value" id="hq-tonnage-counter">42,855.60
+        <span class="hq-ticker-unit">KG</span>
+      </span>
+    </div>
+    <div class="hq-topbar-sep"></div>
     <span class="hq-date" id="hq-clock">—</span>
     <span style="font-size:12px;color:var(--hq-text-muted)">
       <span class="hq-live-dot"></span>Live Platform Feed
@@ -1021,7 +1193,52 @@ table.hq-table {
           </div>
         </div>`).join('')}
 
-      <div style="margin-top:auto;padding-top:12px;border-top:1px solid var(--hq-border);text-align:center">
+      <!-- ── Geospatial Sentinel Widget ── -->
+      <div class="hq-sentinel-wrap">
+        <div class="hq-sentinel-title">
+          <i class="fa fa-satellite-dish" style="color:#00E5FF"></i>
+          Data Source Resilience
+          <span style="color:rgba(0,229,255,.45);font-weight:600">(Geospatial Sentinel)</span>
+        </div>
+
+        <!-- Two-tone split bar: Amber = IoT | Cyan = GPS fallover -->
+        <div class="hq-sentinel-bar-track">
+          <div class="hq-sentinel-bar-amber" id="hq-sentinel-amber" style="width:74%"></div>
+          <div class="hq-sentinel-bar-cyan"  id="hq-sentinel-cyan"  style="width:26%"></div>
+        </div>
+
+        <!-- Lock legends -->
+        <div class="hq-sentinel-legs">
+          <div class="hq-sentinel-leg">
+            <div class="hq-sentinel-dot" style="background:linear-gradient(135deg,#FFD54F,#FFB300);box-shadow:0 0 4px rgba(255,179,0,.6)"></div>
+            <span class="hq-sentinel-leg-label">Active IoT Locks</span>
+            <span class="hq-sentinel-leg-pct" style="color:#FFB300" id="hq-sentinel-amber-pct">74%</span>
+          </div>
+          <div class="hq-sentinel-leg" style="padding-left:1px">
+            <span style="font-size:8.5px;color:var(--hq-text-muted);padding-left:13px;font-weight:600;line-height:1.3;display:block">
+              High-resolution room data
+            </span>
+          </div>
+          <div class="hq-sentinel-leg">
+            <div class="hq-sentinel-dot" style="background:linear-gradient(135deg,#00E5FF,#00ACC1);box-shadow:0 0 4px rgba(0,229,255,.55)"></div>
+            <span class="hq-sentinel-leg-label">Active GPS Fallback</span>
+            <span class="hq-sentinel-leg-pct" style="color:#00E5FF" id="hq-sentinel-cyan-pct">26%</span>
+          </div>
+          <div class="hq-sentinel-leg">
+            <span style="font-size:8.5px;color:var(--hq-text-muted);padding-left:13px;font-weight:600;line-height:1.3;display:block">
+              API-driven resilience
+            </span>
+          </div>
+        </div>
+
+        <!-- Info callout -->
+        <div class="hq-sentinel-callout">
+          <strong>Lock-2 active:</strong> GPS failover engaged for
+          <strong>14 branches</strong> due to local sensor latency.
+        </div>
+      </div>
+
+      <div style="padding-top:12px;border-top:1px solid var(--hq-border);text-align:center">
         <div style="font-size:10px;color:var(--hq-text-muted);text-transform:uppercase;letter-spacing:.08em">Composite Score</div>
         <div style="font-size:2.2rem;font-weight:800;color:var(--hq-green);font-family:monospace;margin-top:4px">95.6</div>
         <div style="font-size:10px;color:var(--hq-green);opacity:.7">Excellent</div>
@@ -1061,6 +1278,80 @@ table.hq-table {
   }
   tick()
   setInterval(tick, 1000)
+
+  /* ── Global Tonnage Ticker ── */
+  ;(function() {
+    // Base volume: 42,855.60 KG — decimal jiggles every 3 s to simulate
+    // live bean movement through the Saudi supply chain.
+    var BASE_INT  = 42855
+    var BASE_DEC  = 60     // hundredths
+
+    // Micro-drift: ±0.04 kg per tick (beans moving = continuous mass change)
+    var DRIFT_MAX = 40     // centikilograms per tick (up to 0.40 kg)
+    var accum     = BASE_DEC  // cumulative centikilograms
+
+    function fmtTonnage(intPart, decPart) {
+      // Zero-pad decimal to 2 digits
+      var dp = String(decPart).padStart(2, '0')
+      // Comma-format integer part (en-SA style: 42,855)
+      var ip = intPart.toLocaleString('en-SA')
+      return ip + '.' + dp
+    }
+
+    function tickTonnage() {
+      // Random micro-movement: ±DRIFT_MAX centikilograms
+      var delta = Math.floor(Math.random() * (DRIFT_MAX * 2 + 1)) - DRIFT_MAX
+      accum += delta
+      // Carry over full kg
+      if (accum >= 100) { BASE_INT += Math.floor(accum / 100); accum = accum % 100; }
+      if (accum < 0)    { var borrow = Math.ceil(-accum / 100); BASE_INT -= borrow; accum += borrow * 100; }
+      // Clamp to realistic range: ±50 kg from origin
+      if (BASE_INT > 42905) { BASE_INT = 42855; accum = 60; }
+      if (BASE_INT < 42805) { BASE_INT = 42855; accum = 60; }
+
+      var el = document.getElementById('hq-tonnage-counter')
+      if (!el) return
+      var newText = fmtTonnage(BASE_INT, accum) + ' '
+      // Only flash if the integer part changed
+      var intChanged = el.textContent.indexOf(BASE_INT.toLocaleString('en-SA')) === -1
+      el.innerHTML = newText + '<span class="hq-ticker-unit">KG</span>'
+      if (intChanged) {
+        el.classList.remove('hq-ticker-flash')
+        void el.offsetWidth  // reflow to restart animation
+        el.classList.add('hq-ticker-flash')
+      }
+    }
+
+    // Initial render
+    var el0 = document.getElementById('hq-tonnage-counter')
+    if (el0) el0.innerHTML = fmtTonnage(BASE_INT, BASE_DEC) + ' <span class="hq-ticker-unit">KG</span>'
+
+    // Tick every 3 seconds
+    setInterval(tickTonnage, 3000)
+  })()
+
+  /* ── Geospatial Sentinel — shimmer animation on page load ── */
+  ;(function() {
+    // Animate bars from 0 → target on first paint
+    var amberBar = document.getElementById('hq-sentinel-amber')
+    var cyanBar  = document.getElementById('hq-sentinel-cyan')
+    if (amberBar) { amberBar.style.width = '0%'; setTimeout(function(){ amberBar.style.width = '74%' }, 200) }
+    if (cyanBar)  { cyanBar.style.width  = '0%'; setTimeout(function(){ cyanBar.style.width  = '26%' }, 200) }
+
+    // Micro-pulse the percentages every 8 s to simulate sensor drift
+    var amberBase = 74, cyanBase = 26
+    setInterval(function() {
+      var drift = (Math.random() < 0.5 ? 1 : -1) * (Math.random() < 0.4 ? 1 : 0)
+      var a = Math.min(80, Math.max(68, amberBase + drift))
+      var cy = 100 - a
+      if (amberBar) amberBar.style.width = a + '%'
+      if (cyanBar)  cyanBar.style.width  = cy + '%'
+      var elA = document.getElementById('hq-sentinel-amber-pct')
+      var elC = document.getElementById('hq-sentinel-cyan-pct')
+      if (elA) elA.textContent = a + '%'
+      if (elC) elC.textContent = cy + '%'
+    }, 8000)
+  })()
 
   /* ── Lock / Unlock toggle ── */
   // Dummy client data mirrored from server (decorative only)
