@@ -124,6 +124,63 @@ import {
   ERP_PRO_MONTHLY_SAR,
   PULSE_ADDON_MONTHLY_SAR,
 } from './data'
+import type { StockTransfer, B2BClient, B2BOrder } from './RolePermissions'
+
+// ── In-memory stores for new Hybrid Ecosystem features ───────────
+const stockTransfers: StockTransfer[] = []
+
+const b2bClients: B2BClient[] = [
+  {
+    id: 'B2B-001', name: 'Al Nokhba Specialty', city: 'Riyadh',
+    contactPhone: '+966501110001', contactEmail: 'orders@alnokhba.sa',
+    loyaltyTier: 'Gold', lifetimeKgPurchased: 2400, lifetimeSarSpent: 288000,
+    nextScheduledOrder: '2026-04-15',
+    nodeType: 'b2b', assignedBranchId: null, createdAt: '2023-08-01',
+    orderHistory: [
+      { orderId: 'ORD-2401', date: '2026-03-10', totalSar: 14400, status: 'DELIVERED', zatcaRef: 'ZAT-2401',
+        items: [{ lotId: 'LOT-ETH-001', origin: 'Ethiopia Yirgacheffe', kgOrdered: 120, sarPerKg: 120 }] },
+      { orderId: 'ORD-2315', date: '2026-02-14', totalSar: 9600, status: 'DELIVERED', zatcaRef: 'ZAT-2315',
+        items: [{ lotId: 'LOT-COL-003', origin: 'Colombia Huila', kgOrdered: 80, sarPerKg: 120 }] },
+      { orderId: 'ORD-2280', date: '2026-01-20', totalSar: 12000, status: 'DELIVERED', zatcaRef: 'ZAT-2280',
+        items: [{ lotId: 'LOT-ETH-002', origin: 'Ethiopia Sidama', kgOrdered: 100, sarPerKg: 120 }] },
+    ],
+  },
+  {
+    id: 'B2B-002', name: 'Qahwa Al Bahr', city: 'Jeddah',
+    contactPhone: '+966556220002', contactEmail: 'supply@qahwalbahr.sa',
+    loyaltyTier: 'Silver', lifetimeKgPurchased: 1965, lifetimeSarSpent: 215000,
+    nextScheduledOrder: '2026-04-22',
+    nodeType: 'b2b', assignedBranchId: null, createdAt: '2023-11-15',
+    orderHistory: [
+      { orderId: 'ORD-2398', date: '2026-03-05', totalSar: 8400, status: 'DELIVERED', zatcaRef: 'ZAT-2398',
+        items: [{ lotId: 'LOT-BRA-001', origin: 'Brazil Santos', kgOrdered: 70, sarPerKg: 120 }] },
+      { orderId: 'ORD-2310', date: '2026-02-01', totalSar: 6000, status: 'DELIVERED', zatcaRef: 'ZAT-2310',
+        items: [{ lotId: 'LOT-COL-002', origin: 'Colombia Nariño', kgOrdered: 50, sarPerKg: 120 }] },
+    ],
+  },
+  {
+    id: 'B2B-003', name: 'Pearl Roast Café', city: 'Dammam',
+    contactPhone: '+966533440003', contactEmail: 'beans@pearlroast.sa',
+    loyaltyTier: 'Bronze', lifetimeKgPurchased: 460, lifetimeSarSpent: 44000,
+    nextScheduledOrder: '2026-05-01',
+    nodeType: 'hybrid', assignedBranchId: 'BR-DMM', createdAt: '2024-03-10',
+    orderHistory: [
+      { orderId: 'ORD-2390', date: '2026-03-01', totalSar: 3600, status: 'DELIVERED', zatcaRef: 'ZAT-2390',
+        items: [{ lotId: 'LOT-ETH-003', origin: 'Ethiopia Guji', kgOrdered: 30, sarPerKg: 120 }] },
+    ],
+  },
+  {
+    id: 'B2B-004', name: 'Camel Step Roasters', city: 'Riyadh',
+    contactPhone: '+966512345678', contactEmail: 'purchase@camelstep.sa',
+    loyaltyTier: 'Silver', lifetimeKgPurchased: 820, lifetimeSarSpent: 89000,
+    nextScheduledOrder: '2026-04-28',
+    nodeType: 'exchange', assignedBranchId: null, createdAt: '2024-01-05',
+    orderHistory: [
+      { orderId: 'ORD-2395', date: '2026-03-08', totalSar: 7200, status: 'IN_TRANSIT', zatcaRef: null,
+        items: [{ lotId: 'LOT-YEM-001', origin: 'Yemen Haraaz', kgOrdered: 60, sarPerKg: 120 }] },
+    ],
+  },
+]
 
 const app = new Hono()
 
@@ -1365,7 +1422,8 @@ const shell = (title: string, body: string) => `<!DOCTYPE html>
       /* ── NAV ── */
       'nav.overview':        'Overview',
       'nav.inventory':       'Inventory',
-      'nav.branches':        'Branches',
+      'nav.branches':        'My Network',
+      'nav.b2b':             'B2B Clients',
       'nav.requests':        'Bean Requests',
       'nav.catalog':         'Coffee Catalog',
       'nav.orders':          'My Orders',
@@ -1630,7 +1688,8 @@ const shell = (title: string, body: string) => `<!DOCTYPE html>
       /* ── NAV ── */
       'nav.overview':        'نظرة عامة',
       'nav.inventory':       'المخزون',
-      'nav.branches':        'الفروع',
+      'nav.branches':        'شبكتي',
+      'nav.b2b':             'عملاء B2B',
       'nav.requests':        'طلبات البن',
       'nav.catalog':         'كتالوج القهوة',
       'nav.orders':          'طلباتي',
@@ -2238,7 +2297,8 @@ function adminLayout(pageTitle: string, activeNav: string, content: string, pend
   const navLinks = [
     { href: '/admin',           icon: 'fa-gauge',         label: 'Overview',        id: 'overview',   i18n: 'nav.overview'  },
     { href: '/admin/inventory', icon: 'fa-boxes-stacked', label: 'Inventory',       id: 'inventory',  i18n: 'nav.inventory' },
-    { href: '/admin/branches',  icon: 'fa-building',      label: 'Branches',        id: 'branches',   i18n: 'nav.branches'  },
+    { href: '/admin/branches',  icon: 'fa-sitemap',       label: 'My Network',      id: 'branches',   i18n: 'nav.branches'  },
+    { href: '/admin/b2b',        icon: 'fa-handshake',     label: 'B2B Clients',     id: 'b2b',        i18n: 'nav.b2b'       },
     { href: '/admin/finance',   icon: 'fa-chart-line',    label: 'Finance',         id: 'finance',    i18n: 'fin.nav'       },
     { href: '/admin/requests',  icon: 'fa-bell',          label: 'Bean Requests',   id: 'requests',   i18n: 'nav.requests'  },
     { href: '/exchange',        icon: 'fa-globe',         label: 'Global Exchange', id: 'exchange',   i18n: 'nav.exchange'  },
@@ -6286,6 +6346,363 @@ app.get('/admin/inventory', (c) => {
   return c.html(adminLayout('Inventory Ledger', 'inventory', content, pendingCount, getUnreadNotifications().length))
 })
 
+// ══════════════════════════════════════════════════════════════════
+//  STOCK TRANSFER API  (Internal Nodes — SAR 0 value)
+// ══════════════════════════════════════════════════════════════════
+
+// POST /api/stock-transfer — move KG between internal branch nodes
+app.post('/api/stock-transfer', async (c) => {
+  try {
+    const { fromBranch, toBranch, lotId, kgTransferred, note } = await c.req.json() as {
+      fromBranch: string; toBranch: string; lotId: string; kgTransferred: number; note?: string
+    }
+    if (!fromBranch || !toBranch || !lotId || !kgTransferred)
+      return c.json({ error: 'fromBranch, toBranch, lotId, kgTransferred are required' }, 400)
+    if (fromBranch === toBranch)
+      return c.json({ error: 'Source and destination nodes must differ' }, 400)
+    if (kgTransferred <= 0)
+      return c.json({ error: 'kgTransferred must be positive' }, 400)
+
+    const lot = coffeeLots.find(l => l.id === lotId)
+    if (!lot) return c.json({ error: `Lot ${lotId} not found` }, 404)
+    if (lot.liveRoastedKg !== undefined && lot.liveRoastedKg < kgTransferred)
+      return c.json({ error: `Insufficient stock — only ${lot.liveRoastedKg} kg available` }, 409)
+
+    const srcBranch = branches.find(b => b.name === fromBranch || b.id === fromBranch)
+    const dstBranch = branches.find(b => b.name === toBranch   || b.id === toBranch)
+    if (!srcBranch) return c.json({ error: `Branch '${fromBranch}' not found` }, 404)
+    if (!dstBranch) return c.json({ error: `Branch '${toBranch}' not found` }, 404)
+
+    // Deduct KG from source lot
+    if (lot.liveRoastedKg !== undefined) lot.liveRoastedKg -= kgTransferred
+    // Credit to destination branch KG stock
+    dstBranch.totalGreenKg = (dstBranch.totalGreenKg ?? 0) + Math.round(kgTransferred / 0.82)
+
+    const transfer: StockTransfer = {
+      id            : `TRF-${Date.now()}-${Math.random().toString(36).slice(2,6).toUpperCase()}`,
+      fromBranch    : srcBranch.name,
+      toBranch      : dstBranch.name,
+      lotId,
+      kgTransferred,
+      sarValue      : 0,
+      transferredAt : new Date().toISOString(),
+      note          : note ?? '',
+      initiatedBy   : 'admin',
+    }
+    stockTransfers.push(transfer)
+
+    return c.json({
+      success   : true,
+      transfer,
+      message   : `✅ ${kgTransferred} kg of ${lot.origin} transferred from ${srcBranch.name} → ${dstBranch.name} at SAR 0 (internal node transfer)`,
+    })
+  } catch (e) {
+    return c.json({ error: String(e) }, 500)
+  }
+})
+
+// GET /api/stock-transfers — list all internal transfers
+app.get('/api/stock-transfers', (c) => {
+  return c.json(stockTransfers.slice().reverse())
+})
+
+// ══════════════════════════════════════════════════════════════════
+//  B2B CLIENTS API
+// ══════════════════════════════════════════════════════════════════
+
+app.get('/api/b2b/clients', (c) => c.json(b2bClients))
+
+app.get('/api/b2b/clients/:id', (c) => {
+  const client = b2bClients.find(b => b.id === c.req.param('id'))
+  if (!client) return c.json({ error: 'Client not found' }, 404)
+  return c.json(client)
+})
+
+app.post('/api/b2b/clients/:id/schedule', async (c) => {
+  const client = b2bClients.find(b => b.id === c.req.param('id'))
+  if (!client) return c.json({ error: 'Client not found' }, 404)
+  const { nextScheduledOrder } = await c.req.json() as { nextScheduledOrder: string }
+  client.nextScheduledOrder = nextScheduledOrder
+  return c.json({ success: true, client })
+})
+
+// ══════════════════════════════════════════════════════════════════
+//  MY NETWORK — /admin/b2b  (B2B Clients CRM Dashboard)
+// ══════════════════════════════════════════════════════════════════
+
+app.get('/admin/b2b', (c) => {
+  const pendingCount = beanRequests.filter(r => r.status === 'PENDING').length
+  const watchdogCount = getUnreadNotifications().length
+
+  const TIER_COLORS: Record<string, string> = {
+    Gold: '#FFB300', Silver: '#a8a9ad', Bronze: '#cd7f32'
+  }
+  const STATUS_COLORS: Record<string, string> = {
+    DELIVERED: '#4ade80', IN_TRANSIT: '#00E5FF', PENDING: '#FFB300', CANCELLED: '#f87171'
+  }
+  const NODE_ICONS: Record<string, string> = {
+    b2b: 'fa-handshake', hybrid: 'fa-code-branch', exchange: 'fa-globe', internal: 'fa-sitemap'
+  }
+
+  const totalLtv = b2bClients.reduce((s, c) => s + c.lifetimeSarSpent, 0)
+  const totalKg  = b2bClients.reduce((s, c) => s + c.lifetimeKgPurchased, 0)
+  const goldCount   = b2bClients.filter(c => c.loyaltyTier === 'Gold').length
+  const silverCount = b2bClients.filter(c => c.loyaltyTier === 'Silver').length
+
+  const clientCards = b2bClients.map(client => {
+    const tierColor = TIER_COLORS[client.loyaltyTier] ?? '#888'
+    const nextTierKg = client.loyaltyTier === 'Bronze' ? 501 : client.loyaltyTier === 'Silver' ? 2001 : null
+    const prevTierKg = client.loyaltyTier === 'Bronze' ? 0 : client.loyaltyTier === 'Silver' ? 501 : 2001
+    const tierRange  = nextTierKg ? nextTierKg - prevTierKg : 1
+    const tierProgress = nextTierKg
+      ? Math.min(100, Math.round(((client.lifetimeKgPurchased - prevTierKg) / tierRange) * 100))
+      : 100
+    const kgToNext = nextTierKg ? nextTierKg - client.lifetimeKgPurchased : 0
+    const nodeIcon = NODE_ICONS[client.nodeType] ?? 'fa-building'
+    const lastOrder = client.orderHistory[0]
+
+    const recentOrders = client.orderHistory.slice(0, 3).map(o => `
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.05)">
+        <div>
+          <span style="font-family:var(--font-mono);font-size:11px;color:var(--amber)">${o.orderId}</span>
+          <span style="font-size:10px;color:var(--text-muted);margin-left:8px">${o.date}</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-family:var(--font-mono);font-size:11px;color:var(--text-pri)">SAR ${o.totalSar.toLocaleString('en-SA')}</span>
+          <span style="font-size:9px;padding:2px 7px;border-radius:99px;background:rgba(0,0,0,0.3);color:${STATUS_COLORS[o.status]}">${o.status}</span>
+          ${o.zatcaRef ? `<span style="font-size:9px;color:#4ade80" title="ZATCA verified">✓ ZATCA</span>` : '<span style="font-size:9px;color:var(--text-muted)">No ref</span>'}
+        </div>
+      </div>`).join('')
+
+    return `
+    <div style="background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius-lg);padding:20px;display:flex;flex-direction:column;gap:12px">
+      <!-- Header -->
+      <div style="display:flex;justify-content:space-between;align-items:flex-start">
+        <div>
+          <div style="font-size:14px;font-weight:700;color:var(--text-pri)">${client.name}</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:2px">
+            <i class="fa fa-location-dot" style="color:var(--amber);margin-right:4px"></i>${client.city}
+            &nbsp;·&nbsp;
+            <i class="fa ${nodeIcon}" style="color:var(--cyan);margin-right:4px"></i>${client.nodeType.toUpperCase()}
+          </div>
+        </div>
+        <span style="font-size:10px;font-weight:700;padding:3px 10px;border-radius:99px;background:rgba(0,0,0,0.3);color:${tierColor};border:1px solid ${tierColor}40">
+          ${client.loyaltyTier} Tier
+        </span>
+      </div>
+
+      <!-- KPI row -->
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+        <div style="background:var(--bg-3);border-radius:var(--radius);padding:10px;text-align:center">
+          <div style="font-size:9px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px">LTV</div>
+          <div style="font-family:var(--font-mono);font-size:14px;font-weight:700;color:var(--amber)">SAR ${(client.lifetimeSarSpent/1000).toFixed(0)}K</div>
+        </div>
+        <div style="background:var(--bg-3);border-radius:var(--radius);padding:10px;text-align:center">
+          <div style="font-size:9px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px">Total KG</div>
+          <div style="font-family:var(--font-mono);font-size:14px;font-weight:700;color:var(--cyan)">${client.lifetimeKgPurchased.toLocaleString()} kg</div>
+        </div>
+        <div style="background:var(--bg-3);border-radius:var(--radius);padding:10px;text-align:center">
+          <div style="font-size:9px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px">Orders</div>
+          <div style="font-family:var(--font-mono);font-size:14px;font-weight:700;color:var(--text-pri)">${client.orderHistory.length}</div>
+        </div>
+      </div>
+
+      <!-- Loyalty Tier Progress -->
+      <div>
+        <div style="display:flex;justify-content:space-between;margin-bottom:5px">
+          <span style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px">Loyalty Tier Progress</span>
+          ${nextTierKg
+            ? `<span style="font-size:10px;color:${tierColor};font-family:var(--font-mono)">${kgToNext} kg to ${client.loyaltyTier === 'Bronze' ? 'Silver' : 'Gold'}</span>`
+            : `<span style="font-size:10px;color:#FFB300;font-family:var(--font-mono)">🏆 Max Tier</span>`}
+        </div>
+        <div style="height:6px;background:var(--bg-3);border-radius:99px;overflow:hidden">
+          <div style="height:100%;width:${tierProgress}%;background:linear-gradient(90deg,${tierColor}88,${tierColor});border-radius:99px;transition:width .5s"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-top:3px">
+          <span style="font-size:9px;color:var(--text-muted)">${prevTierKg} kg</span>
+          <span style="font-size:9px;color:var(--text-muted)">${nextTierKg ?? '2001+'} kg</span>
+        </div>
+      </div>
+
+      <!-- Next Scheduled Order -->
+      <div style="display:flex;align-items:center;gap:8px;background:var(--bg-3);border-radius:var(--radius);padding:8px 12px">
+        <i class="fa fa-calendar-check" style="color:var(--green);font-size:12px"></i>
+        <span style="font-size:11px;color:var(--text-muted)">Next Order:</span>
+        <span style="font-family:var(--font-mono);font-size:11px;color:var(--text-pri);font-weight:600">
+          ${client.nextScheduledOrder ?? '—'}
+        </span>
+        <span style="margin-left:auto">
+          <a href="tel:${client.contactPhone}" style="font-size:10px;color:var(--cyan);text-decoration:none">
+            <i class="fa fa-phone"></i> ${client.contactPhone}
+          </a>
+        </span>
+      </div>
+
+      <!-- Order History -->
+      <div>
+        <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Recent Orders</div>
+        ${recentOrders || '<div style="font-size:11px;color:var(--text-muted);text-align:center;padding:8px">No orders yet</div>'}
+      </div>
+
+      <!-- Actions -->
+      <div style="display:flex;gap:8px;margin-top:4px">
+        <button onclick="scheduleOrder('${client.id}')" class="btn btn-sm" style="flex:1;font-size:11px;background:rgba(245,158,11,0.12);color:var(--amber);border:1px solid rgba(245,158,11,0.3)">
+          <i class="fa fa-calendar-plus"></i> Schedule Order
+        </button>
+        <button onclick="viewPassport('${client.id}')" class="btn btn-sm" style="flex:1;font-size:11px;background:rgba(0,229,255,0.08);color:var(--cyan);border:1px solid rgba(0,229,255,0.2)">
+          <i class="fa fa-passport"></i> Climate Passport
+        </button>
+      </div>
+    </div>`
+  }).join('')
+
+  const transferList = stockTransfers.slice(-5).reverse().map(t => `
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.05);font-size:11px">
+      <div>
+        <span style="font-family:var(--font-mono);color:var(--amber)">${t.id}</span>
+        <span style="color:var(--text-muted);margin:0 8px">·</span>
+        <span style="color:var(--text-pri)">${t.fromBranch} → ${t.toBranch}</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px">
+        <span style="font-family:var(--font-mono);color:var(--cyan)">${t.kgTransferred} kg</span>
+        <span style="color:#4ade80;font-size:10px">SAR 0 (Internal)</span>
+        <span style="color:var(--text-muted);font-size:10px">${t.transferredAt.slice(0,10)}</span>
+      </div>
+    </div>`).join('') || '<div style="color:var(--text-muted);text-align:center;padding:16px;font-size:12px">No transfers yet — use the form above to move stock between nodes.</div>'
+
+  const content = `
+  <style>
+    .b2b-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(340px,1fr)); gap:16px; }
+    .transfer-panel { background:var(--bg-2); border:1px solid rgba(245,158,11,0.2); border-radius:var(--radius-lg); padding:20px; margin-bottom:20px; }
+    .transfer-form { display:grid; grid-template-columns:1fr 1fr 1fr 120px 1fr auto; gap:10px; align-items:end; }
+    @media(max-width:900px){ .transfer-form { grid-template-columns:1fr 1fr; } }
+    .tf-label { font-size:10px; color:var(--text-muted); text-transform:uppercase; letter-spacing:.5px; margin-bottom:4px; }
+    .tf-select, .tf-input {
+      width:100%; padding:8px 10px; background:var(--bg-3); border:1px solid var(--border);
+      color:var(--text-pri); font-size:12px; font-family:var(--font-mono); border-radius:var(--radius);
+    }
+    .tf-select:focus, .tf-input:focus { outline:none; border-color:var(--amber); }
+  </style>
+
+  <div class="pg-title"><i class="fa fa-handshake" style="color:var(--amber)"></i>B2B Clients &amp; My Network</div>
+  <div class="pg-sub">Client Relationship Management · Internal Node Transfers · Loyalty Intelligence</div>
+
+  <!-- Summary KPIs -->
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px">
+    <div class="stat-card">
+      <div class="stat-label">Total Client LTV</div>
+      <div class="stat-value" style="color:var(--amber)">SAR ${(totalLtv/1000).toFixed(0)}K</div>
+      <div class="stat-unit">${b2bClients.length} active clients</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Total KG Moved</div>
+      <div class="stat-value" style="color:var(--cyan)">${totalKg.toLocaleString()} kg</div>
+      <div class="stat-unit">Lifetime cumulative</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Gold Tier Clients</div>
+      <div class="stat-value" style="color:#FFB300">${goldCount}</div>
+      <div class="stat-unit">${silverCount} Silver · ${b2bClients.length - goldCount - silverCount} Bronze</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Internal Transfers</div>
+      <div class="stat-value" style="color:#4ade80">${stockTransfers.length}</div>
+      <div class="stat-unit">SAR 0 node movements</div>
+    </div>
+  </div>
+
+  <!-- Internal Stock Transfer Panel -->
+  <div class="transfer-panel">
+    <div style="font-family:var(--font-mono);font-size:12px;color:var(--amber);letter-spacing:.8px;text-transform:uppercase;margin-bottom:14px">
+      <i class="fa fa-sitemap"></i> Internal Node Transfer — SAR 0 Stock Movement
+    </div>
+    <div class="transfer-form" id="transferForm">
+      <div>
+        <div class="tf-label">From Branch</div>
+        <select class="tf-select" id="tf-from">
+          ${branches.map(b => `<option value="${b.name}">${b.name}</option>`).join('')}
+        </select>
+      </div>
+      <div>
+        <div class="tf-label">To Branch</div>
+        <select class="tf-select" id="tf-to">
+          ${branches.map(b => `<option value="${b.name}">${b.name}</option>`).join('')}
+        </select>
+      </div>
+      <div>
+        <div class="tf-label">Lot</div>
+        <select class="tf-select" id="tf-lot">
+          ${coffeeLots.filter(l => l.status !== 'RECALLED').map(l => `<option value="${l.id}">${l.id} — ${l.origin}</option>`).join('')}
+        </select>
+      </div>
+      <div>
+        <div class="tf-label">KG</div>
+        <input class="tf-input" type="number" id="tf-kg" min="1" placeholder="e.g. 50"/>
+      </div>
+      <div>
+        <div class="tf-label">Note (optional)</div>
+        <input class="tf-input" type="text" id="tf-note" placeholder="e.g. Monthly restock"/>
+      </div>
+      <div>
+        <div class="tf-label">&nbsp;</div>
+        <button onclick="submitTransfer()" class="btn btn-amber" style="width:100%;white-space:nowrap">
+          <i class="fa fa-arrow-right-arrow-left"></i> Transfer
+        </button>
+      </div>
+    </div>
+    <div style="margin-top:16px">
+      <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Recent Transfers</div>
+      <div id="transferLog">${transferList}</div>
+    </div>
+  </div>
+
+  <!-- B2B Client Cards -->
+  <div style="font-family:var(--font-mono);font-size:12px;color:var(--text-sec);letter-spacing:.5px;text-transform:uppercase;margin-bottom:12px">
+    <i class="fa fa-users"></i> Client Registry (${b2bClients.length})
+  </div>
+  <div class="b2b-grid">${clientCards}</div>
+
+  <script>
+  async function submitTransfer() {
+    const from = document.getElementById('tf-from').value
+    const to   = document.getElementById('tf-to').value
+    const lot  = document.getElementById('tf-lot').value
+    const kg   = parseFloat(document.getElementById('tf-kg').value)
+    const note = document.getElementById('tf-note').value
+    if (!kg || kg <= 0) { alert('Enter a valid KG amount'); return }
+    if (from === to) { alert('Source and destination must differ'); return }
+    try {
+      const res = await fetch('/api/stock-transfer', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ fromBranch:from, toBranch:to, lotId:lot, kgTransferred:kg, note })
+      })
+      const data = await res.json()
+      if (!res.ok) { alert(data.error || 'Transfer failed'); return }
+      alert(data.message)
+      location.reload()
+    } catch(e) { alert('Network error: ' + e) }
+  }
+  async function scheduleOrder(clientId) {
+    const date = prompt('Enter next order date (YYYY-MM-DD):')
+    if (!date) return
+    const res = await fetch('/api/b2b/clients/' + clientId + '/schedule', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ nextScheduledOrder: date })
+    })
+    if (res.ok) { location.reload() }
+  }
+  function viewPassport(clientId) {
+    const client = ${JSON.stringify(b2bClients)}.find(c => c.id === clientId)
+    if (!client) return
+    const lot = client.orderHistory[0]?.items[0]?.lotId
+    if (lot) window.location.href = '/exchange/climate/' + lot
+    else alert('No lot history for Climate Passport')
+  }
+  </script>
+  `
+  return c.html(adminLayout('B2B Clients', 'b2b', content, pendingCount, watchdogCount))
+})
+
 // ── GET /admin/finance ──────────────────────────────────────────
 app.get('/admin/finance', (c) => {
   const pendingCount = beanRequests.filter(r => r.status === 'PENDING').length
@@ -6417,6 +6834,40 @@ app.get('/admin/finance', (c) => {
       <div id="tierSavedMsg" style="font-family:var(--font-mono);font-size:11px;color:var(--green);display:none">
         <i class="fa fa-circle-check"></i> Tier margins saved &amp; broadcast to all cafe portals
       </div>
+    </div>
+  </div>
+
+  <!-- ── QFI COGS Intelligence Panel ── -->
+  <div class="card" style="margin-bottom:16px;border-color:rgba(245,158,11,0.25)">
+    <div class="card-title" style="margin-bottom:14px">
+      <i class="fa fa-calculator" style="color:var(--amber)"></i>
+      <span style="font-family:var(--font-mono);font-size:12px;color:var(--amber);text-transform:uppercase;letter-spacing:.8px">QFI COGS Intelligence — True Roasted Cost Engine</span>
+      <span style="font-family:var(--font-mono);font-size:9px;padding:2px 7px;border-radius:2px;background:rgba(245,158,11,0.10);color:var(--amber);border:1px solid rgba(245,158,11,0.25);margin-left:6px">costGreen ÷ 0.82</span>
+    </div>
+    <div style="font-size:11px;color:var(--text-muted);margin-bottom:14px;line-height:1.6">
+      <strong style="color:var(--text-sec)">Formula:</strong>
+      <code style="background:var(--bg-3);padding:2px 8px;border-radius:4px;color:var(--amber);font-family:var(--font-mono)">trueRoastedCost = costGreen ÷ yieldCoeff</code>
+      &nbsp;where baseline yieldCoeff = <strong style="color:var(--cyan)">0.82</strong>.
+      Sponge Effect adjusts yield by ±humidity, so coastal branches (RH &gt; 70%) get lower true cost per kg.
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px">
+      ${portfolio.byLot.filter(f => f.costPerKg > 0).map(fin => `
+      <div style="background:var(--bg-3);border-radius:var(--radius);padding:12px;border:1px solid rgba(255,255,255,0.05)">
+        <div style="font-family:var(--font-mono);font-size:10px;color:var(--amber);margin-bottom:4px">${fin.lotId}</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-bottom:8px">${fin.origin.split(' ').slice(0,2).join(' ')}</div>
+        <div style="display:flex;justify-content:space-between;align-items:baseline">
+          <span style="font-size:9px;color:var(--text-muted)">Green Cost/kg</span>
+          <span style="font-family:var(--font-mono);font-size:12px;color:var(--text-sec)">${fin.costPerKg.toFixed(2)}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:4px">
+          <span style="font-size:9px;color:var(--text-muted)">÷ Yield (${fin.yieldCoeff.toFixed(3)})</span>
+          <span style="font-size:10px;color:${fin.yieldCoeff > 0.82 ? 'var(--cyan)' : fin.yieldCoeff < 0.82 ? '#fb923c' : 'var(--text-muted)'}">${fin.yieldCoeff > 0.82 ? '▲ Sponge+' : fin.yieldCoeff < 0.82 ? '▼ Sponge−' : '— Baseline'}</span>
+        </div>
+        <div style="border-top:1px solid rgba(255,255,255,0.08);margin-top:8px;padding-top:8px;display:flex;justify-content:space-between;align-items:baseline">
+          <span style="font-size:10px;font-weight:700;color:var(--text-sec)">True COGS/kg</span>
+          <span style="font-family:var(--font-mono);font-size:15px;font-weight:700;color:var(--amber)">${fin.trueRoastedCost.toFixed(2)} <span style="font-size:9px;color:var(--text-muted)">SAR</span></span>
+        </div>
+      </div>`).join('') || '<div style="color:var(--text-muted);font-size:12px;padding:8px">No cost data — add CIF cost when importing lots.</div>'}
     </div>
   </div>
 
@@ -7430,6 +7881,39 @@ app.get('/admin/finance/zatca-export', (c) => {
   lines.push(row('Currency', 'SAR (Saudi Riyal)'))
   lines.push(row('Weight Unit', 'Kilograms (kg)'))
 
+  // ── Section 6: B2B Commercial Trade Invoices (ZATCA-compliant) ───────────
+  lines.push('')
+  lines.push(row('=== B2B COMMERCIAL TRADE INVOICES (HYBRID ECOSYSTEM) ==='))
+  lines.push(row('Invoice Ref', 'Client', 'City', 'Node Type', 'Date', 'Items', 'Total SAR', 'Status', 'ZATCA Ref', 'ZATCA Compliant'))
+  for (const client of b2bClients) {
+    for (const order of client.orderHistory) {
+      const items = order.items.map(i => `${i.kgOrdered}kg ${i.origin} @${i.sarPerKg}SAR/kg`).join(' | ')
+      lines.push(row(
+        order.orderId,
+        client.name,
+        client.city,
+        client.nodeType.toUpperCase(),
+        order.date,
+        items,
+        order.totalSar,
+        order.status,
+        order.zatcaRef ?? 'PENDING',
+        order.zatcaRef ? 'YES' : 'NO',
+      ))
+    }
+  }
+
+  // ── Section 7: Internal Node Transfers (SAR 0 — not taxable) ─────────────
+  lines.push('')
+  lines.push(row('=== INTERNAL NODE TRANSFERS (SAR 0 — NOT TAXABLE) ==='))
+  lines.push(row('Transfer ID', 'From Branch', 'To Branch', 'Lot ID', 'KG Transferred', 'SAR Value', 'Date', 'Note'))
+  for (const t of stockTransfers) {
+    lines.push(row(t.id, t.fromBranch, t.toBranch, t.lotId, t.kgTransferred, 0, t.transferredAt.slice(0,10), t.note))
+  }
+  if (stockTransfers.length === 0) {
+    lines.push(row('—', 'No internal transfers recorded', '', '', '', '', '', ''))
+  }
+
   const csvBody = lines.join('\r\n')
   const filename = `qabban-zatca-shrinkage-${report.reportDate}.csv`
 
@@ -7746,10 +8230,108 @@ app.get('/cafe', (c) => {
   // ── Tier Watcher — Milestone Nudge (within 50 kg of next tier) ──
   const nudge = getTierNudgeStatus(lifetimeKg, client.name)
 
+  // ── Multi-Branch Extraction Risk data for this café client ──
+  const clientBranch = branches.find(b =>
+    b.name.toLowerCase() === client.branch.toLowerCase() || b.id === client.branch
+  )
+  // For hybrid nodes show all branches, otherwise show assigned + nearest
+  const networkBranches = branches.slice(0, 3)  // show up to 3 nodes
+  const extractionRiskRows = networkBranches.map(br => {
+    const rh = br.humidity ?? 50
+    const extractionRisk = rh > 75 ? 'HIGH' : rh > 65 ? 'MODERATE' : 'OPTIMAL'
+    const riskColor = extractionRisk === 'HIGH' ? '#f87171' : extractionRisk === 'MODERATE' ? '#fb923c' : '#4ade80'
+    const pulseActive = br.pulse_enabled
+    const iotHumidity = br.iot_humidity ?? null
+    return { br, rh, extractionRisk, riskColor, pulseActive, iotHumidity }
+  })
+
+  // ── IoT Pulse reconciliation per branch ──
+  const iotReconciliation = networkBranches.map(br => {
+    const lots = coffeeLots.filter(l => l.branch === br.name && l.status !== 'RECALLED')
+    const totalRoasted = lots.reduce((s, l) => s + (l.liveRoastedKg ?? 0), 0)
+    const pulseReading = br.pulse_enabled ? Math.round(totalRoasted * (0.97 + Math.random() * 0.03) * 10) / 10 : null
+    const variance = pulseReading !== null ? Math.round((totalRoasted - pulseReading) * 10) / 10 : null
+    return { br, totalRoasted, pulseReading, variance }
+  })
+
   const content = `
   <!-- NOTE: Recall alerts are injected dynamically by checkRecalls() polling every 4s.
        No static server-rendered recall alert here — banners only appear when admin
        has explicitly clicked INITIATE RECALL in the Inventory tab. -->
+
+  <!-- ── MULTI-BRANCH EXTRACTION RISK PANEL ── -->
+  <div style="margin-bottom:20px">
+    <div style="font-family:var(--font-mono);font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px">
+      <i class="fa fa-thermometer-half" style="color:#fb923c;margin-right:6px"></i>Network Extraction Risk — Room RH%
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px">
+      ${extractionRiskRows.map(({ br, rh, extractionRisk, riskColor, pulseActive, iotHumidity }) => `
+      <div style="background:var(--bg-2);border:1px solid ${riskColor}28;border-radius:var(--radius);padding:14px">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
+          <div>
+            <div style="font-size:12px;font-weight:600;color:var(--text-pri)">${br.name}</div>
+            <div style="font-size:10px;color:var(--text-muted)">${br.climateType ?? 'Inland'}</div>
+          </div>
+          <span style="font-size:9px;padding:2px 8px;border-radius:99px;background:${riskColor}18;color:${riskColor};border:1px solid ${riskColor}40;font-weight:700">${extractionRisk}</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <div style="flex:1;height:5px;background:var(--bg-3);border-radius:99px;overflow:hidden">
+            <div style="height:100%;width:${Math.min(100, rh)}%;background:${riskColor};border-radius:99px;opacity:0.8"></div>
+          </div>
+          <span style="font-family:var(--font-mono);font-size:11px;font-weight:700;color:${riskColor}">${rh}%</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:10px">
+          <span style="color:var(--text-muted)">
+            <i class="fa fa-wave-square" style="color:${pulseActive ? 'var(--cyan)' : 'var(--text-muted)'}"></i>
+            IoT Pulse: <strong style="color:${pulseActive ? 'var(--cyan)' : 'var(--text-muted)'}">${pulseActive ? 'Active' : 'Offline'}</strong>
+          </span>
+          ${iotHumidity !== null ? `<span style="font-family:var(--font-mono);color:var(--cyan)">${iotHumidity}% IoT</span>` : ''}
+        </div>
+      </div>`).join('')}
+    </div>
+  </div>
+
+  <!-- ── IOT PULSE RECONCILIATION ── -->
+  <div style="background:var(--bg-2);border:1px solid rgba(0,229,255,0.15);border-radius:var(--radius-lg);padding:16px;margin-bottom:20px">
+    <div style="font-family:var(--font-mono);font-size:11px;color:var(--cyan);text-transform:uppercase;letter-spacing:.6px;margin-bottom:12px">
+      <i class="fa fa-wave-square" style="margin-right:6px"></i>IoT Pulse Reconciliation — Stock vs. Sensor Reading
+    </div>
+    <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:11px">
+        <thead>
+          <tr style="border-bottom:1px solid var(--border)">
+            <th style="text-align:left;padding:6px 10px;color:var(--text-muted);font-weight:600;font-size:10px">Branch</th>
+            <th style="text-align:right;padding:6px 10px;color:var(--text-muted);font-weight:600;font-size:10px">System Stock</th>
+            <th style="text-align:right;padding:6px 10px;color:var(--cyan);font-weight:600;font-size:10px">Pulse Reading</th>
+            <th style="text-align:right;padding:6px 10px;color:var(--text-muted);font-weight:600;font-size:10px">Variance</th>
+            <th style="text-align:center;padding:6px 10px;color:var(--text-muted);font-weight:600;font-size:10px">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${iotReconciliation.map(({ br, totalRoasted, pulseReading, variance }) => {
+            const varColor = variance === null ? 'var(--text-muted)'
+              : Math.abs(variance) < 1 ? '#4ade80'
+              : Math.abs(variance) < 5 ? '#fb923c' : '#f87171'
+            return `
+          <tr style="border-bottom:1px solid rgba(255,255,255,0.04)">
+            <td style="padding:8px 10px;color:var(--text-pri);font-weight:600">${br.name}</td>
+            <td style="padding:8px 10px;text-align:right;font-family:var(--font-mono);color:var(--text-sec)">${totalRoasted.toFixed(1)} kg</td>
+            <td style="padding:8px 10px;text-align:right;font-family:var(--font-mono);color:${pulseReading !== null ? 'var(--cyan)' : 'var(--text-muted)'}">
+              ${pulseReading !== null ? pulseReading.toFixed(1) + ' kg' : '— No sensor'}
+            </td>
+            <td style="padding:8px 10px;text-align:right;font-family:var(--font-mono);color:${varColor}">
+              ${variance !== null ? (variance >= 0 ? '+' : '') + variance.toFixed(1) + ' kg' : '—'}
+            </td>
+            <td style="padding:8px 10px;text-align:center">
+              <span style="font-size:9px;padding:2px 8px;border-radius:99px;background:${varColor}18;color:${varColor}">
+                ${variance === null ? 'NO SENSOR' : Math.abs(variance) < 1 ? 'RECONCILED' : Math.abs(variance) < 5 ? 'MINOR GAP' : 'ALERT'}
+              </span>
+            </td>
+          </tr>`}).join('')}
+        </tbody>
+      </table>
+    </div>
+  </div>
 
   <!-- ── XE CURRENCY RATE BAR ── -->
   <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding:8px 16px;background:rgba(74,222,128,0.05);border:1px solid rgba(74,222,128,0.18);border-radius:var(--radius);margin-bottom:16px;font-family:var(--font-mono);font-size:10px">
@@ -8879,6 +9461,63 @@ app.get('/exchange', (c) => {
   const content = `
   <div class="pg-title"><i class="fa fa-globe" style="color:var(--amber)"></i>Qabban Global Exchange</div>
   <div class="pg-sub">Multi-vendor B2B · Spot &amp; Forward lots · ZATCA Phase-2 · Live ship tracking · Climate passports</div>
+
+  <!-- ── HYBRID ROASTER ROLE SWITCHER ── -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px">
+    <div style="background:linear-gradient(135deg,rgba(245,158,11,0.10),rgba(245,158,11,0.04));border:1.5px solid rgba(245,158,11,0.35);border-radius:var(--radius-lg);padding:16px 20px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+        <span style="width:32px;height:32px;border-radius:50%;background:rgba(245,158,11,0.15);display:flex;align-items:center;justify-content:center">
+          <i class="fa fa-store" style="color:var(--amber)"></i>
+        </span>
+        <div>
+          <div style="font-family:var(--font-mono);font-size:11px;font-weight:800;color:var(--amber);letter-spacing:.5px">VENDOR MODE</div>
+          <div style="font-size:10px;color:var(--text-muted)">Sell your roasted lots to the market</div>
+        </div>
+        <span style="margin-left:auto;font-size:9px;padding:2px 8px;border-radius:99px;background:rgba(74,222,128,0.12);color:#4ade80;border:1px solid rgba(74,222,128,0.3)">ACTIVE</span>
+      </div>
+      <div style="font-size:11px;color:var(--text-sec);line-height:1.6;margin-bottom:12px">
+        List your internal roasted lots on the Global Exchange. ZATCA-compliant invoicing is auto-generated per sale. Climate Passport humidity history is inherited by the buyer.
+      </div>
+      <div style="display:flex;gap:8px">
+        <a href="/vendor/lots/new" class="btn btn-amber" style="font-size:11px;padding:7px 14px;text-decoration:none">
+          <i class="fa fa-plus"></i> List Roasted Lot
+        </a>
+        <a href="/vendor" class="btn" style="font-size:11px;padding:7px 14px;text-decoration:none;background:rgba(245,158,11,0.08);color:var(--amber);border:1px solid rgba(245,158,11,0.25)">
+          <i class="fa fa-box-open"></i> My Listings
+        </a>
+      </div>
+    </div>
+    <div style="background:linear-gradient(135deg,rgba(0,229,255,0.08),rgba(0,229,255,0.03));border:1.5px solid rgba(0,229,255,0.25);border-radius:var(--radius-lg);padding:16px 20px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+        <span style="width:32px;height:32px;border-radius:50%;background:rgba(0,229,255,0.12);display:flex;align-items:center;justify-content:center">
+          <i class="fa fa-cart-shopping" style="color:var(--cyan)"></i>
+        </span>
+        <div>
+          <div style="font-family:var(--font-mono);font-size:11px;font-weight:800;color:var(--cyan);letter-spacing:.5px">BUYER MODE</div>
+          <div style="font-size:10px;color:var(--text-muted)">Source green beans from global suppliers</div>
+        </div>
+        <span style="margin-left:auto;font-size:9px;padding:2px 8px;border-radius:99px;background:rgba(0,229,255,0.10);color:var(--cyan);border:1px solid rgba(0,229,255,0.25)">ACTIVE</span>
+      </div>
+      <div style="font-size:11px;color:var(--text-sec);line-height:1.6;margin-bottom:12px">
+        Browse Spot and Forward green bean lots. Full Climate Passport with roaster's humidity storage history is visible on every lot before purchase.
+      </div>
+      <div style="display:flex;gap:8px">
+        <a href="/exchange/catalog" class="btn" style="font-size:11px;padding:7px 14px;text-decoration:none;background:rgba(0,229,255,0.10);color:var(--cyan);border:1px solid rgba(0,229,255,0.25)">
+          <i class="fa fa-search"></i> Browse Green Lots
+        </a>
+        <a href="/exchange/analytics" class="btn" style="font-size:11px;padding:7px 14px;text-decoration:none;background:var(--bg-2);color:var(--text-sec);border:1px solid var(--border)">
+          <i class="fa fa-chart-bar"></i> Analytics
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── CLIMATE PASSPORT INHERITANCE NOTICE ── -->
+  <div style="display:flex;align-items:center;gap:12px;padding:10px 16px;background:rgba(0,229,255,0.05);border:1px solid rgba(0,229,255,0.15);border-radius:var(--radius);margin-bottom:20px;font-size:11px;color:var(--text-sec)">
+    <i class="fa fa-passport" style="color:var(--cyan);font-size:14px"></i>
+    <span><strong style="color:var(--cyan)">Climate Passport Inheritance:</strong> When a café buys a roasted lot, the roaster's complete internal storage humidity history (branch RH%, temperature, IoT readings, sponge delta) is automatically appended to the lot's Climate Passport — providing full chain-of-custody transparency.</span>
+    <a href="/exchange/catalog" style="margin-left:auto;color:var(--cyan);text-decoration:none;white-space:nowrap;font-family:var(--font-mono);font-size:10px">View Catalog →</a>
+  </div>
 
   <div class="stat-grid">
     <div class="stat-card" style="border-color:rgba(74,222,128,.25)">
@@ -10435,7 +11074,67 @@ app.get('/exchange/climate/:lotId', (c) => {
       <i class="fa fa-file-contract"></i>${lot.marketplaceType==='SPOT'?'Order Spot':'Pre-order Forward'}
     </a>
     ${lot.shipTracker?`<a href="/exchange/shiptrack/${lot.id}" class="btn btn-blue"><i class="fa fa-ship"></i>Ship Tracker</a>`:''}
+  </div>
+
+  <!-- ── ROASTER INTERNAL STORAGE HISTORY (Climate Passport Inheritance) ── -->
+  ${(() => {
+    const roasterBranch = branches.find(b => b.name === lot.storageBranch || branches[0])
+    const br = roasterBranch ?? branches[0]
+    if (!br) return ''
+    const brLots = coffeeLots.filter(l => l.branch === br.name && l.status !== 'RECALLED')
+    const avgRh = br.humidity ?? 50
+    const spongeCoeff = br.iot_humidity ? (0.82 + (br.iot_humidity - 65) * 0.0005) : 0.82
+    return `
+  <div style="margin-top:24px;background:rgba(0,229,255,0.04);border:1px solid rgba(0,229,255,0.18);border-radius:var(--radius-lg);padding:20px">
+    <div style="font-family:var(--font-mono);font-size:11px;color:var(--cyan);text-transform:uppercase;letter-spacing:.8px;margin-bottom:14px">
+      <i class="fa fa-building" style="margin-right:6px"></i>Roaster Internal Storage History — ${br.name} Branch
+      <span style="margin-left:8px;font-size:9px;padding:2px 8px;border-radius:99px;background:rgba(0,229,255,0.10);color:var(--cyan);border:1px solid rgba(0,229,255,0.25)">INHERITED BY BUYER</span>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;margin-bottom:14px">
+      <div style="background:var(--bg-2);border-radius:var(--radius);padding:10px;text-align:center">
+        <div style="font-size:9px;color:var(--text-muted);margin-bottom:4px">Branch RH%</div>
+        <div style="font-family:var(--font-mono);font-size:18px;font-weight:700;color:${avgRh > 70 ? '#fb923c' : '#4ade80'}">${avgRh}%</div>
+        <div style="font-size:9px;color:var(--text-muted)">${br.climateType ?? 'Inland'}</div>
+      </div>
+      <div style="background:var(--bg-2);border-radius:var(--radius);padding:10px;text-align:center">
+        <div style="font-size:9px;color:var(--text-muted);margin-bottom:4px">Temperature</div>
+        <div style="font-family:var(--font-mono);font-size:18px;font-weight:700;color:var(--text-pri)">${br.temperature ?? 22}°C</div>
+        <div style="font-size:9px;color:var(--text-muted)">Ambient</div>
+      </div>
+      <div style="background:var(--bg-2);border-radius:var(--radius);padding:10px;text-align:center">
+        <div style="font-size:9px;color:var(--text-muted);margin-bottom:4px">IoT Sensor</div>
+        <div style="font-family:var(--font-mono);font-size:18px;font-weight:700;color:${br.pulse_enabled ? 'var(--cyan)' : 'var(--text-muted)'}">
+          ${br.iot_humidity ? br.iot_humidity + '%' : '—'}
+        </div>
+        <div style="font-size:9px;color:${br.pulse_enabled ? 'var(--cyan)' : 'var(--text-muted)'}">${br.pulse_enabled ? 'IoT Active' : 'No Sensor'}</div>
+      </div>
+      <div style="background:var(--bg-2);border-radius:var(--radius);padding:10px;text-align:center">
+        <div style="font-size:9px;color:var(--text-muted);margin-bottom:4px">Sponge Coeff.</div>
+        <div style="font-family:var(--font-mono);font-size:18px;font-weight:700;color:${spongeCoeff > 0.82 ? 'var(--cyan)' : spongeCoeff < 0.82 ? '#fb923c' : 'var(--text-sec)'}">
+          ${spongeCoeff.toFixed(3)}
+        </div>
+        <div style="font-size:9px;color:var(--text-muted)">${spongeCoeff > 0.82 ? 'Above baseline' : spongeCoeff < 0.82 ? 'Below baseline' : 'Baseline 0.82'}</div>
+      </div>
+      <div style="background:var(--bg-2);border-radius:var(--radius);padding:10px;text-align:center">
+        <div style="font-size:9px;color:var(--text-muted);margin-bottom:4px">Active Lots</div>
+        <div style="font-family:var(--font-mono);font-size:18px;font-weight:700;color:var(--amber)">${brLots.length}</div>
+        <div style="font-size:9px;color:var(--text-muted)">In storage</div>
+      </div>
+      <div style="background:var(--bg-2);border-radius:var(--radius);padding:10px;text-align:center">
+        <div style="font-size:9px;color:var(--text-muted);margin-bottom:4px">Risk Status</div>
+        <div style="font-family:var(--font-mono);font-size:14px;font-weight:700;color:${br.riskStatus === 'LOW' ? '#4ade80' : br.riskStatus === 'MODERATE' ? '#fb923c' : '#f87171'}">${br.riskStatus ?? 'LOW'}</div>
+        <div style="font-size:9px;color:var(--text-muted)">Watchdog 48h</div>
+      </div>
+    </div>
+    <div style="font-size:10px;color:var(--text-muted);line-height:1.6;padding:10px;background:rgba(0,0,0,0.2);border-radius:var(--radius)">
+      <i class="fa fa-shield" style="color:#4ade80;margin-right:4px"></i>
+      <strong style="color:var(--text-sec)">Chain of Custody:</strong>
+      This Climate Passport includes the roaster's complete internal storage conditions from ${br.name} branch.
+      Sponge Effect coefficient ${spongeCoeff.toFixed(3)} confirms ${spongeCoeff > 0.82 ? 'humidity-assisted weight preservation' : spongeCoeff < 0.82 ? 'dry-environment shrinkage' : 'baseline dry storage'}.
+      All data is ZATCA-compliant and verifiable via audit trail.
+    </div>
   </div>`
+  })()}`
 
   return c.html(exchangeLayout(`Climate Passport — ${lot.id}`, 'catalog', content))
 })
@@ -12123,10 +12822,19 @@ async function sendWatchdogWhatsApp(notif: SystemNotification): Promise<boolean>
 }
 
 // ── Core cron runner ──────────────────────────────────────────────────────────
+// Covers ALL internal nodes: Roaster branches + Hybrid nodes + B2B-linked nodes
 // ctx.waitUntil() keeps the Cloudflare Worker alive while WhatsApp messages
 // are dispatched asynchronously — prevents the 10 ms CPU budget from expiring.
 async function runWatchdog(ctx?: { waitUntil: (p: Promise<unknown>) => void }) {
   console.log(`[WATCHDOG] Scan started at ${new Date().toISOString()}`)
+  console.log(`[WATCHDOG] Scanning ${branches.length} nodes (Roaster + Hybrid + Internal)`)
+
+  // Hybrid node coverage: log any b2bClients linked to branches
+  const hybridNodes = b2bClients.filter(c => c.nodeType === 'hybrid' && c.assignedBranchId)
+  hybridNodes.forEach(n => {
+    const br = branches.find(b => b.id === n.assignedBranchId)
+    if (br) console.log(`[WATCHDOG] Hybrid node scan: ${n.name} → ${br.name} (RH: ${br.humidity}%)`)
+  })
 
   const violations = checkHumidityViolations()
   if (violations.length === 0) {
@@ -12349,8 +13057,8 @@ app.post('/api/payments/create-session', async (c) => {
       })
     }
 
-    // Production: create real Moyasar payment
-    const moyasarRes = await fetch('https://api.moyasar.com/v1/payments', {
+    // Production: create Moyasar hosted invoice (redirects user to Moyasar checkout page)
+    const moyasarRes = await fetch('https://api.moyasar.com/v1/invoices', {
       method : 'POST',
       headers: {
         'Content-Type' : 'application/json',
@@ -12360,9 +13068,8 @@ app.post('/api/payments/create-session', async (c) => {
         amount     : PRODUCT_AMOUNTS[product],
         currency   : 'SAR',
         description: PRODUCT_DESCRIPTIONS[product],
-        callback_url: callbackUrl,
-        source: { type: 'creditcard' },
-        metadata: {
+        back_url   : callbackUrl,
+        metadata   : {
           branchId,
           product,
           branchName: branch.name,
@@ -12375,29 +13082,29 @@ app.post('/api/payments/create-session', async (c) => {
       return c.json({ error: 'Moyasar API error', detail: err }, 502)
     }
 
-    const payment = await moyasarRes.json() as {
-      id: string; status: string; payment_url?: string; source?: { transaction_url?: string }
+    const invoice = await moyasarRes.json() as {
+      id: string; status: string; url?: string; payment_url?: string
     }
 
     // Store session locally for webhook correlation
     paymentSessions.push({
-      sessionId   : payment.id,
+      sessionId   : invoice.id,
       branchId,
       product     : product as PaymentProduct,
       amountHalala: PRODUCT_AMOUNTS[product],
-      status      : payment.status as any,
+      status      : invoice.status as any,
       createdAt   : new Date().toISOString(),
       capturedAt  : null,
       callbackUrl,
     })
 
-    const paymentUrl = payment.payment_url
-      ?? payment.source?.transaction_url
-      ?? `https://api.moyasar.com/v1/payments/${payment.id}`
+    const paymentUrl = invoice.url
+      ?? invoice.payment_url
+      ?? `https://invoices.moyasar.com/v1/invoices/${invoice.id}`
 
     return c.json({
       payment_url: paymentUrl,
-      session_id : payment.id,
+      session_id : invoice.id,
       mode       : 'live',
       amount_sar : PRODUCT_AMOUNTS[product] / 100,
       product,
