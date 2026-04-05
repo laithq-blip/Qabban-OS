@@ -125,6 +125,28 @@ import {
   PULSE_ADDON_MONTHLY_SAR,
 } from './data'
 import type { StockTransfer, B2BClient, B2BOrder } from './RolePermissions'
+import {
+  staffDirectory,
+  assetRegistry,
+  maintenanceLogs,
+  operationalExpenses,
+  calcGosi,
+  calcEosb,
+  generateWpsRecord,
+  generateSifFile,
+  calcDepreciation,
+  runMaintenanceWatchdog,
+  calcTrueOperatingMargin,
+  type Staff,
+  type Asset,
+  type MaintenanceLog,
+  type MaintenanceAlert,
+  type GosiBreakdown,
+  type EosbRecord,
+  type SifFile,
+  type DepreciationRecord,
+  type TrueOperatingMarginCalc,
+} from './EnterpriseModules'
 
 // ── In-memory stores for new Hybrid Ecosystem features ───────────
 const stockTransfers: StockTransfer[] = []
@@ -2293,17 +2315,63 @@ app.get('/', (c) => {
 // ══════════════════════════════════════════════════════════════════
 
 function adminLayout(pageTitle: string, activeNav: string, content: string, pendingCount = 0, watchdogCount = 0) {
-  // Nav links — all features fully accessible, no proLocked gates
-  const navLinks = [
-    { href: '/admin',           icon: 'fa-gauge',         label: 'Overview',        id: 'overview',   i18n: 'nav.overview'  },
-    { href: '/admin/inventory', icon: 'fa-boxes-stacked', label: 'Inventory',       id: 'inventory',  i18n: 'nav.inventory' },
-    { href: '/admin/branches',  icon: 'fa-sitemap',       label: 'My Network',      id: 'branches',   i18n: 'nav.branches'  },
-    { href: '/admin/b2b',        icon: 'fa-handshake',     label: 'B2B Clients',     id: 'b2b',        i18n: 'nav.b2b'       },
-    { href: '/admin/finance',   icon: 'fa-chart-line',    label: 'Finance',         id: 'finance',    i18n: 'fin.nav'       },
-    { href: '/admin/requests',  icon: 'fa-bell',          label: 'Bean Requests',   id: 'requests',   i18n: 'nav.requests'  },
-    { href: '/exchange',        icon: 'fa-globe',         label: 'Global Exchange', id: 'exchange',   i18n: 'nav.exchange'  },
-    { href: '/admin/pulse',     icon: 'fa-wave-square',   label: 'Pulse',           id: 'pulse',      i18n: 'nav.pulse'     },
-    { href: '/admin/watchdog',  icon: 'fa-shield-virus',  label: 'Risk Watchdog',   id: 'watchdog',   i18n: 'nav.watchdog'  },
+  // Enterprise sidebar groups
+  const sidebarGroups = [
+    {
+      label: 'Global Exchange', icon: 'fa-globe', color: '#f59e0b',
+      links: [
+        { href: '/exchange',              icon: 'fa-store',         label: 'Exchange Hub',       id: 'exchange'   },
+        { href: '/exchange/catalog',      icon: 'fa-layer-group',   label: 'Global Catalog',     id: 'catalog'    },
+      ]
+    },
+    {
+      label: 'Production Hub', icon: 'fa-industry', color: '#60a5fa',
+      links: [
+        { href: '/admin',                 icon: 'fa-gauge',         label: 'Overview',           id: 'overview'   },
+        { href: '/admin/inventory',       icon: 'fa-boxes-stacked', label: 'Inventory',          id: 'inventory'  },
+        { href: '/admin/branches',        icon: 'fa-sitemap',       label: 'My Network',         id: 'branches'   },
+        { href: '/admin/pulse',           icon: 'fa-wave-square',   label: 'Pulse',              id: 'pulse'      },
+        { href: '/admin/watchdog',        icon: 'fa-shield-virus',  label: 'Risk Watchdog',      id: 'watchdog'   },
+        { href: '/operations/assets',     icon: 'fa-wrench',        label: 'Assets & Maint.',    id: 'assets'     },
+      ]
+    },
+    {
+      label: 'Retail Hub', icon: 'fa-mug-hot', color: '#34d399',
+      links: [
+        { href: '/cafe',                  icon: 'fa-store',         label: 'Café Portal',        id: 'cafe'       },
+        { href: '/admin/requests',        icon: 'fa-bell',          label: 'Bean Requests',      id: 'requests'   },
+      ]
+    },
+    {
+      label: 'Wholesale CRM', icon: 'fa-handshake', color: '#a78bfa',
+      links: [
+        { href: '/admin/b2b',             icon: 'fa-handshake',     label: 'B2B Clients',        id: 'b2b'        },
+      ]
+    },
+    {
+      label: 'Human Capital', icon: 'fa-users', color: '#f472b6',
+      links: [
+        { href: '/people',                icon: 'fa-id-badge',      label: 'Staff Directory',    id: 'people'     },
+        { href: '/people/payroll',        icon: 'fa-money-check-alt','label': 'Payroll & WPS',   id: 'payroll'    },
+        { href: '/people/gosi',           icon: 'fa-shield-alt',    label: 'GOSI Reports',       id: 'gosi'       },
+        { href: '/people/eosb',           icon: 'fa-coins',         label: 'EOSB Ledger',        id: 'eosb'       },
+      ]
+    },
+    {
+      label: 'Intelligence', icon: 'fa-chart-line', color: '#f59e0b',
+      links: [
+        { href: '/admin/finance',         icon: 'fa-chart-line',    label: 'QFI Finance',        id: 'finance'    },
+        { href: '/admin/finance/enterprise', icon: 'fa-chart-mixed','label': 'Enterprise P&L',   id: 'enterprise-pnl' },
+      ]
+    },
+  ]
+  // Flat list for mobile nav (key items only)
+  const mobileLinks = [
+    { href: '/admin',         icon: 'fa-gauge',        label: 'Overview',   id: 'overview'  },
+    { href: '/admin/inventory', icon:'fa-boxes-stacked',label:'Inventory',   id: 'inventory' },
+    { href: '/admin/finance', icon: 'fa-chart-line',   label: 'Finance',    id: 'finance'   },
+    { href: '/people',        icon: 'fa-users',        label: 'People',     id: 'people'    },
+    { href: '/operations/assets', icon:'fa-wrench',    label: 'Assets',     id: 'assets'    },
   ]
   const body = `
   <header class="topbar">
@@ -2322,6 +2390,10 @@ function adminLayout(pageTitle: string, activeNav: string, content: string, pend
         <i class="fa fa-shield-virus"></i>
         ${watchdogCount > 0 ? `<span class="notif-count" style="background:var(--red)">${watchdogCount}</span>` : ''}
       </a>
+      <a href="/operations/assets" class="notif-btn" title="Asset Alerts" style="color:${runMaintenanceWatchdog(assetRegistry).filter(a=>a.severity==='CRITICAL').length > 0 ? '#f59e0b' : 'inherit'}">
+        <i class="fa fa-wrench"></i>
+        ${runMaintenanceWatchdog(assetRegistry).filter(a=>a.severity==='CRITICAL').length > 0 ? `<span class="notif-count" style="background:#f59e0b">${runMaintenanceWatchdog(assetRegistry).filter(a=>a.severity==='CRITICAL').length}</span>` : ''}
+      </a>
       <span class="topbar-badge badge-admin" data-i18n="badge.admin"><i class="fa fa-shield-alt"></i> Roaster Admin</span>
       <span class="topbar-user"><i class="fa fa-user-circle"></i> <span data-i18n="badge.user">admin</span></span>
       <a href="/"><button class="btn-logout" data-i18n="nav.logout">LOGOUT</button></a>
@@ -2329,25 +2401,31 @@ function adminLayout(pageTitle: string, activeNav: string, content: string, pend
   </header>
   <div class="layout">
     <nav class="sidebar">
+      ${sidebarGroups.map(group => `
       <div class="sidebar-section">
-        <div class="sidebar-label" data-i18n="nav.system">Navigation</div>
-        ${navLinks.map(l => {
-          const isActive  = activeNav === l.id
+        <div class="sidebar-label" style="color:${group.color ?? 'var(--text-muted)'};display:flex;align-items:center;gap:6px">
+          <i class="fa ${group.icon}" style="font-size:10px"></i>${group.label}
+        </div>
+        ${group.links.map(l => {
+          const isActive = activeNav === l.id
+          const hasWatchdogBadge = l.id === 'watchdog' && watchdogCount > 0
+          const hasReqBadge      = l.id === 'requests'  && pendingCount > 0
+          const assetAlerts      = l.id === 'assets' ? runMaintenanceWatchdog(assetRegistry).filter(a=>a.severity==='CRITICAL').length : 0
           return `
         <a href="${l.href}" class="sidebar-link ${isActive ? 'active' : ''}">
-          <i class="fa ${l.icon}"${l.id === 'watchdog' && watchdogCount > 0 ? ' style="color:var(--red)"' : ''}></i> <span data-i18n="${l.i18n}">${l.label}</span>
-          ${l.id === 'requests' && pendingCount > 0
-            ? `<span style="margin-left:auto;background:var(--red);color:white;font-size:9px;padding:1px 5px;border-radius:9px;font-family:var(--font-mono)">${pendingCount}</span>`
-            : ''}
-          ${l.id === 'watchdog' && watchdogCount > 0
-            ? `<span style="margin-left:auto;background:var(--red);color:white;font-size:9px;padding:1px 5px;border-radius:9px;font-family:var(--font-mono)">${watchdogCount}</span>`
-            : ''}
+          <i class="fa ${l.icon}"${hasWatchdogBadge ? ' style="color:var(--red)"' : assetAlerts > 0 ? ' style="color:#f59e0b"' : ''}></i>
+          <span>${l.label}</span>
+          ${hasReqBadge ? `<span style="margin-left:auto;background:var(--red);color:white;font-size:9px;padding:1px 5px;border-radius:9px;font-family:var(--font-mono)">${pendingCount}</span>` : ''}
+          ${hasWatchdogBadge ? `<span style="margin-left:auto;background:var(--red);color:white;font-size:9px;padding:1px 5px;border-radius:9px;font-family:var(--font-mono)">${watchdogCount}</span>` : ''}
+          ${assetAlerts > 0 && !hasWatchdogBadge && !hasReqBadge ? `<span style="margin-left:auto;background:#f59e0b;color:#000;font-size:9px;padding:1px 5px;border-radius:9px;font-family:var(--font-mono)">${assetAlerts}</span>` : ''}
         </a>`
         }).join('')}
-        <!-- Subscribe — opens pricing modal -->
+      </div>`).join('')}
+      <!-- Subscribe -->
+      <div class="sidebar-section">
         <a href="#" class="sidebar-link${activeNav === 'subscribe' ? ' active' : ''}"
            onclick="event.preventDefault();openSubscribeModal()"
-           style="margin-top:6px;background:linear-gradient(135deg,rgba(124,58,237,0.12),rgba(168,85,247,0.08));
+           style="background:linear-gradient(135deg,rgba(124,58,237,0.12),rgba(168,85,247,0.08));
                   border:1px solid rgba(139,92,246,0.3);border-radius:var(--radius)">
           <i class="fa fa-credit-card" style="color:#a78bfa"></i>
           <span style="color:#c4b5fd;font-weight:600">Subscribe</span>
@@ -2357,15 +2435,15 @@ function adminLayout(pageTitle: string, activeNav: string, content: string, pend
         </a>
       </div>
       <div class="sidebar-section">
-        <div class="sidebar-label" data-i18n="nav.system">System</div>
+        <div class="sidebar-label">System</div>
         <div class="sidebar-link" style="font-size:11px;color:var(--text-muted)">
-          <i class="fa fa-circle" style="color:var(--green);font-size:8px"></i> <span data-i18n="misc.system.online">System Online</span>
+          <i class="fa fa-circle" style="color:var(--green);font-size:8px"></i> System Online
         </div>
         <div class="sidebar-link" style="font-size:11px;color:var(--text-muted)">
-          <i class="fa fa-database"></i> ${branches.length} <span data-i18n="misc.branches.active">Branches Active</span>
+          <i class="fa fa-database"></i> ${branches.length} Branches · ${staffDirectory.filter(s=>s.status==='ACTIVE').length} Staff
         </div>
         <a href="/static/manual.html" target="_blank" class="sidebar-link" style="font-size:11px;color:var(--amber);margin-top:2px;text-decoration:none">
-          <i class="fa fa-book-open"></i> User Manual
+          <i class="fa fa-book-open"></i> User Manual v6.0
         </a>
       </div>
     </nav>
@@ -2399,9 +2477,9 @@ function adminLayout(pageTitle: string, activeNav: string, content: string, pend
   </div>
   <nav class="mobile-nav">
     <div class="mobile-nav-items">
-      ${navLinks.map(l =>
+      ${mobileLinks.map(l =>
         `<a href="${l.href}" class="mobile-nav-item ${activeNav === l.id ? 'active' : ''}">
-             <i class="fa ${l.icon}"></i> <span data-i18n="${l.i18n}">${l.label}</span>
+             <i class="fa ${l.icon}"></i> <span>${l.label}</span>
            </a>`
       ).join('')}
       <a href="#" class="mobile-nav-item" onclick="event.preventDefault();openSubscribeModal()">
@@ -13639,6 +13717,837 @@ app.get('/api/hq/license-check', (c) => {
     active                : isBranchSubscriptionActive(branch),
     upgrade_url           : '/admin/billing',
   }, result.httpStatus === 200 ? 200 : result.httpStatus)
+})
+
+// ══════════════════════════════════════════════════════════════════
+//  ENTERPRISE MODULE 1: HUMAN CAPITAL & SAUDI PAYROLL
+//  Routes: /people, /people/payroll, /people/gosi, /people/eosb
+//  API:    /api/people/*, /api/people/payroll/sif-download
+// ══════════════════════════════════════════════════════════════════
+
+app.get('/people', (c) => {
+  const pendingCount   = beanRequests.filter(r => r.status === 'PENDING').length
+  const watchdogCount  = getUnreadNotifications().length
+  const assetAlerts    = runMaintenanceWatchdog(assetRegistry)
+  const criticalAssets = assetAlerts.filter(a => a.severity === 'CRITICAL').length
+
+  // Compute EOSB for all staff
+  const staffWithEosb = staffDirectory.map(s => ({
+    ...s,
+    _eosb : calcEosb(s),
+    _gosi : calcGosi(s, new Date().toISOString().slice(0, 7)),
+  }))
+  const totalPayroll    = staffWithEosb.reduce((t, s) => t + s.basicSalary + s.housingAllowance + s.transportAllowance + s.otherAllowances, 0)
+  const totalGosiEr     = staffWithEosb.reduce((t, s) => t + s._gosi.totalEmployerCost, 0)
+  const totalLaborCost  = totalPayroll + totalGosiEr
+  const totalEosbLiab   = staffWithEosb.reduce((t, s) => t + s._eosb.totalEosbSar, 0)
+  const saudiCount      = staffDirectory.filter(s => s.nationality === 'SAUDI').length
+  const expatCount      = staffDirectory.filter(s => s.nationality === 'EXPAT').length
+  const saudizationPct  = staffDirectory.length > 0 ? Math.round((saudiCount / staffDirectory.length) * 100) : 0
+
+  const tierColor = (level: string) => {
+    const map: Record<string,string> = {
+      NONE:'#6b7280', SCA_INTRO:'#94a3b8', SCA_FOUNDATION:'#60a5fa',
+      SCA_INTERMEDIATE:'#34d399', SCA_PROFESSIONAL:'#f59e0b', WBC_CERTIFIED:'#f472b6',
+    }
+    return map[level] ?? '#6b7280'
+  }
+  const statusColor = (s: string) => ({
+    ACTIVE:'var(--green)', PROBATION:'var(--amber)', ON_LEAVE:'#60a5fa', TERMINATED:'var(--red)',
+  }[s] ?? 'var(--text-muted)')
+
+  const content = `
+  <div class="pg-title"><i class="fa fa-users" style="color:#f472b6"></i>Human Capital Management</div>
+  <div class="pg-sub">Staff Directory · Saudi Payroll · GOSI Automation · EOSB Tracker — KSA Labor Law Compliant</div>
+
+  <!-- KPI Strip -->
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:24px">
+    <div class="card" style="text-align:center;padding:16px 12px">
+      <div style="font-size:28px;font-weight:800;color:#f472b6">${staffDirectory.length}</div>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Total Staff</div>
+    </div>
+    <div class="card" style="text-align:center;padding:16px 12px">
+      <div style="font-size:28px;font-weight:800;color:var(--amber)">SAR ${totalPayroll.toLocaleString()}</div>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Monthly Gross Payroll</div>
+    </div>
+    <div class="card" style="text-align:center;padding:16px 12px">
+      <div style="font-size:28px;font-weight:800;color:var(--green)">SAR ${totalLaborCost.toLocaleString()}</div>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Total Labor Cost (incl. GOSI)</div>
+    </div>
+    <div class="card" style="text-align:center;padding:16px 12px">
+      <div style="font-size:28px;font-weight:800;color:#60a5fa">SAR ${totalEosbLiab.toLocaleString()}</div>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:4px">EOSB Liability (Accrued)</div>
+    </div>
+    <div class="card" style="text-align:center;padding:16px 12px">
+      <div style="font-size:28px;font-weight:800;color:${saudizationPct >= 30 ? 'var(--green)' : 'var(--amber)'}">${saudizationPct}%</div>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Saudization Rate</div>
+      <div style="font-size:10px;color:var(--text-muted)">${saudiCount} SA · ${expatCount} Expat</div>
+    </div>
+    <div class="card" style="text-align:center;padding:16px 12px">
+      <div style="font-size:28px;font-weight:800;color:var(--green)">${staffDirectory.filter(s=>s.status==='ACTIVE').length}</div>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Active Employees</div>
+    </div>
+  </div>
+
+  <!-- Quick Nav Tabs -->
+  <div style="display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap">
+    <a href="/people" class="btn-primary" style="font-size:12px;padding:6px 14px;text-decoration:none;background:rgba(244,114,182,0.15);border:1px solid rgba(244,114,182,0.4);color:#f472b6;border-radius:4px"><i class="fa fa-id-badge"></i> Staff Directory</a>
+    <a href="/people/payroll" class="btn-primary" style="font-size:12px;padding:6px 14px;text-decoration:none;background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);color:var(--amber);border-radius:4px"><i class="fa fa-money-check-alt"></i> Payroll & WPS</a>
+    <a href="/people/gosi" class="btn-primary" style="font-size:12px;padding:6px 14px;text-decoration:none;background:rgba(96,165,250,0.1);border:1px solid rgba(96,165,250,0.3);color:#60a5fa;border-radius:4px"><i class="fa fa-shield-alt"></i> GOSI Reports</a>
+    <a href="/people/eosb" class="btn-primary" style="font-size:12px;padding:6px 14px;text-decoration:none;background:rgba(52,211,153,0.1);border:1px solid rgba(52,211,153,0.3);color:#34d399;border-radius:4px"><i class="fa fa-coins"></i> EOSB Ledger</a>
+  </div>
+
+  <!-- Staff Directory Table -->
+  <div class="card" style="margin-bottom:24px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+      <div style="font-family:var(--font-mono);font-size:12px;color:var(--amber)">STAFF DIRECTORY — ${staffDirectory.length} RECORDS</div>
+      <a href="/people/payroll" style="font-family:var(--font-mono);font-size:11px;color:var(--amber);text-decoration:none;border:1px solid rgba(245,158,11,0.35);padding:4px 10px;border-radius:2px">
+        <i class="fa fa-file-export"></i> GENERATE WPS FILE →
+      </a>
+    </div>
+    <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead>
+          <tr style="border-bottom:1px solid var(--border);color:var(--text-muted)">
+            <th style="padding:8px 6px;text-align:left;font-family:var(--font-mono);font-weight:600;font-size:10px">ID</th>
+            <th style="padding:8px 6px;text-align:left;font-family:var(--font-mono);font-weight:600;font-size:10px">NAME</th>
+            <th style="padding:8px 6px;text-align:left;font-family:var(--font-mono);font-weight:600;font-size:10px">ROLE</th>
+            <th style="padding:8px 6px;text-align:left;font-family:var(--font-mono);font-weight:600;font-size:10px">BRANCH</th>
+            <th style="padding:8px 6px;text-align:left;font-family:var(--font-mono);font-weight:600;font-size:10px">NAT.</th>
+            <th style="padding:8px 6px;text-align:right;font-family:var(--font-mono);font-weight:600;font-size:10px">BASIC (SAR)</th>
+            <th style="padding:8px 6px;text-align:right;font-family:var(--font-mono);font-weight:600;font-size:10px">TOTAL COST</th>
+            <th style="padding:8px 6px;text-align:left;font-family:var(--font-mono);font-weight:600;font-size:10px">SCA LEVEL</th>
+            <th style="padding:8px 6px;text-align:left;font-family:var(--font-mono);font-weight:600;font-size:10px">STATUS</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${staffWithEosb.map(s => {
+            const totalCost = s.basicSalary + s.housingAllowance + s.transportAllowance + s.otherAllowances + s._gosi.totalEmployerCost
+            return `<tr style="border-bottom:1px solid rgba(255,255,255,0.04);transition:background .15s" onmouseover="this.style.background='var(--bg-2)'" onmouseout="this.style.background='transparent'">
+              <td style="padding:8px 6px;font-family:var(--font-mono);font-size:11px;color:var(--amber)">${s.id}</td>
+              <td style="padding:8px 6px;font-weight:600">${s.fullName}
+                ${s.scaCertifications.length > 0 ? `<div style="font-size:10px;color:var(--text-muted);margin-top:2px">${s.scaCertifications.slice(0,2).join(' · ')}</div>` : ''}
+              </td>
+              <td style="padding:8px 6px;color:var(--text-muted)">${s.jobTitle}</td>
+              <td style="padding:8px 6px;font-family:var(--font-mono);font-size:11px">${s.branchId}</td>
+              <td style="padding:8px 6px">
+                <span style="font-size:10px;padding:2px 6px;border-radius:3px;font-family:var(--font-mono);font-weight:700;
+                  background:${s.nationality==='SAUDI'?'rgba(52,211,153,0.15)':'rgba(96,165,250,0.15)'};
+                  color:${s.nationality==='SAUDI'?'#34d399':'#60a5fa'}">${s.nationality}</span>
+              </td>
+              <td style="padding:8px 6px;text-align:right;font-family:var(--font-mono)">${s.basicSalary.toLocaleString()}</td>
+              <td style="padding:8px 6px;text-align:right;font-family:var(--font-mono);color:var(--amber);font-weight:700">${totalCost.toLocaleString()}</td>
+              <td style="padding:8px 6px">
+                <span style="font-size:10px;padding:2px 7px;border-radius:3px;font-family:var(--font-mono);font-weight:700;
+                  background:rgba(0,0,0,0.3);color:${tierColor(s.baristaLevel)};border:1px solid ${tierColor(s.baristaLevel)}44">${s.baristaLevel.replace('SCA_','SCA ')}</span>
+              </td>
+              <td style="padding:8px 6px">
+                <span style="font-size:10px;padding:2px 7px;border-radius:3px;font-family:var(--font-mono);font-weight:700;
+                  background:rgba(0,0,0,0.3);color:${statusColor(s.status)}">${s.status}</span>
+              </td>
+            </tr>`
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- SCA Certification Breakdown -->
+  <div class="card">
+    <div style="font-family:var(--font-mono);font-size:12px;color:var(--amber);margin-bottom:16px">SCA CERTIFICATION MATRIX</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px">
+      ${['ROASTING','BARISTA_SKILLS','GREEN_COFFEE','SENSORY','BREWING','COFFEE_SKILLS'].map(cert => {
+        const holders = staffDirectory.filter(s => s.scaCertifications.includes(cert as any))
+        return `<div style="background:var(--bg-2);border:1px solid var(--border);border-radius:6px;padding:12px">
+          <div style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted);margin-bottom:6px">${cert.replace('_',' ')}</div>
+          <div style="font-size:20px;font-weight:700;color:var(--amber)">${holders.length}</div>
+          <div style="font-size:10px;color:var(--text-muted);margin-top:4px">${holders.map(h=>h.fullName.split(' ')[0]).join(', ') || '—'}</div>
+        </div>`
+      }).join('')}
+    </div>
+  </div>
+  `
+  return c.html(adminLayout('Human Capital', 'people', content, pendingCount, watchdogCount))
+})
+
+// ── GET /people/payroll — WPS/SIF Generator ──────────────────────
+app.get('/people/payroll', (c) => {
+  const pendingCount  = beanRequests.filter(r => r.status === 'PENDING').length
+  const watchdogCount = getUnreadNotifications().length
+  const payMonth      = new Date().toISOString().slice(0, 7)
+  const sif           = generateSifFile(staffDirectory, payMonth, 'SA4420000001234567891234', 'Camel Step Roasters Co.')
+  const totalGross    = sif.records.reduce((t,r) => t + r.basicSalary + r.housingAllowance + r.transportAllowance + r.otherAllowances, 0)
+  const totalGosi     = sif.records.reduce((t,r) => t + r.gosiDeduction, 0)
+
+  const content = `
+  <div class="pg-title"><i class="fa fa-money-check-alt" style="color:var(--amber)"></i>Payroll & WPS Generator</div>
+  <div class="pg-sub">Saudi Wage Protection System · Mudad-Ready SIF Format · GOSI Deductions Auto-Calculated</div>
+
+  <!-- Payroll Summary -->
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:24px">
+    <div class="card" style="text-align:center;padding:16px 12px">
+      <div style="font-size:24px;font-weight:800;color:var(--green)">SAR ${sif.totalNetPay.toLocaleString()}</div>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Total Net Pay — ${payMonth}</div>
+    </div>
+    <div class="card" style="text-align:center;padding:16px 12px">
+      <div style="font-size:24px;font-weight:800;color:var(--amber)">SAR ${totalGross.toLocaleString()}</div>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Total Gross (before deductions)</div>
+    </div>
+    <div class="card" style="text-align:center;padding:16px 12px">
+      <div style="font-size:24px;font-weight:800;color:#60a5fa">SAR ${totalGosi.toLocaleString()}</div>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Employee GOSI Deductions</div>
+    </div>
+    <div class="card" style="text-align:center;padding:16px 12px">
+      <div style="font-size:24px;font-weight:800;color:#f472b6">${sif.employeeCount}</div>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Employees on Payroll</div>
+    </div>
+  </div>
+
+  <!-- WPS Records Table -->
+  <div class="card" style="margin-bottom:24px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+      <div style="font-family:var(--font-mono);font-size:12px;color:var(--amber)">WPS PAYROLL REGISTER — ${payMonth}</div>
+      <a href="/api/people/payroll/sif-download?month=${payMonth}" style="font-family:var(--font-mono);font-size:11px;color:var(--green);text-decoration:none;border:1px solid rgba(52,211,153,0.35);padding:4px 10px;border-radius:2px">
+        <i class="fa fa-download"></i> DOWNLOAD SIF FILE
+      </a>
+    </div>
+    <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead>
+          <tr style="border-bottom:1px solid var(--border);color:var(--text-muted)">
+            <th style="padding:8px 6px;text-align:left;font-family:var(--font-mono);font-size:10px">EMPLOYEE</th>
+            <th style="padding:8px 6px;text-align:right;font-family:var(--font-mono);font-size:10px">BASIC</th>
+            <th style="padding:8px 6px;text-align:right;font-family:var(--font-mono);font-size:10px">HOUSING</th>
+            <th style="padding:8px 6px;text-align:right;font-family:var(--font-mono);font-size:10px">TRANSPORT</th>
+            <th style="padding:8px 6px;text-align:right;font-family:var(--font-mono);font-size:10px">OTHER</th>
+            <th style="padding:8px 6px;text-align:right;font-family:var(--font-mono);font-size:10px">GOSI DED.</th>
+            <th style="padding:8px 6px;text-align:right;font-family:var(--font-mono);font-size:10px;color:var(--green)">NET PAY</th>
+            <th style="padding:8px 6px;text-align:left;font-family:var(--font-mono);font-size:10px">IBAN</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${sif.records.map(r => `
+          <tr style="border-bottom:1px solid rgba(255,255,255,0.04)">
+            <td style="padding:8px 6px;font-weight:600">${r.employeeName}<br><span style="font-family:var(--font-mono);font-size:10px;color:var(--amber)">${r.employeeId}</span></td>
+            <td style="padding:8px 6px;text-align:right;font-family:var(--font-mono)">${r.basicSalary.toLocaleString()}</td>
+            <td style="padding:8px 6px;text-align:right;font-family:var(--font-mono)">${r.housingAllowance.toLocaleString()}</td>
+            <td style="padding:8px 6px;text-align:right;font-family:var(--font-mono)">${r.transportAllowance.toLocaleString()}</td>
+            <td style="padding:8px 6px;text-align:right;font-family:var(--font-mono)">${r.otherAllowances.toLocaleString()}</td>
+            <td style="padding:8px 6px;text-align:right;font-family:var(--font-mono);color:#ef4444">−${r.gosiDeduction.toLocaleString()}</td>
+            <td style="padding:8px 6px;text-align:right;font-family:var(--font-mono);font-weight:700;color:var(--green)">${r.netPay.toLocaleString()}</td>
+            <td style="padding:8px 6px;font-family:var(--font-mono);font-size:10px;color:var(--text-muted)">${r.iban.slice(0,8)}…${r.iban.slice(-4)}</td>
+          </tr>`).join('')}
+        </tbody>
+        <tfoot>
+          <tr style="border-top:2px solid var(--border);font-weight:700">
+            <td style="padding:8px 6px;font-family:var(--font-mono);font-size:10px">TOTAL</td>
+            <td style="padding:8px 6px;text-align:right;font-family:var(--font-mono)">${sif.records.reduce((t,r)=>t+r.basicSalary,0).toLocaleString()}</td>
+            <td style="padding:8px 6px;text-align:right;font-family:var(--font-mono)">${sif.records.reduce((t,r)=>t+r.housingAllowance,0).toLocaleString()}</td>
+            <td style="padding:8px 6px;text-align:right;font-family:var(--font-mono)">${sif.records.reduce((t,r)=>t+r.transportAllowance,0).toLocaleString()}</td>
+            <td style="padding:8px 6px;text-align:right;font-family:var(--font-mono)">${sif.records.reduce((t,r)=>t+r.otherAllowances,0).toLocaleString()}</td>
+            <td style="padding:8px 6px;text-align:right;font-family:var(--font-mono);color:#ef4444">−${totalGosi.toLocaleString()}</td>
+            <td style="padding:8px 6px;text-align:right;font-family:var(--font-mono);color:var(--green)">${sif.totalNetPay.toLocaleString()}</td>
+            <td></td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  </div>
+
+  <!-- SIF Preview -->
+  <div class="card">
+    <div style="font-family:var(--font-mono);font-size:12px;color:var(--amber);margin-bottom:12px">SIF FILE PREVIEW — Mudad/WPS Bank Transfer Format</div>
+    <div style="background:var(--bg-0);border:1px solid var(--border);border-radius:4px;padding:14px;font-family:var(--font-mono);font-size:11px;color:#86efac;line-height:1.8;overflow-x:auto;white-space:pre">${sif.sifContent}</div>
+    <div style="margin-top:12px;padding:10px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2);border-radius:4px;font-size:11px;color:var(--text-muted)">
+      <strong style="color:var(--amber)">SIF Format:</strong> H (Header) | D (Detail per employee) | F (Footer totals) · Pipe-delimited · Upload to Mudad portal or email to WPS bank
+    </div>
+  </div>
+  `
+  return c.html(adminLayout('Payroll & WPS', 'payroll', content, pendingCount, watchdogCount))
+})
+
+// ── GET /api/people/payroll/sif-download ─────────────────────────
+app.get('/api/people/payroll/sif-download', (c) => {
+  const month = c.req.query('month') ?? new Date().toISOString().slice(0, 7)
+  const sif   = generateSifFile(staffDirectory, month, 'SA4420000001234567891234', 'Camel Step Roasters Co.')
+  return new Response(sif.sifContent, {
+    headers: {
+      'Content-Type'       : 'text/plain; charset=utf-8',
+      'Content-Disposition': `attachment; filename="qabban-wps-sif-${month}.txt"`,
+    },
+  })
+})
+
+// ── GET /people/gosi — GOSI Reports ──────────────────────────────
+app.get('/people/gosi', (c) => {
+  const pendingCount  = beanRequests.filter(r => r.status === 'PENDING').length
+  const watchdogCount = getUnreadNotifications().length
+  const month         = new Date().toISOString().slice(0, 7)
+  const gosiReports   = staffDirectory.map(s => calcGosi(s, month))
+  const totalEmployerCost = gosiReports.reduce((t,g) => t + g.totalEmployerCost, 0)
+  const totalEmployeeDed  = gosiReports.reduce((t,g) => t + g.totalEmployeeDeduction, 0)
+  const totalHazard        = gosiReports.reduce((t,g) => t + g.hazardFee, 0)
+  const totalPension       = gosiReports.reduce((t,g) => t + g.employerPension, 0)
+
+  const content = `
+  <div class="pg-title"><i class="fa fa-shield-alt" style="color:#60a5fa"></i>GOSI Reports</div>
+  <div class="pg-sub">General Organization for Social Insurance · Saudi & Expat Contribution Breakdown · ${month}</div>
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:24px">
+    <div class="card" style="text-align:center;padding:16px 12px">
+      <div style="font-size:24px;font-weight:800;color:var(--amber)">SAR ${totalEmployerCost.toLocaleString()}</div>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Total Employer GOSI Cost</div>
+    </div>
+    <div class="card" style="text-align:center;padding:16px 12px">
+      <div style="font-size:24px;font-weight:800;color:#60a5fa">SAR ${totalEmployeeDed.toLocaleString()}</div>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Employee Deductions (Saudis)</div>
+    </div>
+    <div class="card" style="text-align:center;padding:16px 12px">
+      <div style="font-size:24px;font-weight:800;color:#f59e0b">SAR ${totalHazard.toLocaleString()}</div>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Occupational Hazard (2%)</div>
+    </div>
+    <div class="card" style="text-align:center;padding:16px 12px">
+      <div style="font-size:24px;font-weight:800;color:var(--green)">SAR ${totalPension.toLocaleString()}</div>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Employer Pension (Saudis 12%)</div>
+    </div>
+  </div>
+
+  <div class="info-amber" style="margin-bottom:20px">
+    <strong>GOSI Rates (2026):</strong> All employees → Occupational Hazard: <strong>2% employer only</strong>.
+    Saudi nationals → Pension: <strong>10% employee</strong> + <strong>12% employer</strong> of basic salary.
+    Expatriates → Hazard fee only, no pension contribution.
+  </div>
+
+  <div class="card">
+    <div style="font-family:var(--font-mono);font-size:12px;color:var(--amber);margin-bottom:16px">GOSI CONTRIBUTION LEDGER — ${month}</div>
+    <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead>
+          <tr style="border-bottom:1px solid var(--border);color:var(--text-muted)">
+            <th style="padding:8px 6px;text-align:left;font-family:var(--font-mono);font-size:10px">EMPLOYEE</th>
+            <th style="padding:8px 6px;text-align:left;font-family:var(--font-mono);font-size:10px">NAT.</th>
+            <th style="padding:8px 6px;text-align:right;font-family:var(--font-mono);font-size:10px">BASIC SAR</th>
+            <th style="padding:8px 6px;text-align:right;font-family:var(--font-mono);font-size:10px">HAZARD (ER)</th>
+            <th style="padding:8px 6px;text-align:right;font-family:var(--font-mono);font-size:10px">PENSION (EE)</th>
+            <th style="padding:8px 6px;text-align:right;font-family:var(--font-mono);font-size:10px">PENSION (ER)</th>
+            <th style="padding:8px 6px;text-align:right;font-family:var(--font-mono);font-size:10px;color:var(--amber)">TOTAL ER COST</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${gosiReports.map(g => `
+          <tr style="border-bottom:1px solid rgba(255,255,255,0.04)">
+            <td style="padding:8px 6px;font-weight:600">${g.employeeName}<br><span style="font-family:var(--font-mono);font-size:10px;color:var(--amber)">${g.employeeId}</span></td>
+            <td style="padding:8px 6px">
+              <span style="font-size:10px;padding:2px 6px;border-radius:3px;font-family:var(--font-mono);
+                background:${g.nationality==='SAUDI'?'rgba(52,211,153,0.15)':'rgba(96,165,250,0.15)'};
+                color:${g.nationality==='SAUDI'?'#34d399':'#60a5fa'}">${g.nationality}</span>
+            </td>
+            <td style="padding:8px 6px;text-align:right;font-family:var(--font-mono)">${g.basicSalary.toLocaleString()}</td>
+            <td style="padding:8px 6px;text-align:right;font-family:var(--font-mono)">${g.hazardFee.toFixed(2)}</td>
+            <td style="padding:8px 6px;text-align:right;font-family:var(--font-mono);color:#60a5fa">${g.employeePension > 0 ? g.employeePension.toFixed(2) : '—'}</td>
+            <td style="padding:8px 6px;text-align:right;font-family:var(--font-mono)">${g.employerPension > 0 ? g.employerPension.toFixed(2) : '—'}</td>
+            <td style="padding:8px 6px;text-align:right;font-family:var(--font-mono);font-weight:700;color:var(--amber)">${g.totalEmployerCost.toFixed(2)}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  `
+  return c.html(adminLayout('GOSI Reports', 'gosi', content, pendingCount, watchdogCount))
+})
+
+// ── GET /people/eosb — End-of-Service Benefit Tracker ────────────
+app.get('/people/eosb', (c) => {
+  const pendingCount  = beanRequests.filter(r => r.status === 'PENDING').length
+  const watchdogCount = getUnreadNotifications().length
+  const eosbRecords   = staffDirectory.map(s => calcEosb(s))
+  const totalLiability = eosbRecords.reduce((t,e) => t + e.totalEosbSar, 0)
+
+  const content = `
+  <div class="pg-title"><i class="fa fa-coins" style="color:#34d399"></i>EOSB Ledger</div>
+  <div class="pg-sub">End-of-Service Benefit Accruals · KSA Labor Law Article 84 · Real-Time Liability Tracker</div>
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:24px">
+    <div class="card" style="text-align:center;padding:16px 12px">
+      <div style="font-size:28px;font-weight:800;color:#34d399">SAR ${totalLiability.toLocaleString()}</div>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Total EOSB Liability (Accrued)</div>
+    </div>
+    <div class="card" style="text-align:center;padding:16px 12px">
+      <div style="font-size:28px;font-weight:800;color:var(--amber)">${eosbRecords.filter(e=>e.yearsOfService>=5).length}</div>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Employees ≥ 5 Years (Full Rate)</div>
+    </div>
+    <div class="card" style="text-align:center;padding:16px 12px">
+      <div style="font-size:28px;font-weight:800;color:#60a5fa">${eosbRecords.filter(e=>e.yearsOfService>=2 && e.yearsOfService<5).length}</div>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:4px">2-5 Years (Partial Rate)</div>
+    </div>
+  </div>
+
+  <div class="info-amber" style="margin-bottom:20px">
+    <strong>KSA Labor Law Art. 84 — EOSB Formula:</strong><br>
+    • First 5 years: <strong>½ month</strong> basic salary per year of service<br>
+    • After 5 years: <strong>1 full month</strong> basic salary per year of service<br>
+    • Termination without cause: full EOSB. Resignation after 2 years: 1/3 EOSB; after 5 years: 2/3; after 10 years: full EOSB.
+  </div>
+
+  <div class="card">
+    <div style="font-family:var(--font-mono);font-size:12px;color:var(--amber);margin-bottom:16px">EOSB ACCRUAL LEDGER — As of ${new Date().toISOString().split('T')[0]}</div>
+    <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead>
+          <tr style="border-bottom:1px solid var(--border);color:var(--text-muted)">
+            <th style="padding:8px 6px;text-align:left;font-family:var(--font-mono);font-size:10px">EMPLOYEE</th>
+            <th style="padding:8px 6px;text-align:left;font-family:var(--font-mono);font-size:10px">START DATE</th>
+            <th style="padding:8px 6px;text-align:right;font-family:var(--font-mono);font-size:10px">YEARS</th>
+            <th style="padding:8px 6px;text-align:right;font-family:var(--font-mono);font-size:10px">BASIC SAR</th>
+            <th style="padding:8px 6px;text-align:right;font-family:var(--font-mono);font-size:10px">RATE</th>
+            <th style="padding:8px 6px;text-align:right;font-family:var(--font-mono);font-size:10px">FIRST 5 YRS</th>
+            <th style="padding:8px 6px;text-align:right;font-family:var(--font-mono);font-size:10px">AFTER 5 YRS</th>
+            <th style="padding:8px 6px;text-align:right;font-family:var(--font-mono);font-size:10px;color:var(--green)">TOTAL EOSB</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${eosbRecords.map(e => `
+          <tr style="border-bottom:1px solid rgba(255,255,255,0.04)">
+            <td style="padding:8px 6px;font-weight:600">${e.employeeName}<br><span style="font-family:var(--font-mono);font-size:10px;color:var(--amber)">${e.employeeId}</span></td>
+            <td style="padding:8px 6px;font-family:var(--font-mono);font-size:11px">${e.startDate}</td>
+            <td style="padding:8px 6px;text-align:right;font-family:var(--font-mono)">${e.yearsOfService}y ${e.monthsPartial}m</td>
+            <td style="padding:8px 6px;text-align:right;font-family:var(--font-mono)">${e.basicSalary.toLocaleString()}</td>
+            <td style="padding:8px 6px;text-align:right;font-family:var(--font-mono);color:${e.accrualRate===1?'var(--green)':'var(--amber)'}">${e.accrualRate===1?'1.0×':'0.5×'}</td>
+            <td style="padding:8px 6px;text-align:right;font-family:var(--font-mono)">${e.eosbFirstFiveYears.toLocaleString()}</td>
+            <td style="padding:8px 6px;text-align:right;font-family:var(--font-mono)">${e.eosbAfterFiveYears > 0 ? e.eosbAfterFiveYears.toLocaleString() : '—'}</td>
+            <td style="padding:8px 6px;text-align:right;font-family:var(--font-mono);font-weight:700;color:var(--green)">${e.totalEosbSar.toLocaleString()}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  `
+  return c.html(adminLayout('EOSB Ledger', 'eosb', content, pendingCount, watchdogCount))
+})
+
+// ══════════════════════════════════════════════════════════════════
+//  ENTERPRISE MODULE 2: ASSET & PREDICTIVE MAINTENANCE
+//  Routes: /operations/assets
+// ══════════════════════════════════════════════════════════════════
+
+app.get('/operations/assets', (c) => {
+  const pendingCount   = beanRequests.filter(r => r.status === 'PENDING').length
+  const watchdogCount  = getUnreadNotifications().length
+  const alerts         = runMaintenanceWatchdog(assetRegistry)
+  const criticalAlerts = alerts.filter(a => a.severity === 'CRITICAL')
+  const warningAlerts  = alerts.filter(a => a.severity === 'WARNING')
+  const depRecords     = assetRegistry.map(a => calcDepreciation(a))
+  const totalBookValue = depRecords.reduce((t,d) => t + d.currentBookValue, 0)
+  const totalMonthlyDep = depRecords.reduce((t,d) => t + d.monthlyDepreciation, 0)
+
+  const statusColor = (s: string) => ({
+    OPERATIONAL:'var(--green)', MAINTENANCE:'var(--amber)', SERVICE_DUE:'#f59e0b',
+    RETIRED:'var(--text-muted)', DECOMMISSIONED:'var(--red)',
+  }[s] ?? 'var(--text-muted)')
+
+  const categoryIcon = (cat: string) => ({
+    ROASTER:'fa-fire', GRINDER:'fa-cog', ESPRESSO_MACHINE:'fa-mug-hot',
+    BREWER:'fa-droplet', REFRIGERATION:'fa-snowflake', PACKAGING:'fa-box', OTHER:'fa-wrench',
+  }[cat] ?? 'fa-wrench')
+
+  const content = `
+  <div class="pg-title"><i class="fa fa-wrench" style="color:var(--amber)"></i>Assets &amp; Predictive Maintenance</div>
+  <div class="pg-sub">Asset Registry · Maintenance Watchdog · Depreciation Ledger · Giesen · La Marzocco · Mahlkönig</div>
+
+  ${criticalAlerts.length > 0 ? `
+  <div style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.3);border-radius:6px;padding:14px 16px;margin-bottom:20px;display:flex;gap:12px;align-items:flex-start">
+    <i class="fa fa-triangle-exclamation" style="color:var(--red);font-size:18px;flex-shrink:0;margin-top:2px"></i>
+    <div>
+      <strong style="color:var(--red)">🔧 ${criticalAlerts.length} Critical Maintenance Alert${criticalAlerts.length>1?'s':''}</strong> — Immediate action required<br>
+      ${criticalAlerts.map(a => `<div style="font-size:11px;color:#fca5a5;margin-top:4px;font-family:var(--font-mono)">⚠ ${a.assetName}: ${a.message}</div>`).join('')}
+    </div>
+  </div>` : ''}
+
+  <!-- KPI Cards -->
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:24px">
+    <div class="card" style="text-align:center;padding:16px 12px">
+      <div style="font-size:28px;font-weight:800;color:var(--amber)">${assetRegistry.length}</div>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Total Assets</div>
+    </div>
+    <div class="card" style="text-align:center;padding:16px 12px">
+      <div style="font-size:28px;font-weight:800;color:var(--green)">SAR ${totalBookValue.toLocaleString()}</div>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Total Book Value</div>
+    </div>
+    <div class="card" style="text-align:center;padding:16px 12px">
+      <div style="font-size:28px;font-weight:800;color:#60a5fa">SAR ${totalMonthlyDep.toLocaleString()}</div>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Monthly Depreciation</div>
+    </div>
+    <div class="card" style="text-align:center;padding:16px 12px">
+      <div style="font-size:28px;font-weight:800;color:${criticalAlerts.length > 0 ? 'var(--red)' : 'var(--green)'}">${criticalAlerts.length}</div>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Critical Alerts</div>
+    </div>
+    <div class="card" style="text-align:center;padding:16px 12px">
+      <div style="font-size:28px;font-weight:800;color:var(--amber)">${warningAlerts.length}</div>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Warnings</div>
+    </div>
+  </div>
+
+  <!-- Asset Cards Grid -->
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:16px;margin-bottom:24px">
+    ${assetRegistry.map(asset => {
+      const dep    = calcDepreciation(asset)
+      const assetAlerts = alerts.filter(a => a.assetId === asset.id)
+      const burrPct = asset.burrReplacementKg > 0 ? Math.min((asset.totalKgProcessed / asset.burrReplacementKg) * 100, 100) : 0
+      const svcDaysSince = asset.lastServiceDate
+        ? Math.floor((Date.now() - new Date(asset.lastServiceDate).getTime()) / 86400000)
+        : null
+      const svcPct = (svcDaysSince !== null && asset.serviceIntervalDays > 0)
+        ? Math.min((svcDaysSince / asset.serviceIntervalDays) * 100, 100) : 0
+
+      return `
+      <div class="card" style="border:1px solid ${assetAlerts.some(a=>a.severity==='CRITICAL')?'rgba(239,68,68,0.4)':assetAlerts.some(a=>a.severity==='WARNING')?'rgba(245,158,11,0.3)':'var(--border)'}">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px">
+          <div>
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+              <i class="fa ${categoryIcon(asset.category)}" style="color:var(--amber);font-size:14px"></i>
+              <span style="font-weight:700;font-size:14px">${asset.name}</span>
+            </div>
+            <div style="font-size:11px;color:var(--text-muted)">${asset.brand} ${asset.model} · ${asset.branchId}</div>
+          </div>
+          <span style="font-size:10px;padding:3px 8px;border-radius:3px;font-family:var(--font-mono);font-weight:700;
+            background:rgba(0,0,0,0.3);color:${statusColor(asset.status)};border:1px solid ${statusColor(asset.status)}44">${asset.status}</span>
+        </div>
+
+        ${assetAlerts.length > 0 ? assetAlerts.map(a => `
+        <div style="background:${a.severity==='CRITICAL'?'rgba(239,68,68,0.08)':'rgba(245,158,11,0.08)'};border:1px solid ${a.severity==='CRITICAL'?'rgba(239,68,68,0.3)':'rgba(245,158,11,0.3)'};border-radius:4px;padding:8px 10px;margin-bottom:10px;font-size:11px;color:${a.severity==='CRITICAL'?'#fca5a5':'#fcd34d'}">
+          <i class="fa fa-triangle-exclamation"></i> ${a.message}
+        </div>`).join('') : ''}
+
+        ${asset.burrReplacementKg > 0 ? `
+        <div style="margin-bottom:10px">
+          <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text-muted);margin-bottom:4px;font-family:var(--font-mono)">
+            <span>BURR WEAR</span><span>${asset.totalKgProcessed.toFixed(0)} / ${asset.burrReplacementKg} kg</span>
+          </div>
+          <div style="height:6px;background:var(--bg-0);border-radius:3px;overflow:hidden">
+            <div style="height:100%;width:${burrPct}%;background:${burrPct>=100?'var(--red)':burrPct>=90?'var(--amber)':'var(--green)'};border-radius:3px;transition:width .3s"></div>
+          </div>
+        </div>` : ''}
+
+        ${asset.serviceIntervalDays > 0 && svcDaysSince !== null ? `
+        <div style="margin-bottom:10px">
+          <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text-muted);margin-bottom:4px;font-family:var(--font-mono)">
+            <span>SERVICE CYCLE</span><span>${svcDaysSince} / ${asset.serviceIntervalDays} days</span>
+          </div>
+          <div style="height:6px;background:var(--bg-0);border-radius:3px;overflow:hidden">
+            <div style="height:100%;width:${svcPct}%;background:${svcPct>=100?'var(--red)':svcPct>=85?'var(--amber)':'var(--green)'};border-radius:3px"></div>
+          </div>
+        </div>` : ''}
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;font-size:11px">
+          <div style="background:var(--bg-2);border-radius:4px;padding:8px">
+            <div style="color:var(--text-muted);font-family:var(--font-mono);font-size:10px">BOOK VALUE</div>
+            <div style="color:var(--amber);font-family:var(--font-mono);font-weight:700">SAR ${dep.currentBookValue.toLocaleString()}</div>
+          </div>
+          <div style="background:var(--bg-2);border-radius:4px;padding:8px">
+            <div style="color:var(--text-muted);font-family:var(--font-mono);font-size:10px">MONTHLY DEP.</div>
+            <div style="color:#60a5fa;font-family:var(--font-mono);font-weight:700">SAR ${dep.monthlyDepreciation.toLocaleString()}</div>
+          </div>
+        </div>
+      </div>`
+    }).join('')}
+  </div>
+
+  <!-- Depreciation Ledger Table -->
+  <div class="card" style="margin-bottom:24px">
+    <div style="font-family:var(--font-mono);font-size:12px;color:var(--amber);margin-bottom:16px">DEPRECIATION LEDGER — STRAIGHT-LINE METHOD · As of ${new Date().toISOString().split('T')[0]}</div>
+    <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead>
+          <tr style="border-bottom:1px solid var(--border);color:var(--text-muted)">
+            <th style="padding:8px 6px;text-align:left;font-family:var(--font-mono);font-size:10px">ASSET</th>
+            <th style="padding:8px 6px;text-align:right;font-family:var(--font-mono);font-size:10px">PURCHASE COST</th>
+            <th style="padding:8px 6px;text-align:right;font-family:var(--font-mono);font-size:10px">USEFUL LIFE</th>
+            <th style="padding:8px 6px;text-align:right;font-family:var(--font-mono);font-size:10px">MONTHS ELAPSED</th>
+            <th style="padding:8px 6px;text-align:right;font-family:var(--font-mono);font-size:10px">MONTHLY DEP.</th>
+            <th style="padding:8px 6px;text-align:right;font-family:var(--font-mono);font-size:10px">CUMUL. DEP.</th>
+            <th style="padding:8px 6px;text-align:right;font-family:var(--font-mono);font-size:10px;color:var(--amber)">BOOK VALUE</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${depRecords.map(d => `
+          <tr style="border-bottom:1px solid rgba(255,255,255,0.04)">
+            <td style="padding:8px 6px;font-weight:600">${d.assetName}<br><span style="font-family:var(--font-mono);font-size:10px;color:var(--amber)">${d.assetId}</span></td>
+            <td style="padding:8px 6px;text-align:right;font-family:var(--font-mono)">${d.purchaseCost.toLocaleString()}</td>
+            <td style="padding:8px 6px;text-align:right;font-family:var(--font-mono)">${d.usefulLifeYears}yr</td>
+            <td style="padding:8px 6px;text-align:right;font-family:var(--font-mono)">${d.monthsElapsed}</td>
+            <td style="padding:8px 6px;text-align:right;font-family:var(--font-mono);color:#60a5fa">${d.monthlyDepreciation.toLocaleString()}</td>
+            <td style="padding:8px 6px;text-align:right;font-family:var(--font-mono);color:var(--red)">${d.cumulativeDepreciation.toLocaleString()}</td>
+            <td style="padding:8px 6px;text-align:right;font-family:var(--font-mono);font-weight:700;color:var(--amber)">${d.currentBookValue.toLocaleString()}</td>
+          </tr>`).join('')}
+        </tbody>
+        <tfoot>
+          <tr style="border-top:2px solid var(--border);font-weight:700">
+            <td style="padding:8px 6px;font-family:var(--font-mono);font-size:10px">TOTALS</td>
+            <td style="padding:8px 6px;text-align:right;font-family:var(--font-mono)">${depRecords.reduce((t,d)=>t+d.purchaseCost,0).toLocaleString()}</td>
+            <td></td><td></td>
+            <td style="padding:8px 6px;text-align:right;font-family:var(--font-mono);color:#60a5fa">${totalMonthlyDep.toLocaleString()}</td>
+            <td style="padding:8px 6px;text-align:right;font-family:var(--font-mono);color:var(--red)">${depRecords.reduce((t,d)=>t+d.cumulativeDepreciation,0).toLocaleString()}</td>
+            <td style="padding:8px 6px;text-align:right;font-family:var(--font-mono);font-weight:700;color:var(--amber)">${totalBookValue.toLocaleString()}</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  </div>
+
+  <!-- Maintenance Log -->
+  <div class="card">
+    <div style="font-family:var(--font-mono);font-size:12px;color:var(--amber);margin-bottom:16px">MAINTENANCE LOG — ${maintenanceLogs.length} RECORDS</div>
+    ${maintenanceLogs.map(m => `
+    <div style="border:1px solid var(--border);border-radius:6px;padding:12px;margin-bottom:10px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+        <div style="font-weight:600">${m.assetName}</div>
+        <div style="display:flex;gap:8px">
+          <span style="font-size:10px;padding:2px 7px;border-radius:3px;font-family:var(--font-mono);background:rgba(245,158,11,0.1);color:var(--amber)">${m.maintenanceType}</span>
+          <span style="font-size:10px;font-family:var(--font-mono);color:var(--text-muted)">${m.performedAt}</span>
+        </div>
+      </div>
+      <div style="font-size:12px;color:var(--text-muted);margin-bottom:6px">${m.description}</div>
+      <div style="display:flex;gap:16px;font-size:11px;font-family:var(--font-mono)">
+        <span style="color:var(--amber)">SAR ${m.costSar.toLocaleString()}</span>
+        <span style="color:var(--text-muted)">By: ${m.performedBy}</span>
+        ${m.partsReplaced.length > 0 ? `<span style="color:#60a5fa">Parts: ${m.partsReplaced.join(', ')}</span>` : ''}
+        ${m.nextScheduled ? `<span style="color:var(--green)">Next: ${m.nextScheduled}</span>` : ''}
+      </div>
+    </div>`).join('')}
+  </div>
+  `
+  return c.html(adminLayout('Assets & Maintenance', 'assets', content, pendingCount, watchdogCount))
+})
+
+// ── POST /api/assets/:id/log-usage — Record kg processed / cycles ──
+app.post('/api/assets/:id/log-usage', async (c) => {
+  const { id } = c.req.param()
+  const body   = await c.req.json().catch(() => ({}))
+  const asset  = assetRegistry.find(a => a.id === id)
+  if (!asset) return c.json({ error: 'Asset not found' }, 404)
+  if (typeof body.kgProcessed === 'number') asset.totalKgProcessed += body.kgProcessed
+  if (typeof body.cycles      === 'number') asset.totalCyclesRun    += body.cycles
+  if (typeof body.hours       === 'number') asset.totalHoursOperated += body.hours
+  asset.updatedAt = new Date().toISOString()
+  const alerts = runMaintenanceWatchdog([asset])
+  return c.json({ ok: true, asset, alerts })
+})
+
+// ── GET /api/assets/alerts — Maintenance Watchdog JSON ───────────
+app.get('/api/assets/alerts', (c) => {
+  const alerts = runMaintenanceWatchdog(assetRegistry)
+  return c.json({ alerts, critical: alerts.filter(a=>a.severity==='CRITICAL').length, total: alerts.length })
+})
+
+// ══════════════════════════════════════════════════════════════════
+//  ENTERPRISE MODULE 3: ENTERPRISE P&L DASHBOARD
+//  Route: /admin/finance/enterprise
+// ══════════════════════════════════════════════════════════════════
+
+app.get('/admin/finance/enterprise', (c) => {
+  const pendingCount  = beanRequests.filter(r => r.status === 'PENDING').length
+  const watchdogCount = getUnreadNotifications().length
+
+  // Pull financial data from existing QFI engine
+  const balances = calcLiveBalance(coffeeLots, beanRequests)
+  const pf = calcPortfolioFinancials(coffeeLots, balances)
+
+  // Compute labor cost from staff
+  const month = '2026-03'
+  const gosiReports    = staffDirectory.map(s => calcGosi(s, month))
+  const totalLaborGross = staffDirectory.reduce((t,s) => t + s.basicSalary + s.housingAllowance + s.transportAllowance + s.otherAllowances, 0)
+  const totalGosiEr     = gosiReports.reduce((t,g) => t + g.totalEmployerCost, 0)
+  const totalLaborCost  = totalLaborGross + totalGosiEr
+
+  // Depreciation from assets
+  const depRecords     = assetRegistry.map(a => calcDepreciation(a))
+  const totalMonthlyDep = depRecords.reduce((t,d) => t + d.monthlyDepreciation, 0)
+
+  // Maintenance costs from logs (last 30 days)
+  const thirtyDaysAgo = new Date(); thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+  const recentMaintenance = maintenanceLogs
+    .filter(m => new Date(m.performedAt) >= thirtyDaysAgo)
+    .reduce((t,m) => t + m.costSar, 0)
+
+  // Simulated revenue & COGS from lots
+  const _activeRevenue = pf.totalProjectedProfit  // used for reference
+  const grossSales     = 142000  // demo figure (from B2B sales + retail)
+  const cogsSar        = 68000
+  const spongeAdj      = pf.totalEnvironmentalPnL
+  const utilitiesRent  = 22200   // from operationalExpenses seed
+
+  const margin = calcTrueOperatingMargin(
+    grossSales, totalLaborCost, cogsSar + spongeAdj,
+    recentMaintenance, totalMonthlyDep, utilitiesRent
+  )
+
+  const grossProfit   = grossSales - (cogsSar + spongeAdj)
+  const grossMarginPct = grossSales > 0 ? (grossProfit / grossSales * 100) : 0
+  const ebitda        = grossProfit - totalLaborCost - recentMaintenance - utilitiesRent
+  const ebit          = ebitda - totalMonthlyDep
+
+  const barWidth = (val: number, total: number) => Math.max(Math.min((val / total) * 100, 100), 0)
+
+  const content = `
+  <div class="pg-title"><i class="fa fa-chart-mixed" style="color:var(--amber)"></i>Enterprise P&amp;L Dashboard</div>
+  <div class="pg-sub">Consolidated Financial Intelligence · True Operating Margin · COGS + Labor + Assets — ${month}</div>
+
+  <!-- True Operating Margin Banner -->
+  <div style="background:linear-gradient(135deg,rgba(245,158,11,0.08),rgba(245,158,11,0.03));border:1px solid rgba(245,158,11,0.25);border-radius:8px;padding:20px;margin-bottom:24px">
+    <div style="font-family:var(--font-mono);font-size:10px;color:var(--amber);letter-spacing:1px;margin-bottom:8px">TRUE OPERATING MARGIN — QFI ENGINE v6.0</div>
+    <div style="font-size:36px;font-weight:800;color:${margin.netMarginPct >= 0 ? 'var(--green)' : 'var(--red)'};margin-bottom:8px">${margin.netMarginPct.toFixed(1)}%</div>
+    <div style="font-size:12px;color:var(--text-muted);font-family:var(--font-mono)">Net Profit: SAR ${margin.netProfitSar.toLocaleString()}</div>
+    <div style="margin-top:12px;padding:10px;background:var(--bg-0);border-radius:4px;font-family:var(--font-mono);font-size:10px;color:#86efac;line-height:1.8">${margin.breakdown}</div>
+  </div>
+
+  <!-- P&L Waterfall KPIs -->
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:24px">
+    <div class="card" style="text-align:center;padding:16px 12px">
+      <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;font-family:var(--font-mono)">GROSS SALES</div>
+      <div style="font-size:22px;font-weight:800;color:var(--green)">SAR ${grossSales.toLocaleString()}</div>
+    </div>
+    <div class="card" style="text-align:center;padding:16px 12px">
+      <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;font-family:var(--font-mono)">COGS (SPONGE ADJ.)</div>
+      <div style="font-size:22px;font-weight:800;color:var(--red)">−SAR ${(cogsSar + spongeAdj).toLocaleString()}</div>
+    </div>
+    <div class="card" style="text-align:center;padding:16px 12px">
+      <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;font-family:var(--font-mono)">GROSS PROFIT</div>
+      <div style="font-size:22px;font-weight:800;color:var(--amber)">SAR ${grossProfit.toLocaleString()}</div>
+      <div style="font-size:10px;color:var(--text-muted)">${grossMarginPct.toFixed(1)}% margin</div>
+    </div>
+    <div class="card" style="text-align:center;padding:16px 12px">
+      <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;font-family:var(--font-mono)">LABOR COST</div>
+      <div style="font-size:22px;font-weight:800;color:#f472b6">−SAR ${totalLaborCost.toLocaleString()}</div>
+      <div style="font-size:10px;color:var(--text-muted)">incl. GOSI employer</div>
+    </div>
+    <div class="card" style="text-align:center;padding:16px 12px">
+      <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;font-family:var(--font-mono)">EBITDA</div>
+      <div style="font-size:22px;font-weight:800;color:${ebitda>=0?'var(--green)':'var(--red)'}">SAR ${ebitda.toLocaleString()}</div>
+    </div>
+    <div class="card" style="text-align:center;padding:16px 12px">
+      <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;font-family:var(--font-mono)">DEPRECIATION</div>
+      <div style="font-size:22px;font-weight:800;color:#60a5fa">−SAR ${totalMonthlyDep.toLocaleString()}</div>
+      <div style="font-size:10px;color:var(--text-muted)">${assetRegistry.length} assets</div>
+    </div>
+    <div class="card" style="text-align:center;padding:16px 12px">
+      <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;font-family:var(--font-mono)">NET PROFIT (EBIT)</div>
+      <div style="font-size:22px;font-weight:800;color:${margin.netProfitSar>=0?'var(--green)':'var(--red)'}">${margin.netProfitSar>=0?'SAR ':'−SAR '}${Math.abs(margin.netProfitSar).toLocaleString()}</div>
+      <div style="font-size:10px;color:var(--text-muted)">${margin.netMarginPct.toFixed(1)}% net margin</div>
+    </div>
+  </div>
+
+  <!-- P&L Waterfall Bar -->
+  <div class="card" style="margin-bottom:24px">
+    <div style="font-family:var(--font-mono);font-size:12px;color:var(--amber);margin-bottom:16px">P&amp;L WATERFALL — COST BREAKDOWN AS % OF GROSS SALES</div>
+    ${[
+      { label: 'COGS (Sponge-Adjusted)', value: cogsSar + spongeAdj, color: 'var(--red)' },
+      { label: 'Labor Cost (incl. GOSI)', value: totalLaborCost, color: '#f472b6' },
+      { label: 'Maintenance', value: recentMaintenance, color: '#f59e0b' },
+      { label: 'Depreciation', value: totalMonthlyDep, color: '#60a5fa' },
+      { label: 'Utilities & Rent', value: utilitiesRent, color: '#a78bfa' },
+    ].map(item => `
+    <div style="margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+        <span style="font-size:12px;color:var(--text-muted)">${item.label}</span>
+        <span style="font-family:var(--font-mono);font-size:12px;color:${item.color}">SAR ${item.value.toLocaleString()} <span style="color:var(--text-muted);font-size:10px">(${barWidth(item.value, grossSales).toFixed(1)}%)</span></span>
+      </div>
+      <div style="height:8px;background:var(--bg-0);border-radius:4px;overflow:hidden">
+        <div style="height:100%;width:${barWidth(item.value, grossSales)}%;background:${item.color};border-radius:4px;transition:width .4s"></div>
+      </div>
+    </div>`).join('')}
+    <div style="border-top:1px solid var(--border);padding-top:12px;margin-top:4px;display:flex;justify-content:space-between;align-items:center">
+      <span style="font-family:var(--font-mono);font-size:12px;font-weight:700;color:var(--amber)">NET PROFIT</span>
+      <span style="font-family:var(--font-mono);font-size:14px;font-weight:800;color:${margin.netProfitSar>=0?'var(--green)':'var(--red)'}">${margin.netProfitSar>=0?'+':'-'}SAR ${Math.abs(margin.netProfitSar).toLocaleString()} (${margin.netMarginPct.toFixed(1)}%)</span>
+    </div>
+  </div>
+
+  <!-- Environmental P&L from Sponge Engine -->
+  <div class="card" style="margin-bottom:24px">
+    <div style="font-family:var(--font-mono);font-size:12px;color:var(--amber);margin-bottom:12px">ENVIRONMENTAL P&amp;L — SPONGE ENGINE INTEGRATION</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px">
+      <div style="background:var(--bg-2);border-radius:6px;padding:12px">
+        <div style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted)">SPONGE ENVIRONMENTAL P&amp;L</div>
+        <div style="font-size:20px;font-weight:700;color:${spongeAdj>=0?'var(--amber)':'var(--green)'}">SAR ${spongeAdj.toFixed(2)}</div>
+        <div style="font-size:10px;color:var(--text-muted)">High humidity = yield gain; Low = loss</div>
+      </div>
+      <div style="background:var(--bg-2);border-radius:6px;padding:12px">
+        <div style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted)">ADJUSTED COGS</div>
+        <div style="font-size:20px;font-weight:700;color:var(--red)">SAR ${(cogsSar + spongeAdj).toLocaleString()}</div>
+        <div style="font-size:10px;color:var(--text-muted)">Base COGS + Sponge delta</div>
+      </div>
+      <div style="background:var(--bg-2);border-radius:6px;padding:12px">
+        <div style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted)">TRUE ROASTED COST / KG</div>
+        <div style="font-size:20px;font-weight:700;color:var(--amber)">SAR ${(cogsSar / 560).toFixed(2)}</div>
+        <div style="font-size:10px;color:var(--text-muted)">costGreen ÷ spongeCoeff (not 0.82)</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ZATCA VAT Summary -->
+  <div class="card">
+    <div style="font-family:var(--font-mono);font-size:12px;color:var(--amber);margin-bottom:12px">ZATCA VAT LEDGER — ${month}</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px">
+      <div style="background:var(--bg-2);border-radius:6px;padding:12px">
+        <div style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted)">VAT COLLECTED (15%)</div>
+        <div style="font-size:20px;font-weight:700;color:var(--green)">SAR ${(grossSales * 0.15).toLocaleString()}</div>
+        <div style="font-size:10px;color:var(--text-muted)">On B2B + Marketplace sales</div>
+      </div>
+      <div style="background:var(--bg-2);border-radius:6px;padding:12px">
+        <div style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted)">INTERNAL TRANSFERS</div>
+        <div style="font-size:20px;font-weight:700;color:var(--text-muted)">SAR 0</div>
+        <div style="font-size:10px;color:var(--text-muted)">Zero-value — ZATCA non-taxable</div>
+      </div>
+      <div style="background:var(--bg-2);border-radius:6px;padding:12px">
+        <div style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted)">NET VAT PAYABLE</div>
+        <div style="font-size:20px;font-weight:700;color:#60a5fa">SAR ${(grossSales * 0.15).toLocaleString()}</div>
+        <div style="font-size:10px;color:var(--text-muted)">Submit to GAZT quarterly</div>
+      </div>
+    </div>
+    <div class="info-amber" style="margin-top:14px">
+      <strong>ZATCA Phase-2 Compliance:</strong> All B2B commercial invoices include 15% VAT with QR-code XML.
+      Internal node stock transfers (SAR 0) are non-taxable and excluded from the VAT ledger.
+      Marketplace (roaster→café) sales generate ZATCA-compliant e-invoices automatically.
+    </div>
+  </div>
+  `
+  return c.html(adminLayout('Enterprise P&L', 'enterprise-pnl', content, pendingCount, watchdogCount))
+})
+
+// ── GET /api/people/staff — JSON staff list ───────────────────────
+app.get('/api/people/staff', (c) => {
+  return c.json({
+    staff: staffDirectory.map(s => ({
+      id: s.id, fullName: s.fullName, jobTitle: s.jobTitle, branchId: s.branchId,
+      nationality: s.nationality, status: s.status, basicSalary: s.basicSalary,
+      baristaLevel: s.baristaLevel, scaCertifications: s.scaCertifications,
+    })),
+    summary: {
+      total: staffDirectory.length,
+      active: staffDirectory.filter(s=>s.status==='ACTIVE').length,
+      saudis: staffDirectory.filter(s=>s.nationality==='SAUDI').length,
+      expats: staffDirectory.filter(s=>s.nationality==='EXPAT').length,
+    }
+  })
+})
+
+// ── GET /api/finance/enterprise-pnl — JSON P&L snapshot ──────────
+app.get('/api/finance/enterprise-pnl', (c) => {
+  const month          = c.req.query('month') ?? new Date().toISOString().slice(0, 7)
+  const _bal           = calcLiveBalance(coffeeLots, beanRequests)
+  const pf             = calcPortfolioFinancials(coffeeLots, _bal)
+  const gosiReports    = staffDirectory.map(s => calcGosi(s, month))
+  const totalLaborGross = staffDirectory.reduce((t,s) => t + s.basicSalary + s.housingAllowance + s.transportAllowance + s.otherAllowances, 0)
+  const totalGosiEr    = gosiReports.reduce((t,g) => t + g.totalEmployerCost, 0)
+  const totalLaborCost = totalLaborGross + totalGosiEr
+  const depRecords     = assetRegistry.map(a => calcDepreciation(a))
+  const totalMonthlyDep = depRecords.reduce((t,d) => t + d.monthlyDepreciation, 0)
+  const grossSales     = 142000
+  const cogsSar        = 68000
+  const spongeAdj2     = pf.totalEnvironmentalPnL
+  const utilitiesRent  = 22200
+  const recentMaint    = 3850
+  const margin         = calcTrueOperatingMargin(grossSales, totalLaborCost, cogsSar + spongeAdj2, recentMaint, totalMonthlyDep, utilitiesRent)
+  return c.json({ month, margin, laborCost: totalLaborCost, depreciation: totalMonthlyDep, spongeAdjustment: spongeAdj2, gosiEmployer: totalGosiEr })
 })
 
 // ── Scheduled handler — Cloudflare Cron  "0 */6 * * *" ───────────────────────

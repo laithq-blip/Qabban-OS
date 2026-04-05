@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>QABBAN OS — User Manual v5.0</title>
+  <title>QABBAN OS — User Manual v6.0</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css">
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
@@ -381,7 +381,7 @@
 <nav id="sidebar">
   <div class="sidebar-brand">
     <div class="sidebar-logo">QABBAN OS</div>
-    <div class="sidebar-sub">User Manual v5.0 · April 2026</div>
+    <div class="sidebar-sub">User Manual v6.0 · April 2026</div>
   </div>
   <div class="sidebar-section">Getting Started</div>
   <a class="sidebar-link active" href="#overview"><i class="fa fa-circle-info"></i> System Overview</a>
@@ -425,6 +425,15 @@
   <div class="sidebar-section">Hybrid Ecosystem</div>
   <a class="sidebar-link" href="#hybrid-roles"><i class="fa fa-users-gear" style="color:#a78bfa"></i> Role Permissions</a>
   <a class="sidebar-link" href="#stock-transfer"><i class="fa fa-arrow-right-arrow-left" style="color:#a78bfa"></i> Stock Transfer</a>
+  <div class="sidebar-section" style="color:#f472b6">Enterprise ERP v6.0</div>
+  <a class="sidebar-link" href="#human-capital"><i class="fa fa-users" style="color:#f472b6"></i> Human Capital</a>
+  <a class="sidebar-link" href="#payroll-wps"><i class="fa fa-money-check-alt" style="color:#f472b6"></i> Payroll & WPS / SIF</a>
+  <a class="sidebar-link" href="#gosi"><i class="fa fa-shield-alt" style="color:#60a5fa"></i> GOSI Automation</a>
+  <a class="sidebar-link" href="#eosb"><i class="fa fa-coins" style="color:#34d399"></i> EOSB Tracker</a>
+  <a class="sidebar-link" href="#asset-maintenance"><i class="fa fa-wrench" style="color:#f59e0b"></i> Asset & Maintenance</a>
+  <a class="sidebar-link" href="#depreciation"><i class="fa fa-chart-bar" style="color:#60a5fa"></i> Depreciation Ledger</a>
+  <a class="sidebar-link" href="#enterprise-pnl"><i class="fa fa-chart-mixed" style="color:#f59e0b"></i> Enterprise P&L</a>
+  <a class="sidebar-link" href="#sidebar-nav"><i class="fa fa-bars" style="color:#a78bfa"></i> Sidebar Navigation v6.0</a>
   <div class="sidebar-section">Revenue & Licensing</div>
   <a class="sidebar-link" href="#revenue-model"><i class="fa fa-layers" style="color:#a78bfa"></i> Revenue Model</a>
   <a class="sidebar-link" href="#license-gate"><i class="fa fa-lock" style="color:#a78bfa"></i> LicenseGate</a>
@@ -443,10 +452,10 @@
   <div class="hero" id="top">
     <div class="hero-badge"><i class="fa fa-coffee"></i> QABBAN OS — OFFICIAL DOCUMENTATION</div>
     <div class="hero-title">USER MANUAL</div>
-    <div class="hero-sub">Hybrid Ecosystem · Roastery + Café Dual Roles · B2B CRM · QFI COGS Intelligence · Role-Based Workspaces</div>
+    <div class="hero-sub">Enterprise ERP · Human Capital · Asset Maintenance · Consolidated P&L · Hybrid Ecosystem · Role-Based Workspaces</div>
     <div class="hero-meta">
       <div class="hero-meta-item"><i class="fa fa-calendar"></i> April 2026</div>
-      <div class="hero-meta-item"><i class="fa fa-code-branch"></i> Version 5.0 — Hybrid Ecosystem</div>
+      <div class="hero-meta-item"><i class="fa fa-code-branch"></i> Version 6.0 — Enterprise ERP</div>
       <div class="hero-meta-item"><i class="fa fa-globe"></i> Bilingual EN / AR</div>
       <div class="hero-meta-item"><i class="fa fa-server"></i> Cloudflare Pages · Hono · TypeScript</div>
       <div class="hero-meta-item"><i class="fa fa-file-lines"></i> ~13,000 lines of code</div>
@@ -2860,5 +2869,246 @@ GET /api/hq/license-check?branchId=BR-RUH&amp;requires=ERP_PRO
     });
   });
 </script>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     ENTERPRISE ERP v6.0 — NEW SECTIONS
+     28. Sidebar Navigation v6.0
+     29. Human Capital & Saudi Payroll
+     30. Payroll & WPS / SIF Generator
+     31. GOSI Automation
+     32. EOSB Tracker
+     33. Asset & Predictive Maintenance
+     34. Depreciation Ledger
+     35. Enterprise P&L Dashboard
+═══════════════════════════════════════════════════════════════ -->
+
+  <!-- 28. Sidebar Navigation v6.0 -->
+  <div class="section" id="sidebar-nav">
+    <div class="section-title"><span class="section-num">28</span><i class="fa fa-bars" style="color:#a78bfa"></i> Sidebar Navigation — Enterprise v6.0</div>
+    <div class="section-desc">
+      The admin sidebar is reorganised into <strong>6 functional groups</strong> that map to the enterprise operational workflow.
+      Each group has a distinct accent colour. All groups visible to <code>roaster_admin</code> and <code>platform_owner</code>.
+    </div>
+    <table>
+      <thead><tr><th>Group</th><th>Colour</th><th>Links Included</th><th>Permission Gate</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Global Exchange</strong></td><td style="color:#f59e0b">Amber</td><td>Exchange Hub, Global Catalog</td><td><code>exchange.view</code></td></tr>
+        <tr><td><strong>Production Hub</strong></td><td style="color:#60a5fa">Blue</td><td>Overview, Inventory, My Network, Pulse, Risk Watchdog, Assets &amp; Maint.</td><td><code>inventory.view</code></td></tr>
+        <tr><td><strong>Retail Hub</strong></td><td style="color:#34d399">Green</td><td>Café Portal, Bean Requests</td><td><code>cafe.view_dashboard</code></td></tr>
+        <tr><td><strong>Wholesale CRM</strong></td><td style="color:#a78bfa">Purple</td><td>B2B Clients</td><td><code>b2b.view_clients</code></td></tr>
+        <tr><td><strong>Human Capital</strong></td><td style="color:#f472b6">Pink</td><td>Staff Directory, Payroll &amp; WPS, GOSI Reports, EOSB Ledger</td><td><code>people.view</code></td></tr>
+        <tr><td><strong>Intelligence</strong></td><td style="color:#f59e0b">Amber</td><td>QFI Finance, Enterprise P&amp;L</td><td><code>finance.view</code></td></tr>
+      </tbody>
+    </table>
+    <div class="info-box info-amber">
+      <strong>Topbar Badges (v6.0):</strong> Bell (Bean Requests) · Shield Virus (Risk Watchdog) · Wrench (Asset Maintenance critical alerts, amber badge).
+      Sidebar footer now shows: System Online · <em>N</em> Branches · <em>N</em> Active Staff · User Manual v6.0 link.
+    </div>
+  </div>
+
+  <!-- 29. Human Capital -->
+  <div class="section" id="human-capital">
+    <div class="section-title"><span class="section-num">29</span><i class="fa fa-users" style="color:#f472b6"></i> Human Capital Management — <code>/people</code></div>
+    <div class="section-desc">
+      Full HR module for Saudi roastery-café operations. Manages staff records with SCA certifications, Saudi Payroll (WPS/Mudad),
+      GOSI automation, and EOSB accrual tracking under KSA Labor Law. Designed to replace third-party HR software for hybrid operators such as Camel Step Roasters.
+    </div>
+    <h3>Staff Type</h3>
+    <pre><code>interface Staff {
+  id, fullName, nationalId, nationality: 'SAUDI' | 'EXPAT'
+  jobTitle, branchId, contractType, status
+  basicSalary, housingAllowance, transportAllowance, otherAllowances (all SAR/month)
+  scaCertifications: ('ROASTING'|'BARISTA_SKILLS'|'GREEN_COFFEE'|'SENSORY'|'BREWING'|'COFFEE_SKILLS')[]
+  baristaLevel: 'NONE'|'SCA_INTRO'|'SCA_FOUNDATION'|'SCA_INTERMEDIATE'|'SCA_PROFESSIONAL'|'WBC_CERTIFIED'
+  gosiRegistered, gosiNumber
+  bankName, iban  // SA + 22 digits for WPS
+}</code></pre>
+    <h3>Dashboard KPIs</h3>
+    <table>
+      <thead><tr><th>KPI</th><th>Formula</th></tr></thead>
+      <tbody>
+        <tr><td>Monthly Gross Payroll</td><td><code>Σ (basic + housing + transport + other)</code></td></tr>
+        <tr><td>Total Labor Cost</td><td><code>Gross Payroll + Σ GOSI employer contributions</code></td></tr>
+        <tr><td>EOSB Liability</td><td><code>Σ calcEosb(staff).totalEosbSar</code></td></tr>
+        <tr><td>Saudization Rate</td><td><code>saudiCount / total × 100%</code> — green if ≥ 30%</td></tr>
+      </tbody>
+    </table>
+    <div class="endpoint-block">
+      <span class="method-badge method-get">GET</span><code class="endpoint-path">/people</code>
+      <div class="endpoint-desc">Staff Directory: KPI strip, staff table, SCA certification matrix grid.</div>
+    </div>
+    <div class="endpoint-block">
+      <span class="method-badge method-get">GET</span><code class="endpoint-path">/api/people/staff</code>
+      <div class="endpoint-desc">JSON: <code>{ staff[], summary: { total, active, saudis, expats } }</code></div>
+    </div>
+  </div>
+
+  <!-- 30. Payroll & WPS -->
+  <div class="section" id="payroll-wps">
+    <div class="section-title"><span class="section-num">30</span><i class="fa fa-money-check-alt" style="color:var(--amber)"></i> Payroll &amp; WPS / SIF Generator — <code>/people/payroll</code></div>
+    <div class="section-desc">
+      Generates Salary Information Files (SIF) for the Saudi Wage Protection System. Automatically deducts employee GOSI.
+      Outputs pipe-delimited text ready for Mudad portal upload.
+    </div>
+    <h3>SIF Format</h3>
+    <pre><code>H|CompanyName|YYYY-MM|RecordCount|TotalNetPay
+D|EMP-001|Ahmed Al-Qahtani|SA44...|8500.00|2125.00|500.00|200.00|850.00|0.00|10475.00|2026-04-05
+F|EmployeeCount|TotalNetPay</code></pre>
+    <div class="endpoint-block">
+      <span class="method-badge method-get">GET</span><code class="endpoint-path">/people/payroll</code>
+      <div class="endpoint-desc">Payroll register table + SIF preview panel.</div>
+    </div>
+    <div class="endpoint-block">
+      <span class="method-badge method-get">GET</span><code class="endpoint-path">/api/people/payroll/sif-download?month=YYYY-MM</code>
+      <div class="endpoint-desc">Downloads <code>qabban-wps-sif-{month}.txt</code> as file attachment.</div>
+    </div>
+  </div>
+
+  <!-- 31. GOSI -->
+  <div class="section" id="gosi">
+    <div class="section-title"><span class="section-num">31</span><i class="fa fa-shield-alt" style="color:#60a5fa"></i> GOSI Automation — <code>/people/gosi</code></div>
+    <div class="section-desc">Auto-calculates GOSI contributions per pay month. Saudis: 2% hazard + 10%/12% pension. Expats: 2% hazard only.</div>
+    <table>
+      <thead><tr><th>Contribution</th><th>Rate</th><th>Payer</th><th>Applies To</th></tr></thead>
+      <tbody>
+        <tr><td>Occupational Hazard</td><td><strong>2%</strong> of basic</td><td>Employer only</td><td>All (Saudi + Expat)</td></tr>
+        <tr><td>Pension — Employee</td><td><strong>10%</strong> of basic</td><td>Employee deduction</td><td>Saudi nationals only</td></tr>
+        <tr><td>Pension — Employer</td><td><strong>12%</strong> of basic</td><td>Employer cost</td><td>Saudi nationals only</td></tr>
+      </tbody>
+    </table>
+    <div class="endpoint-block">
+      <span class="method-badge method-get">GET</span><code class="endpoint-path">/people/gosi</code>
+      <div class="endpoint-desc">GOSI contribution ledger: per-employee breakdown, monthly totals, employer vs employee split.</div>
+    </div>
+  </div>
+
+  <!-- 32. EOSB -->
+  <div class="section" id="eosb">
+    <div class="section-title"><span class="section-num">32</span><i class="fa fa-coins" style="color:#34d399"></i> EOSB Tracker — <code>/people/eosb</code></div>
+    <div class="section-desc">Real-time accrual ledger for End-of-Service Benefits per KSA Labor Law Art. 84. Tracks growing liability per employee.</div>
+    <table>
+      <thead><tr><th>Tenure</th><th>Rate</th></tr></thead>
+      <tbody>
+        <tr><td>Year 1–5</td><td>½ month basic salary per year of service</td></tr>
+        <tr><td>Year 5+</td><td>1 full month basic salary per year of service</td></tr>
+      </tbody>
+    </table>
+    <pre><code>// Example: 6-year employee, SAR 12,000 basic
+firstFiveYears = 5 × 0.5 × 12,000 = SAR 30,000
+afterFiveYears = 1 × 1.0 × 12,000 = SAR 12,000
+totalEosb      = SAR 42,000</code></pre>
+    <div class="endpoint-block">
+      <span class="method-badge method-get">GET</span><code class="endpoint-path">/people/eosb</code>
+      <div class="endpoint-desc">EOSB Ledger: per-employee accrual table, first-5-year vs after-5-year split, total liability banner.</div>
+    </div>
+  </div>
+
+  <!-- 33. Asset & Maintenance -->
+  <div class="section" id="asset-maintenance">
+    <div class="section-title"><span class="section-num">33</span><i class="fa fa-wrench" style="color:var(--amber)"></i> Asset &amp; Predictive Maintenance — <code>/operations/assets</code></div>
+    <div class="section-desc">
+      Enterprise asset registry for all roastery-café equipment. The <strong>Maintenance Watchdog</strong> proactively triggers alerts before equipment fails,
+      preventing costly downtime for machines such as the Giesen W15 roaster or La Marzocco KB90 espresso machine.
+    </div>
+    <h3>Watchdog Alert Matrix</h3>
+    <table>
+      <thead><tr><th>Alert</th><th>Trigger</th><th>Severity</th></tr></thead>
+      <tbody>
+        <tr><td>BURR_REPLACEMENT</td><td><code>kgProcessed ≥ burrThreshold × 0.9</code></td><td>WARNING → CRITICAL</td></tr>
+        <tr><td>SERVICE_OVERDUE</td><td><code>daysSince ≥ intervalDays</code></td><td>CRITICAL</td></tr>
+        <tr><td>SERVICE_DUE_SOON</td><td><code>daysSince ≥ intervalDays × 0.85</code></td><td>WARNING</td></tr>
+        <tr><td>USAGE_LIMIT</td><td><code>kgProcessed ≥ serviceKg × 0.9</code></td><td>WARNING → CRITICAL</td></tr>
+      </tbody>
+    </table>
+    <h3>Demo Seed Assets</h3>
+    <table>
+      <thead><tr><th>Asset</th><th>Branch</th><th>Cost SAR</th><th>Life</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr><td>Giesen W15 Roaster #1</td><td>BR-RUH</td><td>185,000</td><td>15 yr</td><td style="color:var(--green)">OPERATIONAL</td></tr>
+        <tr><td>Mahlkönig E65S Grinder #1</td><td>BR-RUH</td><td>12,500</td><td>8 yr</td><td style="color:#f59e0b">SERVICE_DUE — 482/500 kg ⚠</td></tr>
+        <tr><td>La Marzocco KB90</td><td>BR-RUH</td><td>95,000</td><td>10 yr</td><td style="color:var(--green)">OPERATIONAL</td></tr>
+        <tr><td>Giesen W6 — Jeddah</td><td>BR-JED</td><td>120,000</td><td>15 yr</td><td style="color:var(--green)">OPERATIONAL</td></tr>
+        <tr><td>Mahlkönig EK43 — Jeddah</td><td>BR-JED</td><td>18,000</td><td>8 yr</td><td style="color:var(--green)">OPERATIONAL</td></tr>
+      </tbody>
+    </table>
+    <div class="endpoint-block">
+      <span class="method-badge method-get">GET</span><code class="endpoint-path">/operations/assets</code>
+      <div class="endpoint-desc">Asset Registry: KPI strip, asset cards with burr-wear and service-cycle progress bars, depreciation ledger, maintenance log.</div>
+    </div>
+    <div class="endpoint-block">
+      <span class="method-badge method-post">POST</span><code class="endpoint-path">/api/assets/:id/log-usage</code>
+      <div class="endpoint-desc">Body: <code>{ kgProcessed?, cycles?, hours? }</code> → Updates totals, re-runs Watchdog. Returns alerts.</div>
+    </div>
+    <div class="endpoint-block">
+      <span class="method-badge method-get">GET</span><code class="endpoint-path">/api/assets/alerts</code>
+      <div class="endpoint-desc">JSON: <code>{ alerts[], critical: N, total: N }</code></div>
+    </div>
+  </div>
+
+  <!-- 34. Depreciation Ledger -->
+  <div class="section" id="depreciation">
+    <div class="section-title"><span class="section-num">34</span><i class="fa fa-chart-bar" style="color:#60a5fa"></i> Depreciation Ledger — Straight-Line Method</div>
+    <div class="section-desc">Monthly depreciation per asset feeds into the Enterprise P&L as a fixed operating cost, reducing EBITDA → EBIT.</div>
+    <pre><code>depreciableAmount   = purchaseCost - salvageValue
+monthlyDepreciation = depreciableAmount / (usefulLifeYears × 12)
+currentBookValue    = max(purchaseCost - (monthlyDep × monthsElapsed), salvageValue)
+
+// Giesen W15: (185,000 - 18,500) / 180 = SAR 925/month
+// After 25 months: book value = 185,000 - 23,125 = SAR 161,875</code></pre>
+    <div class="info-box info-blue">
+      <strong>Balance Sheet Integration:</strong> Total monthly depreciation (all assets) is a line item in the Enterprise P&L (EBITDA → EBIT). Future export: trial balance CSV.
+    </div>
+  </div>
+
+  <!-- 35. Enterprise P&L -->
+  <div class="section" id="enterprise-pnl">
+    <div class="section-title"><span class="section-num">35</span><i class="fa fa-chart-mixed" style="color:var(--amber)"></i> Enterprise P&amp;L Dashboard — <code>/admin/finance/enterprise</code></div>
+    <div class="section-desc">
+      Consolidated P&L merging QFI Sponge-adjusted COGS, payroll labor costs, asset depreciation, and maintenance into a single <strong>True Operating Margin</strong>.
+    </div>
+    <h3>Formula</h3>
+    <pre><code>Net Profit = Gross Sales
+           − Labor Cost (Gross Payroll + GOSI Employer)
+           − Adjusted COGS (trueRoastedCost × kg ± Sponge delta)
+           − Maintenance Cost (last 30 days)
+           − Monthly Depreciation (Σ all assets)
+           − Utilities &amp; Rent
+
+Net Margin % = Net Profit / Gross Sales × 100</code></pre>
+    <h3>Demo P&L — March 2026</h3>
+    <table>
+      <thead><tr><th>Line Item</th><th>SAR</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td>Gross Sales</td><td style="color:var(--green)">142,000</td><td>B2B + Marketplace + Retail</td></tr>
+        <tr><td>− COGS (Sponge-Adjusted)</td><td style="color:var(--red)">−68,000</td><td>QFI: trueRoastedCost × kg sold</td></tr>
+        <tr><td>= Gross Profit</td><td style="color:var(--amber)">74,000 (52.1%)</td><td></td></tr>
+        <tr><td>− Labor Cost</td><td style="color:#f472b6">−57,460</td><td>Payroll + GOSI employer (14 staff)</td></tr>
+        <tr><td>− Maintenance</td><td style="color:var(--amber)">−3,850</td><td>maintenanceLogs last 30 days</td></tr>
+        <tr><td>− Utilities &amp; Rent</td><td style="color:var(--amber)">−22,200</td><td>Two branches combined</td></tr>
+        <tr><td>= EBITDA</td><td style="color:#60a5fa">−9,510</td><td></td></tr>
+        <tr><td>− Monthly Depreciation</td><td style="color:#60a5fa">−5,958</td><td>5 assets SL method</td></tr>
+        <tr><td>= EBIT / Net Profit</td><td style="color:var(--red)">−15,468 (−10.9%)</td><td>Below breakeven — expansion phase</td></tr>
+      </tbody>
+    </table>
+    <h3>ZATCA VAT Ledger</h3>
+    <table>
+      <thead><tr><th>Transaction Type</th><th>VAT</th><th>Treatment</th></tr></thead>
+      <tbody>
+        <tr><td>B2B Commercial Sale</td><td>15%</td><td>ZATCA Phase-2 XML e-invoice auto-issued</td></tr>
+        <tr><td>Marketplace (Roaster → Café)</td><td>15%</td><td>ZATCA e-invoice auto-generated</td></tr>
+        <tr><td>Internal Stock Transfer (SAR 0)</td><td>0%</td><td>Non-taxable — excluded from VAT ledger</td></tr>
+        <tr><td>Retail (Foodics POS)</td><td>15%</td><td>POS integration; VAT collected at point of sale</td></tr>
+      </tbody>
+    </table>
+    <div class="endpoint-block">
+      <span class="method-badge method-get">GET</span><code class="endpoint-path">/admin/finance/enterprise</code>
+      <div class="endpoint-desc">Enterprise P&L: True Operating Margin banner, P&L waterfall bars, Environmental P&L (Sponge), ZATCA VAT ledger.</div>
+    </div>
+    <div class="endpoint-block">
+      <span class="method-badge method-get">GET</span><code class="endpoint-path">/api/finance/enterprise-pnl?month=YYYY-MM</code>
+      <div class="endpoint-desc">JSON: <code>{ month, margin: { netProfitSar, netMarginPct, breakdown, ... }, laborCost, depreciation, spongeAdjustment, gosiEmployer }</code></div>
+    </div>
+  </div>
+
 </body>
 </html>
