@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>QABBAN OS — User Manual v4.0</title>
+  <title>QABBAN OS — User Manual v5.0</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css">
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
@@ -381,7 +381,7 @@
 <nav id="sidebar">
   <div class="sidebar-brand">
     <div class="sidebar-logo">QABBAN OS</div>
-    <div class="sidebar-sub">User Manual v4.0 · March 2026</div>
+    <div class="sidebar-sub">User Manual v5.0 · April 2026</div>
   </div>
   <div class="sidebar-section">Getting Started</div>
   <a class="sidebar-link active" href="#overview"><i class="fa fa-circle-info"></i> System Overview</a>
@@ -389,11 +389,13 @@
   <div class="sidebar-section">Admin Portal</div>
   <a class="sidebar-link" href="#admin-overview"><i class="fa fa-gauge"></i> Overview Tab</a>
   <a class="sidebar-link" href="#inventory"><i class="fa fa-boxes-stacking"></i> Inventory Tab</a>
-  <a class="sidebar-link" href="#branches"><i class="fa fa-building"></i> Branches Tab</a>
+  <a class="sidebar-link" href="#branches"><i class="fa fa-sitemap"></i> My Network</a>
+  <a class="sidebar-link" href="#b2b-clients"><i class="fa fa-handshake"></i> B2B Clients CRM</a>
   <a class="sidebar-link" href="#finance"><i class="fa fa-chart-line"></i> Finance Tab</a>
   <a class="sidebar-link" href="#requests"><i class="fa fa-inbox"></i> Bean Requests Tab</a>
   <div class="sidebar-section">Cafe Portal</div>
   <a class="sidebar-link" href="#cafe"><i class="fa fa-mug-hot"></i> Cafe Portal</a>
+  <a class="sidebar-link" href="#cafe-multi-branch"><i class="fa fa-store"></i> Multi-Branch View</a>
   <a class="sidebar-link" href="#cafe-orders"><i class="fa fa-list-check"></i> My Orders</a>
   <div class="sidebar-section">Global Exchange</div>
   <a class="sidebar-link" href="#exchange-hub"><i class="fa fa-globe"></i> Exchange Hub</a>
@@ -420,6 +422,9 @@
   <a class="sidebar-link" href="#iot-toggle"><i class="fa fa-toggle-on"></i> IoT Source Toggle</a>
   <div class="sidebar-section">Risk Management</div>
   <a class="sidebar-link" href="#risk-watchdog"><i class="fa fa-triangle-exclamation" style="color:#f87171"></i> Risk Watchdog</a>
+  <div class="sidebar-section">Hybrid Ecosystem</div>
+  <a class="sidebar-link" href="#hybrid-roles"><i class="fa fa-users-gear" style="color:#a78bfa"></i> Role Permissions</a>
+  <a class="sidebar-link" href="#stock-transfer"><i class="fa fa-arrow-right-arrow-left" style="color:#a78bfa"></i> Stock Transfer</a>
   <div class="sidebar-section">Revenue & Licensing</div>
   <a class="sidebar-link" href="#revenue-model"><i class="fa fa-layers" style="color:#a78bfa"></i> Revenue Model</a>
   <a class="sidebar-link" href="#license-gate"><i class="fa fa-lock" style="color:#a78bfa"></i> LicenseGate</a>
@@ -438,13 +443,13 @@
   <div class="hero" id="top">
     <div class="hero-badge"><i class="fa fa-coffee"></i> QABBAN OS — OFFICIAL DOCUMENTATION</div>
     <div class="hero-title">USER MANUAL</div>
-    <div class="hero-sub">Qabban Global Exchange & Loyalty Engine v6 · Complete Feature Reference</div>
+    <div class="hero-sub">Hybrid Ecosystem · Roastery + Café Dual Roles · B2B CRM · QFI COGS Intelligence · Role-Based Workspaces</div>
     <div class="hero-meta">
-      <div class="hero-meta-item"><i class="fa fa-calendar"></i> March 2026</div>
-      <div class="hero-meta-item"><i class="fa fa-code-branch"></i> Version 4.0</div>
+      <div class="hero-meta-item"><i class="fa fa-calendar"></i> April 2026</div>
+      <div class="hero-meta-item"><i class="fa fa-code-branch"></i> Version 5.0 — Hybrid Ecosystem</div>
       <div class="hero-meta-item"><i class="fa fa-globe"></i> Bilingual EN / AR</div>
       <div class="hero-meta-item"><i class="fa fa-server"></i> Cloudflare Pages · Hono · TypeScript</div>
-      <div class="hero-meta-item"><i class="fa fa-file-lines"></i> ~12,000 lines of code</div>
+      <div class="hero-meta-item"><i class="fa fa-file-lines"></i> ~13,000 lines of code</div>
     </div>
   </div>
 
@@ -455,59 +460,88 @@
       <i class="fa fa-circle-info" style="color:var(--amber)"></i>
       System Overview
     </div>
-    <div class="section-desc">QABBAN OS is a fully integrated, cloud-native roastery operating system for Saudi specialty coffee producers and buyers.</div>
+    <div class="section-desc">QABBAN OS is a fully integrated, cloud-native roastery operating system for Saudi specialty coffee producers and buyers. Version 5.0 introduces a <strong style="color:var(--amber)">Hybrid Ecosystem</strong> where roasteries can simultaneously act as cafés, with role-based workspaces that cleanly separate internal transfers from B2B commercial sales.</div>
+
+    <div class="info-box info-amber" style="margin-bottom:24px">
+      <i class="fa fa-circle-nodes"></i>
+      <strong>v5.0 — Hybrid Ecosystem Architecture:</strong> Each operator can hold multiple roles. A roastery admin manages internal nodes via "My Network", sells to B2B clients through the CRM, acts as both a vendor and a buyer on the Global Exchange, and tracks COGS via the QFI COGS Intelligence panel. Cafés access multi-branch dashboards with Extraction Risk scores, IoT Pulse reconciliation tables, and a Tier Tracker for KG-to-next-upgrade nudges. Climate Passports are inherited across every buyer-seller hop.
+    </div>
 
     <div class="cards-grid">
       <div class="feature-card">
         <div class="feature-card-icon">🏭</div>
         <div class="feature-card-title">Roaster Admin Portal</div>
-        <div class="feature-card-desc">Full inventory management, branch humidity monitoring, financial intelligence, and order fulfilment workflow.</div>
+        <div class="feature-card-desc">Full inventory management, My Network internal nodes, B2B CRM, financial intelligence, and order fulfilment. QFI COGS panel with trueRoastedCost = costGreen ÷ 0.82.</div>
       </div>
       <div class="feature-card">
         <div class="feature-card-icon">☕</div>
-        <div class="feature-card-title">Cafe (Buyer) Portal</div>
-        <div class="feature-card-desc">Coffee catalog with tier-based pricing, bean requests, loyalty tracker, and order history for Saudi roasteries.</div>
+        <div class="feature-card-title">Café (Buyer) Portal</div>
+        <div class="feature-card-desc">Multi-branch view with Extraction Risk (RH%), IoT Pulse reconciliation table, Tier Tracker (KG to next tier), loyalty tracker, and order history.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-card-icon">🤝</div>
+        <div class="feature-card-title">B2B Clients CRM</div>
+        <div class="feature-card-desc">Lifetime Value (LTV), full order history with ZATCA refs, next scheduled order, loyalty tier progress bars, and WhatsApp nudge controls per client.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-card-icon">↔️</div>
+        <div class="feature-card-title">Stock Transfer (Internal)</div>
+        <div class="feature-card-desc">Move roasted beans between internal nodes at SAR 0 — updates branch-level kg stock and local inventory value. Transfers are ZATCA-tagged as non-taxable.</div>
       </div>
       <div class="feature-card">
         <div class="feature-card-icon">🌍</div>
-        <div class="feature-card-title">Global Exchange</div>
-        <div class="feature-card-desc">International green-bean sourcing marketplace with Spot & Forward contracts, climate passports and ship tracking.</div>
+        <div class="feature-card-title">Global Exchange — Dual Role</div>
+        <div class="feature-card-desc">Roasters act as Vendor (list roasted lots) AND Buyer (purchase green beans). Climate Passports are fully inherited: a café buyer sees the roaster's internal humidity storage history.</div>
       </div>
       <div class="feature-card">
         <div class="feature-card-icon">🏅</div>
         <div class="feature-card-title">Coffee Miles Loyalty</div>
-        <div class="feature-card-desc">Bronze / Silver / Gold tier system with automatic tier assignment, hybrid stacked discounts and milestone nudges.</div>
+        <div class="feature-card-desc">Bronze / Silver / Gold tier system with automatic tier assignment, hybrid stacked discounts, milestone nudges, and Tier Tracker UI in the café portal.</div>
       </div>
       <div class="feature-card">
         <div class="feature-card-icon">📊</div>
-        <div class="feature-card-title">QFI Financial Engine</div>
-        <div class="feature-card-desc">Reactive portfolio financials with per-tier wholesale pricing, live margin configuration and environmental P&L.</div>
+        <div class="feature-card-title">QFI COGS Intelligence</div>
+        <div class="feature-card-desc">trueRoastedCost = costGreen ÷ yieldCoeff (÷ 0.82). Per-lot breakdown panel above the wholesale price table in the Finance tab. All finance views include COGS.</div>
       </div>
       <div class="feature-card">
         <div class="feature-card-icon">🧾</div>
         <div class="feature-card-title">ZATCA Phase-2</div>
-        <div class="feature-card-desc">UBL XML e-invoicing, bulk shrinkage report, and 15% VAT compliance for Saudi tax authority requirements.</div>
+        <div class="feature-card-desc">UBL XML e-invoicing, bulk shrinkage report, B2B commercial trade invoices (Section 6), and internal node transfer records (Section 7 — flagged non-taxable).</div>
       </div>
       <div class="feature-card">
         <div class="feature-card-icon">🧪</div>
         <div class="feature-card-title">Sponge Effect Engine</div>
-        <div class="feature-card-desc">Dynamic yield coefficient that adjusts the 0.82 roasting baseline based on real warehouse humidity.</div>
+        <div class="feature-card-desc">Dynamic yield coefficient adjusts the 0.82 roasting baseline based on real warehouse humidity. Powers trueRoastedCost and Environmental P&L across all nodes.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-card-icon">🛡️</div>
+        <div class="feature-card-title">Risk Watchdog — Hybrid Nodes</div>
+        <div class="feature-card-desc">48-hour RH > 70% detection now covers all nodes: roastery warehouses and café storage branches. All RH readings logged per runWatchdog() cycle.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-card-icon">👥</div>
+        <div class="feature-card-title">Role Permissions (RolePermissions.ts)</div>
+        <div class="feature-card-desc">Four roles: platform_owner (/hq), roaster_admin (/admin), cafe_client (/cafe), hybrid_node (/admin + /cafe). Enforced via permission_check middleware on all sensitive routes.</div>
       </div>
       <div class="feature-card">
         <div class="feature-card-icon">💱</div>
         <div class="feature-card-title">XE Currency Engine</div>
-        <div class="feature-card-desc">Live USD/EUR→SAR conversion via XE Currency API with SAMA peg, configurable buffer and 60s execution lock.</div>
+        <div class="feature-card-desc">Live USD/EUR→SAR conversion via XE Currency API with SAMA peg, configurable buffer and 60s execution lock. Drives all marketplace pricing.</div>
       </div>
     </div>
 
     <table class="manual-table">
-      <thead><tr><th>Portal / Module</th><th>URL Path</th><th>Primary Users</th></tr></thead>
+      <thead><tr><th>Portal / Module</th><th>URL Path</th><th>Role</th><th>Primary Users</th></tr></thead>
       <tbody>
-        <tr><td>Roaster Admin</td><td class="endpoint-path">/admin</td><td>Roastery manager/operator</td></tr>
-        <tr><td>Cafe Buyer Portal</td><td class="endpoint-path">/cafe?cid=CAF-XXX</td><td>Cafe owners / buyers</td></tr>
-        <tr><td>Global Exchange Hub</td><td class="endpoint-path">/exchange</td><td>Buyers & vendors</td></tr>
-        <tr><td>Vendor Portal</td><td class="endpoint-path">/vendor</td><td>Green bean producers</td></tr>
-        <tr><td>Buyer Portal</td><td class="endpoint-path">/buyer</td><td>Saudi roastery purchasers</td></tr>
+        <tr><td>Roaster Admin</td><td class="endpoint-path">/admin</td><td>roaster_admin</td><td>Roastery manager / operator</td></tr>
+        <tr><td>Café Buyer Portal</td><td class="endpoint-path">/cafe?cid=CAF-XXX</td><td>cafe_client</td><td>Café owners / buyers</td></tr>
+        <tr><td>B2B Clients CRM</td><td class="endpoint-path">/admin/b2b</td><td>roaster_admin</td><td>Roastery sales team</td></tr>
+        <tr><td>My Network (Internal Nodes)</td><td class="endpoint-path">/admin/branches</td><td>roaster_admin</td><td>Roastery warehouse managers</td></tr>
+        <tr><td>Global Exchange Hub</td><td class="endpoint-path">/exchange</td><td>Any</td><td>Buyers &amp; vendors</td></tr>
+        <tr><td>Vendor Portal</td><td class="endpoint-path">/vendor</td><td>Any</td><td>Green bean producers</td></tr>
+        <tr><td>Buyer Portal</td><td class="endpoint-path">/buyer</td><td>Any</td><td>Saudi roastery purchasers</td></tr>
+        <tr><td>ManagementHQ</td><td class="endpoint-path">/hq?hq_token=…</td><td>platform_owner</td><td>Platform operator (god view)</td></tr>
+        <tr><td>Risk Watchdog</td><td class="endpoint-path">/admin/watchdog</td><td>roaster_admin</td><td>Quality &amp; compliance team</td></tr>
       </tbody>
     </table>
   </div>
@@ -538,13 +572,16 @@
 
     <div class="sub-title">Top Navigation Tabs</div>
     <table class="manual-table">
-      <thead><tr><th>Tab</th><th>Icon</th><th>Path</th></tr></thead>
+      <thead><tr><th>Tab</th><th>Icon</th><th>Path</th><th>v5.0 Notes</th></tr></thead>
       <tbody>
-        <tr><td>Overview</td><td><i class="fa fa-gauge"></i></td><td class="endpoint-path">/admin</td></tr>
-        <tr><td>Inventory</td><td><i class="fa fa-boxes-stacking"></i></td><td class="endpoint-path">/admin/inventory</td></tr>
-        <tr><td>Branches</td><td><i class="fa fa-building"></i></td><td class="endpoint-path">/admin/branches</td></tr>
-        <tr><td>Finance</td><td><i class="fa fa-chart-line"></i></td><td class="endpoint-path">/admin/finance</td></tr>
-        <tr><td>Bean Requests</td><td><i class="fa fa-inbox"></i></td><td class="endpoint-path">/admin/requests</td></tr>
+        <tr><td>Overview</td><td><i class="fa fa-gauge"></i></td><td class="endpoint-path">/admin</td><td>QFI tiles, sponge status, live balance</td></tr>
+        <tr><td>Inventory</td><td><i class="fa fa-boxes-stacking"></i></td><td class="endpoint-path">/admin/inventory</td><td>Lot lifecycle + Watchdog alerts</td></tr>
+        <tr><td><strong style="color:var(--amber)">My Network</strong> <span style="font-size:10px;color:#4ade80">NEW v5</span></td><td><i class="fa fa-sitemap"></i></td><td class="endpoint-path">/admin/branches</td><td>Internal nodes — formerly "Branches". Includes StockTransfer panel.</td></tr>
+        <tr><td><strong style="color:var(--amber)">B2B Clients</strong> <span style="font-size:10px;color:#4ade80">NEW v5</span></td><td><i class="fa fa-handshake"></i></td><td class="endpoint-path">/admin/b2b</td><td>CRM — LTV, order history, loyalty tier, next order</td></tr>
+        <tr><td>Finance</td><td><i class="fa fa-chart-line"></i></td><td class="endpoint-path">/admin/finance</td><td>QFI COGS Intelligence panel added</td></tr>
+        <tr><td>Bean Requests</td><td><i class="fa fa-inbox"></i></td><td class="endpoint-path">/admin/requests</td><td>Dispatch auto-updates Coffee Miles tier</td></tr>
+        <tr><td>Global Exchange</td><td><i class="fa fa-globe"></i></td><td class="endpoint-path">/exchange</td><td>Dual Vendor + Buyer mode (v5)</td></tr>
+        <tr><td>Risk Watchdog</td><td><i class="fa fa-triangle-exclamation"></i></td><td class="endpoint-path">/admin/watchdog</td><td>Covers all hybrid nodes (roastery + café)</td></tr>
       </tbody>
     </table>
 
@@ -629,10 +666,15 @@
     </div>
   </div>
 
-  <!-- 5. Branches -->
+  <!-- 5. My Network (Internal Nodes) — v5.0 -->
   <div class="section" id="branches">
-    <div class="section-title"><span class="section-num">05</span><i class="fa fa-building" style="color:var(--amber)"></i> Admin Portal — Branches Tab</div>
-    <div class="section-desc">Route: <code style="color:var(--amber)">/admin/branches</code> — Live humidity & temperature monitoring per branch. Climate Preset system (Inland / Coastal).</div>
+    <div class="section-title"><span class="section-num">05</span><i class="fa fa-sitemap" style="color:var(--amber)"></i> Admin Portal — My Network (Internal Nodes)</div>
+    <div class="section-desc">Route: <code style="color:var(--amber)">/admin/branches</code> — v5.0: Renamed from "Branches" to "My Network". Internal Nodes represent the roastery's own warehouse and café locations. Live humidity/temperature monitoring, Climate Preset system (Inland / Coastal), and the new <strong>Stock Transfer</strong> panel for moving beans at SAR 0 between nodes.</div>
+
+    <div class="info-box info-amber">
+      <i class="fa fa-sitemap"></i>
+      <strong>What changed in v5.0:</strong> The sidebar label "Branches" is now "<strong>My Network</strong>" with a sitemap icon. Internal nodes are roastery-owned locations — both warehouse branches and café branches that belong to the same operator. Stock moves between them are classified as internal transfers (non-taxable) and separated from B2B commercial sales.
+    </div>
 
     <div class="sub-title">Risk Classification</div>
     <table class="manual-table">
@@ -645,16 +687,89 @@
       </tbody>
     </table>
 
-    <div class="sub-title">Branch Card Components</div>
+    <div class="sub-title">Internal Node Card Components</div>
     <ul class="checklist">
-      <li><i class="fa fa-thermometer-half"></i> Live humidity % + temperature °C from sensors</li>
+      <li><i class="fa fa-thermometer-half"></i> Live humidity % + temperature °C from sensors (IoT or Weather API fallback)</li>
       <li><i class="fa fa-triangle-exclamation"></i> Risk badge with color (LOW / MODERATE / HIGH / CRITICAL)</li>
-      <li><i class="fa fa-boxes-stacking"></i> Lot count stored at this branch</li>
-      <li><i class="fa fa-mug-hot"></i> Local cafes served from this branch</li>
-      <li><i class="fa fa-flask"></i> Sponge coefficient for this branch (e.g. 0.825) + rule label</li>
-      <li><i class="fa fa-info-circle"></i> Climate-specific storage advice</li>
-      <li><i class="fa fa-plus"></i> UPDATE SENSOR button → POST /admin/branches/:id/update</li>
+      <li><i class="fa fa-boxes-stacking"></i> Lot count and total green kg stored at this node</li>
+      <li><i class="fa fa-mug-hot"></i> Local cafés served from this node</li>
+      <li><i class="fa fa-flask"></i> Sponge coefficient for this node (e.g. 0.825) + rule label</li>
+      <li><i class="fa fa-info-circle"></i> Climate-specific storage advice (Inland vs Coastal preset)</li>
+      <li><i class="fa fa-plus"></i> UPDATE SENSOR button → <span class="method-post">POST</span> <code>/admin/branches/:id/update</code></li>
     </ul>
+
+    <div class="sub-title" id="stock-transfer">Stock Transfer — Internal Node Logistics (SAR 0)</div>
+    <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px">Admins can move roasted bean stock between internal nodes at <strong>zero commercial value (SAR 0)</strong>. This updates branch-level kg stock and local inventory value without generating a commercial invoice.</p>
+
+    <div class="info-box info-green">
+      <i class="fa fa-arrow-right-arrow-left"></i>
+      <strong>How Stock Transfer Works:</strong> Select a source node and a destination node, enter the kg amount, and click <strong>TRANSFER STOCK</strong>. The system deducts kg from the source node's live roasted balance and adds it to the destination node. No SAR value is exchanged — this is purely a physical logistics operation within the operator's own network.
+    </div>
+
+    <table class="manual-table">
+      <thead><tr><th>Field</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td>Source Node</td><td>Dropdown — any internal node with sufficient roasted stock</td></tr>
+        <tr><td>Destination Node</td><td>Dropdown — any other internal node (cannot be same as source)</td></tr>
+        <tr><td>Transfer Quantity (kg)</td><td>Must not exceed source node's current live roasted balance</td></tr>
+        <tr><td>Transfer Value (SAR)</td><td>Always <strong>SAR 0</strong> — internal transfers are not commercial transactions</td></tr>
+        <tr><td>Transfer Log</td><td>Each transfer creates a timestamped log entry visible in the node card and in the ZATCA export (Section 7 — flagged <code>NON_TAXABLE</code>)</td></tr>
+      </tbody>
+    </table>
+
+    <div class="sub-title">ZATCA Compliance for Internal Transfers</div>
+    <p style="font-size:13px;color:var(--text-muted)">Internal node transfers appear in the ZATCA Bulk Shrinkage Export (Section 7) as <strong>non-taxable inventory movements</strong>. No VAT is applied. Reference format: <code>TRANSFER-{sourceId}-{destId}-{YYYYMMDD}</code>. This ensures full audit traceability while keeping them separate from commercial B2B invoices.</p>
+  </div>
+
+  <!-- 5b. B2B Clients CRM — v5.0 NEW -->
+  <div class="section" id="b2b-clients">
+    <div class="section-title"><span class="section-num">05b</span><i class="fa fa-handshake" style="color:var(--amber)"></i> Admin Portal — B2B Clients CRM</div>
+    <div class="section-desc">Route: <code style="color:var(--amber)">/admin/b2b</code> — New in v5.0. Dedicated CRM tab for managing external café and roastery clients. Displays LTV (SAR), full order history, next scheduled order, and loyalty tier progress bars. Replaces weather data with commercial relationship metrics.</div>
+
+    <div class="info-box info-amber">
+      <i class="fa fa-handshake"></i>
+      <strong>B2B vs Internal Transfer:</strong> B2B sales are <em>commercial transactions</em> — they generate ZATCA-compliant invoices with 15% VAT. Internal stock transfers (My Network tab) are SAR 0 logistics movements. The B2B CRM tab is exclusively for external client relationships.
+    </div>
+
+    <div class="sub-title">B2B Client Card Components</div>
+    <table class="manual-table">
+      <thead><tr><th>Component</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><strong>LTV (Lifetime Value)</strong></td><td>Total SAR revenue generated by this client across all-time confirmed + dispatched orders</td></tr>
+        <tr><td><strong>Order History</strong></td><td>Chronological list of all orders — ID, date, amount (SAR), status, ZATCA reference number</td></tr>
+        <tr><td><strong>Next Scheduled Order</strong></td><td>Next expected order date (editable). Used for proactive stock planning and nudge automation.</td></tr>
+        <tr><td><strong>Loyalty Tier Progress</strong></td><td>Visual progress bar from current tier toward next tier (Bronze→Silver→Gold) based on cumulative kg purchased</td></tr>
+        <tr><td><strong>KG to Next Tier</strong></td><td>Exact kg remaining until the client reaches the next Coffee Miles tier</td></tr>
+        <tr><td><strong>Internal Node Transfer Panel</strong></td><td>Quick-access panel to initiate a SAR-0 stock transfer for supporting this client's orders from the nearest node</td></tr>
+      </tbody>
+    </table>
+
+    <div class="sub-title">Demo B2B Clients</div>
+    <table class="manual-table">
+      <thead><tr><th>Client</th><th>ID</th><th>Tier</th><th>Lifetime KG</th><th>LTV (SAR)</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>Al Nokhba Specialty — Riyadh</td><td class="endpoint-path">CAF-001</td>
+          <td><span class="tier-badge badge-gold">🥇 Gold</span></td>
+          <td>2,400 kg</td><td>SAR ~390,000</td>
+        </tr>
+        <tr>
+          <td>Qahwa Al Bahr — Jeddah</td><td class="endpoint-path">CAF-002</td>
+          <td><span class="tier-badge badge-silver">🥈 Silver ⚡</span></td>
+          <td>1,965 kg (36 kg from Gold)</td><td>SAR ~310,000</td>
+        </tr>
+        <tr>
+          <td>Pearl Roast Café — Dammam</td><td class="endpoint-path">CAF-003</td>
+          <td><span class="tier-badge badge-bronze">🥉 Bronze ⚡</span></td>
+          <td>460 kg (41 kg from Silver)</td><td>SAR ~78,000</td>
+        </tr>
+        <tr>
+          <td>Camel Step Coffee</td><td class="endpoint-path">CAF-004</td>
+          <td><span class="tier-badge badge-silver">🥈 Silver</span></td>
+          <td>~900 kg</td><td>SAR ~148,000</td>
+        </tr>
+      </tbody>
+    </table>
   </div>
 
   <!-- 6. Finance -->
@@ -664,16 +779,49 @@
 
     <div class="sub-title">Finance Sub-Sections</div>
     <ul class="checklist">
+      <li><i class="fa fa-calculator" style="color:var(--amber)"></i> <strong>QFI COGS Intelligence</strong> <span style="font-size:10px;color:#4ade80">NEW v5</span> — per-lot COGS breakdown using trueRoastedCost = costGreen ÷ 0.82</li>
       <li><i class="fa fa-grid-2"></i> QFI Portfolio Cards — Bronze / Silver / Gold inventory values + Env P&L (live-reactive)</li>
       <li><i class="fa fa-table"></i> QFI Per-Lot Wholesale Price Table — True Roasted Cost + Bronze/Silver/Gold prices per lot</li>
       <li><i class="fa fa-medal"></i> Coffee Miles Loyalty Tier Engine — tier definitions, discount rules, buyer ledger</li>
       <li><i class="fa fa-users"></i> Buyer Loyalty Ledger — all cafes with lifetime kg, tier badge, progress bars, nudge badges</li>
       <li><i class="fa fa-bell"></i> Tier Watcher Dashboard — buyers within 50 kg of upgrade + WhatsApp nudge buttons</li>
       <li><i class="fa fa-sliders"></i> Client Tier Pricing — margin input (Bronze 40% / Silver 35% / Gold 28%) + SET ALL broadcast</li>
-      <li><i class="fa fa-file-csv"></i> ZATCA Bulk Shrinkage Report — CSV export for audit</li>
+      <li><i class="fa fa-file-csv"></i> ZATCA Bulk Shrinkage Report — CSV export for audit (now includes B2B invoices + internal transfers)</li>
       <li><i class="fa fa-coins"></i> Global Exchange Currency Settings — XE live rates + buffer + refresh</li>
       <li><i class="fa fa-scale-balanced"></i> Live Balance Banner — purchased green kg vs dispatched equivalent</li>
     </ul>
+
+    <div class="sub-title">QFI COGS Intelligence Panel — v5.0</div>
+    <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px">A new panel appears above the Lot-Level Financial Breakdown Table. It shows per-lot Cost of Goods Sold (COGS) using the <strong>True Roasted Cost</strong> formula.</p>
+
+    <div class="code-block">
+<span class="comment">── QFI COGS Formula ──────────────────────────────────────────────</span>
+<span class="comment">// True Roasted Cost = the actual cost of one kg of roasted coffee,</span>
+<span class="comment">// accounting for the mass lost during roasting.</span>
+
+trueRoastedCost = costGreen ÷ yieldCoeff
+                = costGreen ÷ 0.82   (using SPONGE_BASELINE_COEFFICIENT)
+
+<span class="comment">Example: SAR 100/kg green → SAR 121.95/kg roasted (18% mass lost)</span>
+
+
+<span class="comment">── COGS per lot in the Finance panel ────────────────────────────</span>
+For each active lot the panel shows:
+  costGreen       = lot.costPerKg (SAR/kg, entered at lot creation)
+  yieldCoeff      = branch sponge coefficient (default 0.82)
+  trueRoastedCost = costGreen ÷ yieldCoeff
+  liveKg          = lot.roastedWeightKg (sponge-adjusted live balance)
+  totalCOGS       = trueRoastedCost × liveKg
+
+<span class="comment">── Margin Validation ─────────────────────────────────────────────</span>
+grossMarginCheck = (wholesalePriceGold − trueRoastedCost) ÷ wholesalePriceGold
+<span class="comment">Alert shown if grossMarginCheck falls below 10%.</span>
+    </div>
+
+    <div class="info-box info-amber">
+      <i class="fa fa-lightbulb"></i>
+      <strong>Why COGS Matters:</strong> Without dividing by 0.82, you would understate the real cost of roasted coffee. A lot purchased at SAR 100/kg green costs <em>SAR 121.95/kg after roasting</em> — if you sell at SAR 169.38/kg (Gold tier), your true gross margin is <strong>27.9%</strong>, not 40%. The QFI COGS panel ensures all finance views reflect the actual roasted cost, not the raw green purchase price.
+    </div>
 
     <div class="sub-title">QFI Financial Engine — Full Equation Set</div>
     <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px">The QFI (Qabban Financial Intelligence) engine converts raw green-bean cost into tier-based wholesale prices using the Sponge baseline coefficient and a gross-margin formula.</p>
@@ -751,15 +899,23 @@ environmentalPnL = spongeKgDelta × wholesalePrice
 
   <!-- 8. Cafe Portal -->
   <div class="section" id="cafe">
-    <div class="section-title"><span class="section-num">08</span><i class="fa fa-mug-hot" style="color:var(--amber)"></i> Cafe (Buyer) Portal</div>
-    <div class="section-desc">Route: <code style="color:var(--amber)">/cafe?cid=CAF-001</code> — Buyer-facing interface with loyalty tracker, catalog, rate bar, and order modal.</div>
+    <div class="section-title"><span class="section-num">08</span><i class="fa fa-mug-hot" style="color:var(--amber)"></i> Café (Buyer) Portal</div>
+    <div class="section-desc">Route: <code style="color:var(--amber)">/cafe?cid=CAF-001</code> — v5.0: Buyer-facing interface enhanced with <strong>Multi-Branch View</strong>, Extraction Risk panel (RH%), IoT Pulse reconciliation table, and Tier Tracker (KG to next upgrade). Also includes loyalty tracker, rate bar, and order modal.</div>
+
+    <div class="info-box info-amber">
+      <i class="fa fa-code-branch"></i>
+      <strong>v5.0 Café Portal Enhancements:</strong> (1) Multi-branch view showing Extraction Risk (Room RH%) per shop. (2) IoT Pulse Reconciliation table showing system stock vs. sensor reading vs. variance. (3) Tier Tracker UI component showing "KG to Next Tier" based on cumulative purchases from the roaster. These are rendered above the coffee catalog.
+    </div>
 
     <div class="sub-title">Portal Components (Top to Bottom)</div>
     <ul class="checklist">
       <li><i class="fa fa-dollar-sign"></i> <strong>XE Currency Rate Bar</strong> — USD→SAR and EUR→SAR live rates with LOCK RATE (60s) button</li>
       <li><i class="fa fa-medal"></i> <strong>Loyalty Tracker Card</strong> — tier badge, lifetime kg, progress bar, discount breakdown, mini tier reference</li>
       <li><i class="fa fa-bell"></i> <strong>Milestone Nudge Banner</strong> — amber pulsing banner when within 50 kg of next tier (dismissable)</li>
-      <li><i class="fa fa-shield-halved"></i> <strong>SFDA Recall Banner</strong> — urgent red banner if recalled lot was dispatched to this cafe</li>
+      <li><i class="fa fa-map-marked-alt" style="color:#00E5FF"></i> <strong>Multi-Branch Extraction Risk Panel</strong> <span style="font-size:10px;color:#4ade80">NEW v5</span> — RH% for each registered shop location, color-coded OPTIMAL / MODERATE / HIGH</li>
+      <li><i class="fa fa-scale-balanced" style="color:#00E5FF"></i> <strong>IoT Pulse Reconciliation Table</strong> <span style="font-size:10px;color:#4ade80">NEW v5</span> — system stock vs. sensor reading vs. variance, status: RECONCILED / VARIANCE</li>
+      <li><i class="fa fa-chart-line" style="color:var(--amber)"></i> <strong>Tier Tracker UI</strong> <span style="font-size:10px;color:#4ade80">NEW v5</span> — shows exact kg to next tier, animated progress bar, upgrade benefit preview</li>
+      <li><i class="fa fa-shield-halved"></i> <strong>SFDA Recall Banner</strong> — urgent red banner if recalled lot was dispatched to this café</li>
       <li><i class="fa fa-grid"></i> <strong>Coffee Catalog</strong> — lot cards with tier pricing, marketplace badges, grade scores, and action buttons</li>
     </ul>
 
@@ -820,6 +976,58 @@ orderTotal           = discountedPricePerKg × orderKg
     </div>
   </div>
 
+  <!-- 8b. Cafe Multi-Branch View — v5.0 NEW -->
+  <div class="section" id="cafe-multi-branch">
+    <div class="section-title"><span class="section-num">08b</span><i class="fa fa-store" style="color:var(--amber)"></i> Café — Multi-Branch View</div>
+    <div class="section-desc">New in v5.0. Cafés with multiple shop locations see a unified panel showing Extraction Risk (Room RH%), IoT Pulse reconciliation, and a Tier Tracker for each branch node.</div>
+
+    <div class="sub-title">Extraction Risk Panel</div>
+    <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px">Extraction quality is directly affected by ambient humidity. The Extraction Risk panel shows current RH% for each shop and classifies it into three bands:</p>
+    <table class="manual-table">
+      <thead><tr><th>Band</th><th>RH% Range</th><th>Color</th><th>Impact</th></tr></thead>
+      <tbody>
+        <tr><td>OPTIMAL</td><td>40–60% RH</td><td style="color:#4ade80">🟢 Green</td><td>Ideal extraction conditions — consistent espresso yield</td></tr>
+        <tr><td>MODERATE</td><td>61–70% RH</td><td style="color:#fbbf24">🟡 Amber</td><td>Slight moisture absorption — minor yield variation</td></tr>
+        <tr><td>HIGH</td><td>&gt; 70% RH</td><td style="color:#f87171">🔴 Red</td><td>Risk of clumping, channeling, inconsistent extraction</td></tr>
+      </tbody>
+    </table>
+
+    <div class="sub-title">IoT Pulse Reconciliation Table</div>
+    <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px">Shows system-recorded stock vs. IoT sensor-measured usage for each branch. Highlights any discrepancy (variance) between what the system expects and what sensors report.</p>
+    <table class="manual-table">
+      <thead><tr><th>Column</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td>Branch</td><td>Shop location name and ID</td></tr>
+        <tr><td>System Stock (kg)</td><td>What the roastery's inventory system records for this branch</td></tr>
+        <tr><td>Sensor Reading (kg)</td><td>IoT-measured actual stock at this branch (from scale + telemetry)</td></tr>
+        <tr><td>Variance (kg)</td><td>System Stock minus Sensor Reading. Positive = surplus; negative = deficit.</td></tr>
+        <tr><td>Status</td><td><span class="status-dispatched">RECONCILED</span> if variance &lt; 2 kg · <span class="status-pending">VARIANCE</span> if gap is significant</td></tr>
+      </tbody>
+    </table>
+
+    <div class="sub-title">Tier Tracker UI Component</div>
+    <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px">A prominent card displayed in the café portal showing the client's progress toward the next Coffee Miles tier, based on cumulative kg purchased from their roaster.</p>
+    <div style="background:var(--card);border:1px solid rgba(245,158,11,0.25);border-radius:10px;padding:20px;margin:16px 0">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <div style="color:var(--amber);font-weight:700;font-size:14px"><i class="fa fa-medal"></i> TIER TRACKER</div>
+        <span class="tier-badge badge-silver">🥈 Silver — 3% discount</span>
+      </div>
+      <div style="font-size:12px;color:var(--text-muted);margin-bottom:6px">Lifetime purchases: <strong style="color:var(--text)">1,965 kg</strong></div>
+      <div style="font-size:12px;color:var(--amber);margin-bottom:8px">⚡ <strong>36 kg to Gold</strong> — place your next order to unlock 5% discount</div>
+      <div class="progress-demo"><div class="progress-fill" style="width:97.6%"></div></div>
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-muted);margin-top:4px">
+        <span>501 kg (Silver threshold)</span><span>97.6% to Gold</span><span>2,001 kg (Gold threshold)</span>
+      </div>
+    </div>
+
+    <ul class="checklist">
+      <li><i class="fa fa-chart-simple"></i> Progress bar animates from 0 to current percentage on page load</li>
+      <li><i class="fa fa-bolt" style="color:var(--amber)"></i> Pulsing <strong style="color:var(--amber)">⚡ nudge banner</strong> appears automatically when ≤ 50 kg from next tier</li>
+      <li><i class="fa fa-medal"></i> Upgrade benefit preview shown: next tier discount % + roastery margin %</li>
+      <li><i class="fa fa-whatsapp"></i> WhatsApp button for café to directly contact roastery from within the tier tracker</li>
+    </ul>
+  </div>
+
   <!-- 9. Cafe Orders -->
   <div class="section" id="cafe-orders">
     <div class="section-title"><span class="section-num">09</span><i class="fa fa-list-check" style="color:var(--amber)"></i> Cafe Orders Page</div>
@@ -829,20 +1037,49 @@ orderTotal           = discountedPricePerKg × orderKg
 
   <!-- 10. Exchange Hub -->
   <div class="section" id="exchange-hub">
-    <div class="section-title"><span class="section-num">10</span><i class="fa fa-globe" style="color:var(--amber)"></i> Global Exchange Hub</div>
-    <div class="section-desc">Route: <code style="color:var(--amber)">/exchange</code> — International green-bean sourcing marketplace hub with live rates and lot previews.</div>
+    <div class="section-title"><span class="section-num">10</span><i class="fa fa-globe" style="color:var(--amber)"></i> Global Exchange Hub — Dual Role</div>
+    <div class="section-desc">Route: <code style="color:var(--amber)">/exchange</code> — v5.0: Roasters can now act as both <strong>Vendors</strong> (listing their roasted lots) and <strong>Buyers</strong> (purchasing green beans). The Exchange Hub homepage shows two mode cards: Vendor Mode and Buyer Mode. Climate Passports are inherited across every transaction — a café buyer sees the roaster's full internal humidity storage history.</div>
+
+    <div class="info-box info-amber">
+      <i class="fa fa-arrows-left-right"></i>
+      <strong>v5.0 Dual Role:</strong> A Saudi roastery can simultaneously: (A) List its roasted lots as a <em>vendor</em> for café buyers to purchase on the exchange. (B) Browse and purchase green/unroasted beans as a <em>buyer</em> from international producers. Both modes are accessible from the same Exchange Hub dashboard with two distinct mode cards.
+    </div>
+
+    <div class="sub-title">Exchange Hub Mode Cards (v5.0)</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:16px 0">
+      <div style="background:var(--card);border:1px solid rgba(245,158,11,0.3);border-radius:10px;padding:20px">
+        <div style="color:var(--amber);font-weight:700;font-size:13px;margin-bottom:8px"><i class="fa fa-store"></i> VENDOR MODE</div>
+        <p style="font-size:12px;color:var(--text-muted)">List your roasted coffee lots on the exchange. Set SPOT (immediate) or FORWARD (pre-harvest) marketplace type. Generate Climate Passports with your internal humidity storage history attached.</p>
+        <div style="margin-top:12px"><span class="method-get">GET</span> <code style="margin-left:6px">/vendor</code></div>
+        <div style="margin-top:4px"><span class="method-get">GET</span> <code style="margin-left:6px">/vendor/lots/new</code></div>
+      </div>
+      <div style="background:var(--card);border:1px solid rgba(0,229,255,0.2);border-radius:10px;padding:20px">
+        <div style="color:#00E5FF;font-weight:700;font-size:13px;margin-bottom:8px"><i class="fa fa-handshake"></i> BUYER MODE</div>
+        <p style="font-size:12px;color:var(--text-muted)">Browse green and roasted bean lots from verified global vendors. Use the Landed Price Calculator for true SAR cost. Climate Passport inheritance means you see the full humidity history of every lot you buy.</p>
+        <div style="margin-top:12px"><span class="method-get">GET</span> <code style="margin-left:6px">/buyer</code></div>
+        <div style="margin-top:4px"><span class="method-get">GET</span> <code style="margin-left:6px">/exchange/catalog</code></div>
+      </div>
+    </div>
+
+    <div class="sub-title">Climate Passport Inheritance — v5.0</div>
+    <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px">When a café purchases a lot from a roastery on the Global Exchange, the lot's Climate Passport automatically inherits the roastery's full internal storage humidity history. This gives the buyer complete visibility into storage conditions from origin through roastery warehouse.</p>
+    <div class="info-box info-green">
+      <i class="fa fa-passport"></i>
+      <strong>Inheritance Chain:</strong> Origin Farm → Shipping → Saudi Customs → <strong>Roastery Warehouse (internal humidity log)</strong> → Café Delivery. Every hop is logged in the Climate Passport. The buyer always sees the complete chain.
+    </div>
 
     <div class="sub-title">Exchange Navigation</div>
     <table class="manual-table">
-      <thead><tr><th>Item</th><th>Path</th><th>Section</th></tr></thead>
+      <thead><tr><th>Item</th><th>Path</th><th>Role</th><th>Section</th></tr></thead>
       <tbody>
-        <tr><td><i class="fa fa-gauge"></i> Exchange Hub</td><td class="endpoint-path">/exchange</td><td>—</td></tr>
-        <tr><td><i class="fa fa-list"></i> Global Catalog</td><td class="endpoint-path">/exchange/catalog</td><td>MARKETPLACE</td></tr>
-        <tr><td><i class="fa fa-bolt"></i> Spot Lots</td><td class="endpoint-path">/exchange/catalog?type=SPOT</td><td>—</td></tr>
-        <tr><td><i class="fa fa-seedling"></i> Forward Lots</td><td class="endpoint-path">/exchange/catalog?type=FORWARD</td><td>—</td></tr>
-        <tr><td><i class="fa fa-store"></i> Vendor Portal</td><td class="endpoint-path">/vendor</td><td>PORTALS</td></tr>
-        <tr><td><i class="fa fa-handshake"></i> Buyer Portal</td><td class="endpoint-path">/buyer</td><td>BUYERS</td></tr>
-        <tr><td><i class="fa fa-chart-bar"></i> Analytics</td><td class="endpoint-path">/exchange/analytics</td><td>INTELLIGENCE</td></tr>
+        <tr><td><i class="fa fa-gauge"></i> Exchange Hub</td><td class="endpoint-path">/exchange</td><td>Any</td><td>—</td></tr>
+        <tr><td><i class="fa fa-list"></i> Global Catalog</td><td class="endpoint-path">/exchange/catalog</td><td>Buyer</td><td>MARKETPLACE</td></tr>
+        <tr><td><i class="fa fa-bolt"></i> Spot Lots</td><td class="endpoint-path">/exchange/catalog?type=SPOT</td><td>Buyer</td><td>—</td></tr>
+        <tr><td><i class="fa fa-seedling"></i> Forward Lots</td><td class="endpoint-path">/exchange/catalog?type=FORWARD</td><td>Buyer</td><td>—</td></tr>
+        <tr><td><i class="fa fa-store"></i> Vendor Portal</td><td class="endpoint-path">/vendor</td><td>Vendor / Roaster</td><td>PORTALS</td></tr>
+        <tr><td><i class="fa fa-handshake"></i> Buyer Portal</td><td class="endpoint-path">/buyer</td><td>Buyer / Roaster</td><td>BUYERS</td></tr>
+        <tr><td><i class="fa fa-passport"></i> Climate Passport</td><td class="endpoint-path">/exchange/climate/:lotId</td><td>Any</td><td>COMPLIANCE</td></tr>
+        <tr><td><i class="fa fa-chart-bar"></i> Analytics</td><td class="endpoint-path">/exchange/analytics</td><td>Any</td><td>INTELLIGENCE</td></tr>
       </tbody>
     </table>
   </div>
@@ -1313,6 +1550,22 @@ ruleBDeficitKg    = min(0, spongeAdjKg)
       <strong>GET /admin/finance/zatca-export</strong> → Downloads <code>qabban-zatca-bulk-shrinkage-{date}.csv</code><br>
       Covers 30-day period · Standard 18% baseline · Sponge coefficient per branch · 15% ZATCA VAT
     </div>
+
+    <div class="sub-title">v5.0 ZATCA Export — Additional Sections</div>
+    <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px">The ZATCA CSV export has been extended in v5.0 with two new sections:</p>
+    <table class="manual-table">
+      <thead><tr><th>Section</th><th>Content</th><th>Tax Treatment</th></tr></thead>
+      <tbody>
+        <tr><td>Sections 1–5</td><td>Portfolio shrinkage summary + per-lot detail (unchanged from v4)</td><td>N/A (audit documentation)</td></tr>
+        <tr><td><strong>Section 6</strong> <span style="font-size:10px;color:#4ade80">NEW v5</span></td><td>B2B commercial trade invoices — one row per client/order. Columns: client ID, order ID, date, amount SAR, VAT (15%), ZATCA ref, product.</td><td>Taxable — 15% VAT</td></tr>
+        <tr><td><strong>Section 7</strong> <span style="font-size:10px;color:#4ade80">NEW v5</span></td><td>Internal node transfer log — one row per stock transfer. Columns: source node, destination node, kg, transfer date, reference, SAR value.</td><td><strong>NON_TAXABLE</strong> — SAR 0 flagged</td></tr>
+      </tbody>
+    </table>
+
+    <div class="info-box info-green">
+      <i class="fa fa-check-circle"></i>
+      <strong>ZATCA Compliance for All Trade Types:</strong> Section 6 ensures every B2B commercial sale between the roastery and external cafés is fully documented with VAT. Section 7 ensures internal transfers are also tracked for audit purposes — they are clearly marked as non-taxable inventory movements so tax authorities can verify no commercial transaction occurred.
+    </div>
   </div>
 
   <!-- 23. SFDA -->
@@ -1467,9 +1720,50 @@ curl -X POST http://localhost:3000/api/sponge/simulate \
   -H "Content-Type: application/json" -d '{"humidity":85}'
     </div>
 
+    <div class="sub-title">v5.0 New API Endpoints</div>
+    <table class="manual-table">
+      <thead><tr><th>Method</th><th>Path</th><th>Role</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><span class="method-get">GET</span></td><td class="endpoint-path">/admin/b2b</td><td>roaster_admin</td><td>B2B Clients CRM — LTV, order history, loyalty tier, next order</td></tr>
+        <tr><td><span class="method-post">POST</span></td><td class="endpoint-path">/admin/stock-transfer</td><td>roaster_admin</td><td>Internal stock transfer SAR 0 — body: {fromNodeId, toNodeId, kgAmount}</td></tr>
+        <tr><td><span class="method-get">GET</span></td><td class="endpoint-path">/cafe/multi-branch</td><td>cafe_client</td><td>Multi-branch view with Extraction Risk + IoT Pulse reconciliation</td></tr>
+        <tr><td><span class="method-get">GET</span></td><td class="endpoint-path">/api/watchdog/hybrid-nodes</td><td>roaster_admin</td><td>Watchdog status for all hybrid nodes (roastery + café branches)</td></tr>
+        <tr><td><span class="method-get">GET</span></td><td class="endpoint-path">/api/finance/cogs</td><td>roaster_admin</td><td>QFI COGS Intelligence — trueRoastedCost per lot</td></tr>
+      </tbody>
+    </table>
+
+    <div class="sub-title">Useful Test API Calls</div>
+    <div class="code-block">
+<span class="comment"># Finance snapshot (Bronze/Silver/Gold portfolio values)</span>
+curl https://qabban-os.pages.dev/api/finance/snapshot
+
+<span class="comment"># Tier nudge for Qahwa Al Bahr (36 kg from Gold)</span>
+curl -X POST https://qabban-os.pages.dev/api/cafe/tier-nudge \
+  -H "Content-Type: application/json" -d '{"cafeId":"CAF-002"}'
+
+<span class="comment"># ZATCA Bulk Shrinkage CSV export (now includes B2B + transfers)</span>
+curl https://qabban-os.pages.dev/admin/finance/zatca-export -o zatca.csv
+
+<span class="comment"># Watchdog manual scan (now covers all hybrid nodes)</span>
+curl https://qabban-os.pages.dev/api/watchdog/run
+
+<span class="comment"># Internal stock transfer (SAR 0, from Riyadh to Dammam)</span>
+curl -X POST https://qabban-os.pages.dev/admin/stock-transfer \
+  -H "Content-Type: application/json" \
+  -d '{"fromNodeId":"BR-RUH","toNodeId":"BR-DMM","kgAmount":50}'
+
+<span class="comment"># QFI COGS Intelligence per lot</span>
+curl https://qabban-os.pages.dev/api/finance/cogs
+    </div>
+
     <div class="info-box info-green" style="margin-top:24px">
       <i class="fa fa-rocket"></i>
-      <strong>Live System URL:</strong> <a href="https://3000-ihghwgfukl99k815ye7z8-cbeee0f9.sandbox.novita.ai" style="color:#4ade80">https://3000-ihghwgfukl99k815ye7z8-cbeee0f9.sandbox.novita.ai</a>
+      <strong>Production URL:</strong> <a href="https://qabban-os.pages.dev" style="color:#4ade80">https://qabban-os.pages.dev</a>
+    </div>
+    <div class="info-box info-amber" style="margin-top:12px">
+      <i class="fa fa-building-columns"></i>
+      <strong>ManagementHQ (God View):</strong> <a href="https://qabban-os.pages.dev/hq?hq_token=qabban-hq-internal-2026" style="color:#fcd34d">https://qabban-os.pages.dev/hq?hq_token=qabban-hq-internal-2026</a><br>
+      HQ token: <code>qabban-hq-internal-2026</code> · Header: <code>X-HQ-Token: qabban-hq-internal-2026</code>
     </div>
   </div>
 
@@ -1895,7 +2189,12 @@ Dammam : dkey-dmm-2a3b4c5d-6e7f-8901-cdef-ab2345678901
       <i class="fa fa-triangle-exclamation" style="color:#f87171"></i>
       Risk Watchdog — Sustained Humidity Violation Engine
     </div>
-    <div class="section-desc">Route: <code style="color:var(--amber)">/admin/watchdog</code> — Automated 6-hour cron engine that scans every lot's Climate Passport for sustained high-humidity exposure. Escalates violations to CRITICAL, notifies the branch manager via WhatsApp, flags the lot in the Inventory tab, and injects an urgent red banner on the Admin Dashboard.</div>
+    <div class="section-desc">Route: <code style="color:var(--amber)">/admin/watchdog</code> — Automated 6-hour cron engine that scans every lot's Climate Passport for sustained high-humidity exposure. v5.0: Now covers <strong>all hybrid nodes</strong> — both roastery warehouses and café storage branches. Escalates violations to CRITICAL, notifies branch manager via WhatsApp, flags lot in Inventory tab, and injects urgent red banner on Admin Dashboard.</div>
+
+    <div class="info-box info-amber" style="margin-bottom:16px">
+      <i class="fa fa-code-branch"></i>
+      <strong>v5.0 Hybrid Node Coverage:</strong> The Risk Watchdog 48-hour analysis now applies to <em>all</em> internal nodes — including café branches registered under <code>hybrid_node</code> or <code>cafe_client</code> roles. Every <code>runWatchdog()</code> cycle logs RH% for both roastery warehouses and café storage locations. This ensures coffee quality is monitored end-to-end across the entire supply chain.
+    </div>
 
     <div class="sub-title">What the Watchdog Monitors</div>
     <div class="info-box info-red">
@@ -2074,6 +2373,96 @@ Dammam : dkey-dmm-2a3b4c5d-6e7f-8901-cdef-ab2345678901
     </div>
   </div>
 
+  <!-- HYBRID ECOSYSTEM — Role Permissions v5.0 -->
+  <div class="section" id="hybrid-roles">
+    <div class="section-title">
+      <span class="section-num">36</span>
+      <i class="fa fa-users-gear" style="color:#a78bfa"></i>
+      Hybrid Ecosystem — Role Permissions (RolePermissions.ts)
+    </div>
+    <div class="section-desc">New file <code style="color:var(--amber)">src/RolePermissions.ts</code> (~900 lines) introduced in v5.0. Defines four operator roles with distinct workspace access, navigation scopes, and API permissions. Enforced by the existing <code>permission_check</code> middleware on all sensitive routes.</div>
+
+    <div class="sub-title">The Four Roles</div>
+    <table class="manual-table">
+      <thead><tr><th>Role</th><th>Constant</th><th>Primary Workspace</th><th>Key Permissions</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong style="color:#a78bfa">Platform Owner</strong></td>
+          <td class="endpoint-path">platform_owner</td>
+          <td class="endpoint-path">/hq?hq_token=qabban-hq-internal-2026</td>
+          <td>God-view access — all data, all branches, ManagementHQ dashboard, tonnage ticker, geospatial sentinel</td>
+        </tr>
+        <tr>
+          <td><strong style="color:var(--amber)">Roaster Admin</strong></td>
+          <td class="endpoint-path">roaster_admin</td>
+          <td class="endpoint-path">/admin</td>
+          <td>My Network, B2B CRM, Inventory, Finance (COGS), Bean Requests, Exchange (Vendor + Buyer), Risk Watchdog, ZATCA Export</td>
+        </tr>
+        <tr>
+          <td><strong style="color:#4ade80">Café Client</strong></td>
+          <td class="endpoint-path">cafe_client</td>
+          <td class="endpoint-path">/cafe?cid=CAF-XXX</td>
+          <td>Coffee catalog, tier pricing, bean requests, order history, multi-branch dashboard, Extraction Risk, IoT Pulse reconciliation, Tier Tracker</td>
+        </tr>
+        <tr>
+          <td><strong style="color:#00E5FF">Hybrid Node</strong></td>
+          <td class="endpoint-path">hybrid_node</td>
+          <td class="endpoint-path">/admin + /cafe</td>
+          <td>Combined roaster_admin + cafe_client permissions. Roasteries that also operate cafés use this role to access both workspaces from a single login.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="sub-title">Permission Matrix</div>
+    <table class="manual-table">
+      <thead><tr><th>Route / Feature</th><th>platform_owner</th><th>roaster_admin</th><th>cafe_client</th><th>hybrid_node</th></tr></thead>
+      <tbody>
+        <tr><td>/hq (ManagementHQ)</td><td>✅</td><td>❌</td><td>❌</td><td>❌</td></tr>
+        <tr><td>/admin (Roaster portal)</td><td>✅</td><td>✅</td><td>❌</td><td>✅</td></tr>
+        <tr><td>/admin/b2b (B2B CRM)</td><td>✅</td><td>✅</td><td>❌</td><td>✅</td></tr>
+        <tr><td>/admin/branches (My Network)</td><td>✅</td><td>✅</td><td>❌</td><td>✅</td></tr>
+        <tr><td>/admin/finance (COGS + ZATCA)</td><td>✅</td><td>✅</td><td>❌</td><td>✅</td></tr>
+        <tr><td>/cafe (Café portal)</td><td>✅</td><td>❌</td><td>✅</td><td>✅</td></tr>
+        <tr><td>/exchange (Vendor mode)</td><td>✅</td><td>✅</td><td>❌</td><td>✅</td></tr>
+        <tr><td>/exchange (Buyer mode)</td><td>✅</td><td>✅</td><td>✅</td><td>✅</td></tr>
+        <tr><td>/admin/watchdog</td><td>✅</td><td>✅</td><td>❌</td><td>✅</td></tr>
+        <tr><td>Stock Transfer (SAR 0)</td><td>✅</td><td>✅</td><td>❌</td><td>✅</td></tr>
+        <tr><td>Climate Passport (view)</td><td>✅</td><td>✅</td><td>✅</td><td>✅</td></tr>
+      </tbody>
+    </table>
+
+    <div class="sub-title">Hybrid Node — Use Case</div>
+    <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px">A business that both roasts coffee and operates branded cafés (e.g., a roastery with its own café chain) uses the <code>hybrid_node</code> role. From the same login, they can:</p>
+    <ul class="checklist">
+      <li><i class="fa fa-building"></i> Manage their roasting inventory, lots, and financial intelligence via <code>/admin</code></li>
+      <li><i class="fa fa-mug-hot"></i> View their cafés' multi-branch extraction risk and IoT Pulse reconciliation via <code>/cafe</code></li>
+      <li><i class="fa fa-arrow-right-arrow-left"></i> Transfer roasted stock from the roastery warehouse to café locations at SAR 0 (internal transfer)</li>
+      <li><i class="fa fa-store"></i> List excess roasted lots on the Global Exchange as a vendor</li>
+      <li><i class="fa fa-handshake"></i> Source green beans from international vendors as a buyer</li>
+    </ul>
+
+    <div class="sub-title">RolePermissions.ts — Key Type Definitions</div>
+    <div class="code-block">
+<span class="comment">// src/RolePermissions.ts</span>
+<span class="keyword">type</span> OperatorRole = <span class="string">'platform_owner'</span> | <span class="string">'roaster_admin'</span> | <span class="string">'cafe_client'</span> | <span class="string">'hybrid_node'</span>
+
+<span class="keyword">interface</span> RoleConfig {
+  role        : OperatorRole
+  workspaces  : (<span class="string">'/hq'</span> | <span class="string">'/admin'</span> | <span class="string">'/cafe'</span> | <span class="string">'/exchange'</span> | <span class="string">'/vendor'</span> | <span class="string">'/buyer'</span>)[]
+  features    : string[]   <span class="comment">// e.g. 'stock_transfer', 'b2b_crm', 'cogs_panel', 'watchdog'</span>
+  exchangeMode: (<span class="string">'vendor'</span> | <span class="string">'buyer'</span>)[]
+}
+
+<span class="comment">// hybrid_node = roaster_admin + cafe_client combined</span>
+<span class="keyword">const</span> ROLES: Record&lt;OperatorRole, RoleConfig&gt; = {
+  platform_owner : { workspaces: [<span class="string">'/hq'</span>, <span class="string">'/admin'</span>, <span class="string">'/cafe'</span>], features: [<span class="string">'*'</span>], exchangeMode: [<span class="string">'vendor'</span>, <span class="string">'buyer'</span>] },
+  roaster_admin  : { workspaces: [<span class="string">'/admin'</span>, <span class="string">'/exchange'</span>], features: [<span class="string">'stock_transfer'</span>, <span class="string">'b2b_crm'</span>, <span class="string">'cogs_panel'</span>, <span class="string">'watchdog'</span>], exchangeMode: [<span class="string">'vendor'</span>, <span class="string">'buyer'</span>] },
+  cafe_client    : { workspaces: [<span class="string">'/cafe'</span>, <span class="string">'/exchange'</span>], features: [<span class="string">'tier_tracker'</span>, <span class="string">'extraction_risk'</span>, <span class="string">'iot_reconciliation'</span>], exchangeMode: [<span class="string">'buyer'</span>] },
+  hybrid_node    : { workspaces: [<span class="string">'/admin'</span>, <span class="string">'/cafe'</span>, <span class="string">'/exchange'</span>], features: [<span class="string">'*'</span>], exchangeMode: [<span class="string">'vendor'</span>, <span class="string">'buyer'</span>] },
+}
+    </div>
+  </div>
+
   <!-- 35. Revenue Model & Licensing -->
   <div class="section" id="revenue-model">
     <div class="section-header">
@@ -2217,6 +2606,22 @@ GET /api/hq/license-check?branchId=BR-RUH&amp;requires=ERP_PRO
     </div>
 
     <p>The HQ Dashboard at <code>/hq</code> is a restricted view for Qabban Operations. It provides real-time revenue visibility and plan management across all branches.</p>
+
+    <div class="sub-title">Global Tonnage Ticker — v5.0</div>
+    <div class="info-box info-amber" style="margin-bottom:16px">
+      <i class="fa fa-weight-scale" style="color:var(--amber)"></i>
+      <strong>Global Tonnage Ticker:</strong> Located in the top header (left of the "Live Platform Feed" indicator). Uses a monospaced Digital Ledger font with soft amber glow. Displays <strong>"TOTAL VOLUME MANAGED: 42,855.60 KG"</strong>. The decimal portion animates every 3 seconds via <code>geoSentinelAnimate()</code> with a shimmer effect, reflecting the live total volume managed across all branches and nodes.
+    </div>
+
+    <div class="sub-title">Geospatial Sentinel — v5.0</div>
+    <div class="info-box" style="background:rgba(0,229,255,0.06);border:1px solid rgba(0,229,255,0.2);color:#a5f3fc;margin-bottom:16px">
+      <i class="fa fa-satellite-dish" style="color:#00E5FF"></i>
+      <strong>DATA SOURCE RESILIENCE (GEOSPATIAL SENTINEL)</strong> widget is placed in the Platform Health sidebar between "API Availability" and "Composite Health Score". It shows a two-tone horizontal progress bar:<br><br>
+      <span style="background:#FFB300;color:#000;padding:1px 6px;border-radius:3px;font-size:11px;font-weight:700">■ AMBER</span> = Physical IoT Sensors — <strong>74% Active IoT Locks</strong><br>
+      <span style="background:#00E5FF;color:#000;padding:1px 6px;border-radius:3px;font-size:11px;font-weight:700">■ CYAN</span> = Weather API Failover — <strong>26% Active GPS Fallback</strong><br><br>
+      Info text: <em>"Lock-2 active: GPS failover engaged for 14 branches due to local sensor latency."</em><br>
+      The bar drifts ±2% every 6 seconds via <code>sentinelDrift()</code>.
+    </div>
 
     <div class="sub-title">Revenue Ticker Cards</div>
     <table>
@@ -2416,8 +2821,8 @@ GET /api/hq/license-check?branchId=BR-RUH&amp;requires=ERP_PRO
   <!-- Footer -->
   <div style="background:#0a0a0f;border-top:1px solid var(--border);padding:32px 60px;text-align:center">
     <div style="color:var(--amber);font-family:var(--font-mono);font-weight:700;letter-spacing:3px;margin-bottom:8px">QABBAN OS</div>
-    <div style="color:var(--text-muted);font-size:12px">User Manual v7.0 · March 2026 · Qabban Global Exchange &amp; Loyalty Engine v6 · Risk Watchdog v2.0 · Revenue Model v2.0 · Moyasar Checkout v1.0</div>
-    <div style="color:var(--text-muted);font-size:11px;margin-top:6px">Hono + TypeScript + Cloudflare Pages · ~12,000 lines · Bilingual EN/AR</div>
+    <div style="color:var(--text-muted);font-size:12px">User Manual v5.0 · April 2026 · Hybrid Ecosystem · Qabban Global Exchange v6 · Risk Watchdog v2.0 · Revenue Model v2.0 · Moyasar Checkout v1.0</div>
+    <div style="color:var(--text-muted);font-size:11px;margin-top:6px">Hono + TypeScript + Cloudflare Pages · ~13,000 lines · Bilingual EN/AR</div>
   </div>
 
 </main>
