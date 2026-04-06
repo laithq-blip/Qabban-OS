@@ -130,6 +130,9 @@ import {
   assetRegistry,
   maintenanceLogs,
   operationalExpenses,
+  scaCertVault,
+  waInboundOrders,
+  zatcaB2bInvoices,
   calcGosi,
   calcEosb,
   generateWpsRecord,
@@ -137,6 +140,14 @@ import {
   calcDepreciation,
   runMaintenanceWatchdog,
   calcTrueOperatingMargin,
+  parseWhatsAppOrder,
+  generateZatcaB2bInvoice,
+  buildWaOrderConfirmation,
+  buildWaMaintenanceAlert,
+  buildCertRenewalReminder,
+  buildEnterpriseHealthSnapshot,
+  evaluateCertStatus,
+  calcCertCompliance,
   type Staff,
   type Asset,
   type MaintenanceLog,
@@ -146,6 +157,11 @@ import {
   type SifFile,
   type DepreciationRecord,
   type TrueOperatingMarginCalc,
+  type WaInboundOrder,
+  type WaOrderItem,
+  type ZatcaB2bInvoice,
+  type ScaCertRecord,
+  type EnterpriseHealthSnapshot,
 } from './EnterpriseModules'
 
 // ── In-memory stores for new Hybrid Ecosystem features ───────────
@@ -2346,32 +2362,36 @@ function adminLayout(pageTitle: string, activeNav: string, content: string, pend
       label: 'Wholesale CRM', icon: 'fa-handshake', color: '#a78bfa',
       links: [
         { href: '/admin/b2b',             icon: 'fa-handshake',     label: 'B2B Clients',        id: 'b2b'        },
+        { href: '/admin/wa-orders',       icon: 'fa-brands fa-whatsapp', label: 'WA Orders',     id: 'wa-orders'  },
       ]
     },
     {
       label: 'Human Capital', icon: 'fa-users', color: '#f472b6',
       links: [
         { href: '/people',                icon: 'fa-id-badge',      label: 'Staff Directory',    id: 'people'     },
-        { href: '/people/payroll',        icon: 'fa-money-check-alt','label': 'Payroll & WPS',   id: 'payroll'    },
+        { href: '/people/payroll',        icon: 'fa-money-check-alt', label: 'Payroll & WPS',    id: 'payroll'    },
         { href: '/people/gosi',           icon: 'fa-shield-alt',    label: 'GOSI Reports',       id: 'gosi'       },
         { href: '/people/eosb',           icon: 'fa-coins',         label: 'EOSB Ledger',        id: 'eosb'       },
+        { href: '/people/certifications', icon: 'fa-certificate',   label: 'SCA Cert Vault',     id: 'certifications' },
       ]
     },
     {
       label: 'Intelligence', icon: 'fa-chart-line', color: '#f59e0b',
       links: [
+        { href: '/admin/executive',       icon: 'fa-rocket',        label: 'Executive Overview', id: 'executive'  },
         { href: '/admin/finance',         icon: 'fa-chart-line',    label: 'QFI Finance',        id: 'finance'    },
-        { href: '/admin/finance/enterprise', icon: 'fa-chart-mixed','label': 'Enterprise P&L',   id: 'enterprise-pnl' },
+        { href: '/admin/finance/enterprise', icon: 'fa-chart-mixed', label: 'Enterprise P&L',   id: 'enterprise-pnl' },
       ]
     },
   ]
   // Flat list for mobile nav (key items only)
   const mobileLinks = [
-    { href: '/admin',         icon: 'fa-gauge',        label: 'Overview',   id: 'overview'  },
-    { href: '/admin/inventory', icon:'fa-boxes-stacked',label:'Inventory',   id: 'inventory' },
-    { href: '/admin/finance', icon: 'fa-chart-line',   label: 'Finance',    id: 'finance'   },
-    { href: '/people',        icon: 'fa-users',        label: 'People',     id: 'people'    },
-    { href: '/operations/assets', icon:'fa-wrench',    label: 'Assets',     id: 'assets'    },
+    { href: '/admin',             icon: 'fa-gauge',        label: 'Overview',   id: 'overview'  },
+    { href: '/admin/executive',   icon: 'fa-rocket',       label: 'Executive',  id: 'executive' },
+    { href: '/admin/wa-orders',   icon: 'fa-brands fa-whatsapp', label: 'WA Orders', id: 'wa-orders' },
+    { href: '/admin/finance',     icon: 'fa-chart-line',   label: 'Finance',    id: 'finance'   },
+    { href: '/people',            icon: 'fa-users',        label: 'People',     id: 'people'    },
+    { href: '/operations/assets', icon: 'fa-wrench',       label: 'Assets',     id: 'assets'    },
   ]
   const body = `
   <header class="topbar">
@@ -14548,6 +14568,684 @@ app.get('/api/finance/enterprise-pnl', (c) => {
   const recentMaint    = 3850
   const margin         = calcTrueOperatingMargin(grossSales, totalLaborCost, cogsSar + spongeAdj2, recentMaint, totalMonthlyDep, utilitiesRent)
   return c.json({ month, margin, laborCost: totalLaborCost, depreciation: totalMonthlyDep, spongeAdjustment: spongeAdj2, gosiEmployer: totalGosiEr })
+})
+
+// ══════════════════════════════════════════════════════════════════
+//  ENTERPRISE MODULE 4: WHATSAPP-FIRST ORDERING ENGINE
+//  POST /api/wa/webhook  — receive WhatsApp B2B orders
+//  GET  /admin/wa-orders — order inbox dashboard
+//  POST /api/wa/orders/:id/confirm — confirm + generate ZATCA invoice
+// ══════════════════════════════════════════════════════════════════
+
+// ── POST /api/wa/webhook — WhatsApp Business API webhook ──────────
+// In production: verify X-Hub-Signature-256 header from Meta
+app.post('/api/wa/webhook', async (c) => {
+  const body = await c.req.json().catch(() => ({})) as Record<string, unknown>
+
+  // Meta webhook verification challenge
+  if (body['hub.mode'] === 'subscribe') {
+    return c.text(String(body['hub.challenge'] ?? ''))
+  }
+
+  // Parse inbound WhatsApp message
+  const changes = (body as { entry?: { changes?: { value?: { messages?: { id: string; from: string; text?: { body: string } }[] } }[] }[] }).entry?.[0]?.changes?.[0]?.value
+  const msg     = changes?.messages?.[0]
+  if (!msg?.text?.body) return c.json({ ok: true, note: 'no message body' })
+
+  const senderPhone  = msg.from.startsWith('+') ? msg.from : `+${msg.from}`
+  const rawText      = msg.text.body.trim()
+  const waMessageId  = msg.id
+
+  // Look up client by phone number
+  const client = waInboundOrders.find(o => o.clientPhone === senderPhone)?.clientId
+  // Find from b2bClients store (we rely on the b2bClients array from the main file scope)
+  const clientName = client ?? 'Unknown Client'
+
+  // Parse order items
+  const items = parseWhatsAppOrder(rawText)
+  if (items.length === 0) {
+    console.log(`[WA-WEBHOOK] No parseable order items from ${senderPhone}`)
+    return c.json({ ok: true, note: 'no order items parsed', rawText })
+  }
+
+  const subtotal = items.reduce((t, i) => t + i.lineTotal, 0)
+  const vat      = Math.round(subtotal * 0.15 * 100) / 100
+  const total    = Math.round((subtotal + vat) * 100) / 100
+  const orderId  = `WA-ORD-${Date.now().toString(36).toUpperCase()}`
+
+  const newOrder: WaInboundOrder = {
+    orderId,
+    clientId   : client ?? 'UNKNOWN',
+    clientName : clientName,
+    clientPhone: senderPhone,
+    waMessageId,
+    receivedAt : new Date().toISOString(),
+    rawMessage : rawText,
+    items,
+    subtotalSar: subtotal,
+    vatSar     : vat,
+    totalSar   : total,
+    status     : 'RECEIVED',
+    zatcaInvoiceRef  : null,
+    zatcaQrCode      : null,
+    confirmationSentAt: null,
+    invoiceSentAt    : null,
+    notes      : `Parsed ${items.length} item(s) from WhatsApp`,
+  }
+  waInboundOrders.push(newOrder)
+
+  // Auto-confirm if client is known, generate ZATCA invoice immediately
+  if (client && client !== 'UNKNOWN') {
+    const invoice = generateZatcaB2bInvoice(newOrder)
+    zatcaB2bInvoices.push(invoice)
+    newOrder.status          = 'CONFIRMED'
+    newOrder.zatcaInvoiceRef = invoice.invoiceNumber
+    newOrder.zatcaQrCode     = invoice.qrCodeTlv
+    newOrder.confirmationSentAt = new Date().toISOString()
+    newOrder.invoiceSentAt      = new Date().toISOString()
+
+    const msgs = buildWaOrderConfirmation(newOrder, invoice)
+    console.log(`[WA-ORDER] 🧾 Auto-confirmed ${orderId} → ${invoice.invoiceNumber}`)
+    console.log(`[WA-ORDER] 📱 Reply to ${senderPhone}:\n${msgs.en}`)
+  }
+
+  return c.json({ ok: true, orderId, items: items.length, total })
+})
+
+// ── GET /api/wa/webhook — Meta webhook GET verification ───────────
+app.get('/api/wa/webhook', (c) => {
+  const mode  = c.req.query('hub.mode')
+  const token = c.req.query('hub.verify_token')
+  const chal  = c.req.query('hub.challenge')
+  const VERIFY_TOKEN = 'qabban_wa_verify_2026'
+  if (mode === 'subscribe' && token === VERIFY_TOKEN) return c.text(chal ?? '')
+  return c.text('Forbidden', 403)
+})
+
+// ── POST /api/wa/orders/:id/confirm — manual confirm + ZATCA ─────
+app.post('/api/wa/orders/:id/confirm', async (c) => {
+  const { id } = c.req.param()
+  const order  = waInboundOrders.find(o => o.orderId === id)
+  if (!order) return c.json({ error: 'Order not found' }, 404)
+  if (order.status !== 'RECEIVED') return c.json({ error: 'Order already processed' }, 409)
+
+  const invoice = generateZatcaB2bInvoice(order)
+  zatcaB2bInvoices.push(invoice)
+  order.status             = 'CONFIRMED'
+  order.zatcaInvoiceRef    = invoice.invoiceNumber
+  order.zatcaQrCode        = invoice.qrCodeTlv
+  order.confirmationSentAt = new Date().toISOString()
+  order.invoiceSentAt      = new Date().toISOString()
+
+  const msgs = buildWaOrderConfirmation(order, invoice)
+  return c.json({ ok: true, order, invoice, confirmationMessage: msgs })
+})
+
+// ── GET /admin/wa-orders — WhatsApp Order Inbox UI ────────────────
+app.get('/admin/wa-orders', (c) => {
+  const pendingCount  = beanRequests.filter(r => r.status === 'PENDING').length
+  const watchdogCount = getUnreadNotifications().length
+  const pending       = waInboundOrders.filter(o => o.status === 'RECEIVED')
+  const confirmed     = waInboundOrders.filter(o => o.status === 'CONFIRMED')
+  const totalRevenue  = confirmed.reduce((t, o) => t + o.subtotalSar, 0)
+
+  const statusColor = (s: WaInboundOrder['status']) => ({
+    RECEIVED   : '#f59e0b',
+    CONFIRMED  : '#34d399',
+    PREPARING  : '#60a5fa',
+    DISPATCHED : '#a78bfa',
+    DELIVERED  : 'var(--green)',
+    CANCELLED  : 'var(--red)',
+  }[s] ?? 'var(--text-muted)')
+
+  const content = `
+  <div class="pg-title"><i class="fa-brands fa-whatsapp" style="color:#25d366"></i>WhatsApp Order Inbox</div>
+  <div class="pg-sub">B2B Orders via WhatsApp · Auto-ZATCA Invoice · XE Rate-Locked · Bilingual EN/AR</div>
+
+  <!-- KPI Strip -->
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:24px">
+    <div class="card" style="text-align:center;padding:16px 12px">
+      <div style="font-size:28px;font-weight:800;color:#25d366">${waInboundOrders.length}</div>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Total WA Orders</div>
+    </div>
+    <div class="card" style="text-align:center;padding:16px 12px">
+      <div style="font-size:28px;font-weight:800;color:${pending.length > 0 ? 'var(--amber)' : 'var(--green)'}">${pending.length}</div>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Awaiting Confirmation</div>
+    </div>
+    <div class="card" style="text-align:center;padding:16px 12px">
+      <div style="font-size:28px;font-weight:800;color:var(--green)">${confirmed.length}</div>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Confirmed + ZATCA Issued</div>
+    </div>
+    <div class="card" style="text-align:center;padding:16px 12px">
+      <div style="font-size:22px;font-weight:800;color:var(--amber)">SAR ${totalRevenue.toLocaleString()}</div>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Confirmed Revenue (ex-VAT)</div>
+    </div>
+    <div class="card" style="text-align:center;padding:16px 12px">
+      <div style="font-size:28px;font-weight:800;color:#60a5fa">${zatcaB2bInvoices.length}</div>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:4px">ZATCA Invoices Generated</div>
+    </div>
+  </div>
+
+  <!-- Webhook Info -->
+  <div class="info-amber" style="margin-bottom:20px">
+    <strong>WhatsApp Webhook:</strong> <code>POST /api/wa/webhook</code> — accepts orders from B2B clients.<br>
+    Webhook verification token: <code>qabban_wa_verify_2026</code><br>
+    Auto-generates ZATCA Phase-2 invoice and sends bilingual confirmation (EN + AR) on receipt.<br>
+    <strong>Test:</strong> <code>POST /api/wa/orders/WA-ORD-XXXX/confirm</code> to manually confirm pending orders.
+  </div>
+
+  ${pending.length > 0 ? `
+  <div style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.3);border-radius:6px;padding:12px 16px;margin-bottom:20px">
+    <strong style="color:var(--amber)"><i class="fa-brands fa-whatsapp"></i> ${pending.length} Order(s) Awaiting Confirmation</strong>
+    ${pending.map(o => `
+    <div style="border:1px solid rgba(245,158,11,0.2);border-radius:6px;padding:12px;margin-top:10px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
+        <div>
+          <span style="font-weight:700;color:var(--amber)">${o.orderId}</span>
+          <span style="font-size:11px;color:var(--text-muted);margin-left:8px">${o.clientName}</span>
+        </div>
+        <span style="font-size:10px;color:${statusColor(o.status)};font-family:var(--font-mono);font-weight:700">${o.status}</span>
+      </div>
+      <div style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted);margin-bottom:8px">📱 ${o.clientPhone} · ${new Date(o.receivedAt).toLocaleString('en-SA')}</div>
+      <div style="background:var(--bg-2);border-radius:4px;padding:8px;font-size:11px;color:var(--text-muted);margin-bottom:8px">
+        "${o.rawMessage}"
+      </div>
+      <table style="width:100%;border-collapse:collapse;font-size:11px;margin-bottom:8px">
+        ${o.items.map(i => `
+        <tr style="border-bottom:1px solid rgba(255,255,255,0.04)">
+          <td style="padding:4px 6px">${i.origin}</td>
+          <td style="padding:4px 6px;text-align:right;font-family:var(--font-mono)">${i.kgOrdered} kg</td>
+          <td style="padding:4px 6px;text-align:right;font-family:var(--font-mono)">× SAR ${i.sarPerKg}</td>
+          <td style="padding:4px 6px;text-align:right;font-family:var(--font-mono);color:var(--amber)">SAR ${i.lineTotal.toLocaleString()}</td>
+        </tr>`).join('')}
+        <tr style="font-weight:700">
+          <td colspan="3" style="padding:6px;text-align:right;font-family:var(--font-mono)">Subtotal + VAT 15%:</td>
+          <td style="padding:6px;text-align:right;font-family:var(--font-mono);color:var(--green)">SAR ${o.totalSar.toLocaleString()}</td>
+        </tr>
+      </table>
+      <button onclick="confirmWaOrder('${o.orderId}')" style="padding:6px 16px;background:rgba(52,211,153,0.15);border:1px solid rgba(52,211,153,0.4);border-radius:4px;color:#34d399;font-size:11px;font-family:var(--font-mono);cursor:pointer;font-weight:700">
+        <i class="fa fa-check"></i> CONFIRM + ISSUE ZATCA INVOICE
+      </button>
+    </div>`).join('')}
+  </div>` : ''}
+
+  <!-- All Orders Table -->
+  <div class="card">
+    <div style="font-family:var(--font-mono);font-size:12px;color:var(--amber);margin-bottom:16px">ALL WHATSAPP ORDERS — ${waInboundOrders.length} RECORDS</div>
+    <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead>
+          <tr style="border-bottom:1px solid var(--border);color:var(--text-muted)">
+            <th style="padding:8px 6px;text-align:left;font-family:var(--font-mono);font-size:10px">ORDER ID</th>
+            <th style="padding:8px 6px;text-align:left;font-family:var(--font-mono);font-size:10px">CLIENT</th>
+            <th style="padding:8px 6px;text-align:left;font-family:var(--font-mono);font-size:10px">ITEMS</th>
+            <th style="padding:8px 6px;text-align:right;font-family:var(--font-mono);font-size:10px">SUBTOTAL</th>
+            <th style="padding:8px 6px;text-align:right;font-family:var(--font-mono);font-size:10px">VAT</th>
+            <th style="padding:8px 6px;text-align:right;font-family:var(--font-mono);font-size:10px">TOTAL</th>
+            <th style="padding:8px 6px;text-align:center;font-family:var(--font-mono);font-size:10px">STATUS</th>
+            <th style="padding:8px 6px;text-align:left;font-family:var(--font-mono);font-size:10px">ZATCA REF</th>
+            <th style="padding:8px 6px;text-align:left;font-family:var(--font-mono);font-size:10px">RECEIVED</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${[...waInboundOrders].reverse().map(o => `
+          <tr style="border-bottom:1px solid rgba(255,255,255,0.04)">
+            <td style="padding:8px 6px;font-family:var(--font-mono);color:var(--amber)">${o.orderId}</td>
+            <td style="padding:8px 6px">${o.clientName}<br><span style="font-size:10px;color:var(--text-muted)">${o.clientPhone}</span></td>
+            <td style="padding:8px 6px;font-size:11px;color:var(--text-muted)">${o.items.map(i => `${i.kgOrdered}kg ${i.origin}`).join(', ')}</td>
+            <td style="padding:8px 6px;text-align:right;font-family:var(--font-mono)">SAR ${o.subtotalSar.toLocaleString()}</td>
+            <td style="padding:8px 6px;text-align:right;font-family:var(--font-mono);color:#60a5fa">SAR ${o.vatSar.toFixed(2)}</td>
+            <td style="padding:8px 6px;text-align:right;font-family:var(--font-mono);font-weight:700;color:var(--green)">SAR ${o.totalSar.toLocaleString()}</td>
+            <td style="padding:8px 6px;text-align:center"><span style="font-size:10px;padding:2px 7px;border-radius:3px;font-family:var(--font-mono);background:rgba(0,0,0,0.3);color:${statusColor(o.status)}">${o.status}</span></td>
+            <td style="padding:8px 6px;font-family:var(--font-mono);font-size:10px;color:${o.zatcaInvoiceRef ? '#4ade80' : 'var(--text-muted)'}">
+              ${o.zatcaInvoiceRef ?? '—'}
+            </td>
+            <td style="padding:8px 6px;font-size:10px;color:var(--text-muted)">${new Date(o.receivedAt).toLocaleDateString('en-SA')}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+  async function confirmWaOrder(orderId) {
+    const res = await fetch('/api/wa/orders/' + orderId + '/confirm', { method: 'POST' })
+    const d   = await res.json()
+    if (d.ok) {
+      alert('✅ Order confirmed!\\nZATCA Invoice: ' + d.invoice.invoiceNumber + '\\n\\n' + d.confirmationMessage.en)
+      location.reload()
+    } else {
+      alert('Error: ' + JSON.stringify(d))
+    }
+  }
+  </script>
+  `
+  return c.html(adminLayout('WhatsApp Orders', 'wa-orders', content, pendingCount, watchdogCount))
+})
+
+// ── GET /api/wa/orders — JSON list ───────────────────────────────
+app.get('/api/wa/orders', (c) => {
+  return c.json({
+    orders : waInboundOrders,
+    pending: waInboundOrders.filter(o => o.status === 'RECEIVED').length,
+    total  : waInboundOrders.length,
+  })
+})
+
+// ══════════════════════════════════════════════════════════════════
+//  ENTERPRISE MODULE 5: SCA CERTIFICATION VAULT
+//  Route: /people/certifications
+// ══════════════════════════════════════════════════════════════════
+
+app.get('/people/certifications', (c) => {
+  const pendingCount  = beanRequests.filter(r => r.status === 'PENDING').length
+  const watchdogCount = getUnreadNotifications().length
+  const compliance    = calcCertCompliance(scaCertVault)
+
+  const statusColor = (s: ScaCertRecord['status']) => ({
+    ACTIVE       : 'var(--green)',
+    EXPIRING_SOON: 'var(--amber)',
+    EXPIRED      : 'var(--red)',
+    RENEWED      : '#60a5fa',
+  }[s] ?? 'var(--text-muted)')
+
+  const levelBadge = (lv: string) => ({
+    SCA_INTRO         : { label: 'INTRO',    color: '#94a3b8' },
+    SCA_FOUNDATION    : { label: 'FOUND.',   color: '#60a5fa' },
+    SCA_INTERMEDIATE  : { label: 'INTER.',   color: '#34d399' },
+    SCA_PROFESSIONAL  : { label: 'PRO',      color: '#f59e0b' },
+    WBC_CERTIFIED     : { label: 'WBC ★',   color: '#f472b6' },
+    NONE              : { label: 'NONE',     color: '#6b7280' },
+  }[lv] ?? { label: lv, color: '#6b7280' })
+
+  // Group by employee
+  const byEmployee: Record<string, ScaCertRecord[]> = {}
+  for (const cert of scaCertVault) {
+    if (!byEmployee[cert.employeeId]) byEmployee[cert.employeeId] = []
+    byEmployee[cert.employeeId].push(cert)
+  }
+
+  const content = `
+  <div class="pg-title"><i class="fa fa-certificate" style="color:#f59e0b"></i>SCA Certification Vault</div>
+  <div class="pg-sub">Barista Skill Levels · Certificate Registry · Renewal Tracker · WhatsApp Reminders</div>
+
+  <!-- Compliance KPIs -->
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:24px">
+    <div class="card" style="text-align:center;padding:16px 12px">
+      <div style="font-size:32px;font-weight:800;color:${compliance.compliancePct >= 70 ? 'var(--green)' : compliance.compliancePct >= 50 ? 'var(--amber)' : 'var(--red)'}">${compliance.compliancePct}%</div>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Cert Compliance Rate</div>
+    </div>
+    <div class="card" style="text-align:center;padding:16px 12px">
+      <div style="font-size:28px;font-weight:800;color:var(--green)">${compliance.active}</div>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Active Certificates</div>
+    </div>
+    <div class="card" style="text-align:center;padding:16px 12px">
+      <div style="font-size:28px;font-weight:800;color:var(--amber)">${compliance.expiringSoon}</div>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Expiring Within 90 Days</div>
+    </div>
+    <div class="card" style="text-align:center;padding:16px 12px">
+      <div style="font-size:28px;font-weight:800;color:var(--red)">${compliance.expired}</div>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Expired — Action Required</div>
+    </div>
+    <div class="card" style="text-align:center;padding:16px 12px">
+      <div style="font-size:28px;font-weight:800;color:#60a5fa">${compliance.total}</div>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Total Certificates</div>
+    </div>
+  </div>
+
+  ${compliance.expired > 0 || compliance.expiringSoon > 0 ? `
+  <div style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.3);border-radius:6px;padding:12px 16px;margin-bottom:20px">
+    <strong style="color:var(--red)"><i class="fa fa-triangle-exclamation"></i> ${compliance.expired} Expired + ${compliance.expiringSoon} Expiring Soon</strong><br>
+    <span style="font-size:11px;color:#fca5a5">Send WhatsApp renewal reminders from the cert records below. GOSI/HRDF compliance requires active SCA certifications for barista staff.</span>
+  </div>` : ''}
+
+  <!-- Cert Table grouped by employee -->
+  ${Object.entries(byEmployee).map(([empId, certs]) => {
+    const empName = certs[0].employeeName
+    const empStaff = staffDirectory.find(s => s.id === empId)
+    return `
+  <div class="card" style="margin-bottom:16px">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+      <div style="width:36px;height:36px;border-radius:50%;background:rgba(245,158,11,0.15);display:flex;align-items:center;justify-content:center">
+        <i class="fa fa-user" style="color:var(--amber)"></i>
+      </div>
+      <div>
+        <div style="font-weight:700">${empName}</div>
+        <div style="font-size:11px;color:var(--text-muted)">${empStaff?.jobTitle ?? ''} · ${empStaff?.branchId ?? ''} · <span style="color:var(--amber)">${empId}</span></div>
+      </div>
+      <div style="margin-left:auto;font-size:11px;color:var(--text-muted)">${certs.length} cert${certs.length>1?'s':''}</div>
+    </div>
+    <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:11px">
+        <thead>
+          <tr style="border-bottom:1px solid var(--border);color:var(--text-muted)">
+            <th style="padding:6px 8px;text-align:left;font-family:var(--font-mono);font-size:10px">CERT TYPE</th>
+            <th style="padding:6px 8px;text-align:left;font-family:var(--font-mono);font-size:10px">LEVEL</th>
+            <th style="padding:6px 8px;text-align:left;font-family:var(--font-mono);font-size:10px">REG NO.</th>
+            <th style="padding:6px 8px;text-align:left;font-family:var(--font-mono);font-size:10px">COURSE</th>
+            <th style="padding:6px 8px;text-align:right;font-family:var(--font-mono);font-size:10px">SCORE</th>
+            <th style="padding:6px 8px;text-align:center;font-family:var(--font-mono);font-size:10px">EXPIRY</th>
+            <th style="padding:6px 8px;text-align:center;font-family:var(--font-mono);font-size:10px">STATUS</th>
+            <th style="padding:6px 8px;text-align:center;font-family:var(--font-mono);font-size:10px">ACTION</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${certs.map(cert => {
+            const live = evaluateCertStatus(cert)
+            const badge = levelBadge(cert.level)
+            return `
+          <tr style="border-bottom:1px solid rgba(255,255,255,0.04)">
+            <td style="padding:6px 8px;font-family:var(--font-mono);font-weight:600">${cert.certType.replace(/_/g,' ')}</td>
+            <td style="padding:6px 8px"><span style="font-size:9px;padding:2px 6px;border-radius:3px;font-family:var(--font-mono);font-weight:700;background:rgba(0,0,0,0.3);color:${badge.color}">${badge.label}</span></td>
+            <td style="padding:6px 8px;font-family:var(--font-mono);font-size:10px;color:var(--text-muted)">${cert.registrationId}</td>
+            <td style="padding:6px 8px;font-size:10px;color:var(--text-muted)">${cert.trainingCenter}</td>
+            <td style="padding:6px 8px;text-align:right;font-family:var(--font-mono);color:${cert.score && cert.score >= 90 ? 'var(--green)' : cert.score && cert.score >= 70 ? 'var(--amber)' : 'var(--text-muted)'}">${cert.score ?? '—'}</td>
+            <td style="padding:6px 8px;text-align:center;font-family:var(--font-mono);font-size:10px;color:${live==='EXPIRED'?'var(--red)':live==='EXPIRING_SOON'?'var(--amber)':'var(--green)'}">${cert.expiryDate}</td>
+            <td style="padding:6px 8px;text-align:center"><span style="font-size:9px;padding:2px 6px;border-radius:3px;font-family:var(--font-mono);font-weight:700;background:rgba(0,0,0,0.3);color:${statusColor(live)}">${live.replace('_',' ')}</span></td>
+            <td style="padding:6px 8px;text-align:center">
+              ${live !== 'ACTIVE' ? `<button onclick="sendCertReminder('${cert.certId}')" style="padding:3px 8px;background:rgba(37,211,102,0.1);border:1px solid rgba(37,211,102,0.3);border-radius:3px;color:#25d366;font-size:9px;font-family:var(--font-mono);cursor:pointer">
+                <i class="fa-brands fa-whatsapp"></i> REMIND
+              </button>` : '<span style="color:var(--text-muted);font-size:10px">—</span>'}
+            </td>
+          </tr>`
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+  </div>`
+  }).join('')}
+
+  <script>
+  function sendCertReminder(certId) {
+    fetch('/api/people/cert-reminder/' + certId, { method: 'POST' })
+      .then(r => r.json())
+      .then(d => {
+        if (d.ok) alert('✅ Renewal reminder sent!\\n\\n' + d.message.en)
+        else alert('Error: ' + JSON.stringify(d))
+      })
+  }
+  </script>
+  `
+  return c.html(adminLayout('SCA Cert Vault', 'certifications', content, pendingCount, watchdogCount))
+})
+
+// ── POST /api/people/cert-reminder/:id — send WhatsApp reminder ───
+app.post('/api/people/cert-reminder/:id', (c) => {
+  const { id } = c.req.param()
+  const cert   = scaCertVault.find(c => c.certId === id)
+  if (!cert) return c.json({ error: 'Cert not found' }, 404)
+
+  const staff = staffDirectory.find(s => s.id === cert.employeeId)
+  const phone = staff?.phone ?? '+966500000000'
+  const msgs  = buildCertRenewalReminder(cert, phone)
+
+  cert.renewalReminder = true
+  console.log(`[CERT-VAULT] 📱 WhatsApp reminder → ${phone}\n${msgs.en}`)
+  return c.json({ ok: true, certId: id, phone, message: msgs })
+})
+
+// ── GET /api/people/certifications — JSON cert list ───────────────
+app.get('/api/people/certifications', (c) => {
+  const compliance = calcCertCompliance(scaCertVault)
+  return c.json({
+    certs     : scaCertVault.map(c => ({ ...c, liveStatus: evaluateCertStatus(c) })),
+    compliance,
+  })
+})
+
+// ══════════════════════════════════════════════════════════════════
+//  ENTERPRISE MODULE 6: EXECUTIVE OVERVIEW — ERP HEALTH DASHBOARD
+//  Route: /admin/executive
+// ══════════════════════════════════════════════════════════════════
+
+app.get('/admin/executive', (c) => {
+  const pendingCount  = beanRequests.filter(r => r.status === 'PENDING').length
+  const watchdogCount = getUnreadNotifications().length
+
+  // Compute sponge adjustment from QFI engine
+  const _bal      = calcLiveBalance(coffeeLots, beanRequests)
+  const pf        = calcPortfolioFinancials(coffeeLots, _bal)
+  const spongeAdj = pf.totalEnvironmentalPnL
+
+  const grossSales  = 142000
+  const cogsSar     = 68000
+  const utilRent    = 22200
+
+  const snap = buildEnterpriseHealthSnapshot(
+    staffDirectory, assetRegistry, maintenanceLogs, waInboundOrders,
+    scaCertVault, grossSales, cogsSar, spongeAdj, utilRent
+  )
+
+  const signalIcon = (s: string) => s === 'OK' ? '✅' : s === 'WARN' ? '⚠️' : '🔴'
+  const signalColor = (s: string) => s === 'OK' ? 'var(--green)' : s === 'WARN' ? 'var(--amber)' : 'var(--red)'
+
+  const healthColor = snap.erpHealthScore >= 80 ? 'var(--green)' :
+                      snap.erpHealthScore >= 60 ? 'var(--amber)' : 'var(--red)'
+
+  const content = `
+  <div class="pg-title"><i class="fa fa-rocket" style="color:var(--amber)"></i>Executive Overview — Enterprise ERP Health</div>
+  <div class="pg-sub">Full Vertical ERP · People · Assets · WhatsApp Commerce · Finance · ZATCA — ${snap.asOf.split('T')[0]}</div>
+
+  <!-- ERP Health Score Banner -->
+  <div style="background:linear-gradient(135deg,rgba(245,158,11,0.1),rgba(245,158,11,0.03));border:1px solid rgba(245,158,11,0.3);border-radius:10px;padding:24px;margin-bottom:28px;display:flex;align-items:center;gap:24px;flex-wrap:wrap">
+    <div style="text-align:center;min-width:120px">
+      <div style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted);letter-spacing:1px;margin-bottom:6px">ERP HEALTH SCORE</div>
+      <div style="font-size:56px;font-weight:900;color:${healthColor};line-height:1">${snap.erpHealthScore}</div>
+      <div style="font-size:12px;color:${healthColor};margin-top:4px">${snap.erpHealthScore >= 80 ? 'EXCELLENT' : snap.erpHealthScore >= 60 ? 'GOOD' : 'NEEDS ATTENTION'}</div>
+    </div>
+    <div style="flex:1;min-width:280px">
+      <div style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted);letter-spacing:1px;margin-bottom:10px">ERP SIGNAL PANEL — 8 INDICATORS</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+        ${snap.erpSignals.map(sig => `
+        <div style="background:rgba(0,0,0,0.25);border-radius:4px;padding:8px 10px;border-left:2px solid ${signalColor(sig.status)}">
+          <div style="font-size:10px;font-weight:700;color:${signalColor(sig.status)}">${signalIcon(sig.status)} ${sig.label}</div>
+          <div style="font-size:9px;color:var(--text-muted);margin-top:2px;font-family:var(--font-mono)">${sig.detail}</div>
+        </div>`).join('')}
+      </div>
+    </div>
+  </div>
+
+  <!-- 4 Pillar KPI Sections -->
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;margin-bottom:24px">
+
+    <!-- People Pillar -->
+    <div class="card" style="border-left:3px solid #f472b6">
+      <div style="font-family:var(--font-mono);font-size:11px;color:#f472b6;margin-bottom:14px;letter-spacing:.5px"><i class="fa fa-users"></i> HUMAN CAPITAL</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div style="background:var(--bg-2);border-radius:4px;padding:10px">
+          <div style="font-size:10px;color:var(--text-muted);font-family:var(--font-mono)">HEADCOUNT</div>
+          <div style="font-size:22px;font-weight:800;color:#f472b6">${snap.headCount}</div>
+          <div style="font-size:10px;color:var(--text-muted)">${snap.saudizationPct}% Saudi</div>
+        </div>
+        <div style="background:var(--bg-2);border-radius:4px;padding:10px">
+          <div style="font-size:10px;color:var(--text-muted);font-family:var(--font-mono)">MONTHLY LABOR</div>
+          <div style="font-size:16px;font-weight:800;color:#f472b6">SAR ${snap.totalLaborCostSar.toLocaleString()}</div>
+          <div style="font-size:10px;color:var(--text-muted)">incl. GOSI employer</div>
+        </div>
+        <div style="background:var(--bg-2);border-radius:4px;padding:10px">
+          <div style="font-size:10px;color:var(--text-muted);font-family:var(--font-mono)">EOSB LIABILITY</div>
+          <div style="font-size:16px;font-weight:700;color:#60a5fa">SAR ${snap.totalEosbLiabilitySar.toLocaleString()}</div>
+        </div>
+        <div style="background:var(--bg-2);border-radius:4px;padding:10px">
+          <div style="font-size:10px;color:var(--text-muted);font-family:var(--font-mono)">SCA COMPLIANCE</div>
+          <div style="font-size:22px;font-weight:800;color:${snap.certCompliancePct >= 70 ? 'var(--green)' : 'var(--amber)'}">${snap.certCompliancePct}%</div>
+          <div style="font-size:10px;color:var(--red)">${snap.expiredCerts} expired</div>
+        </div>
+      </div>
+      <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+        <a href="/people" style="font-size:10px;padding:4px 10px;background:rgba(244,114,182,0.1);border:1px solid rgba(244,114,182,0.3);color:#f472b6;border-radius:3px;text-decoration:none;font-family:var(--font-mono)">Staff Directory →</a>
+        <a href="/people/payroll" style="font-size:10px;padding:4px 10px;background:rgba(244,114,182,0.1);border:1px solid rgba(244,114,182,0.3);color:#f472b6;border-radius:3px;text-decoration:none;font-family:var(--font-mono)">WPS Payroll →</a>
+        <a href="/people/certifications" style="font-size:10px;padding:4px 10px;background:rgba(244,114,182,0.1);border:1px solid rgba(244,114,182,0.3);color:#f472b6;border-radius:3px;text-decoration:none;font-family:var(--font-mono)">SCA Vault →</a>
+      </div>
+    </div>
+
+    <!-- Assets Pillar -->
+    <div class="card" style="border-left:3px solid #60a5fa">
+      <div style="font-family:var(--font-mono);font-size:11px;color:#60a5fa;margin-bottom:14px;letter-spacing:.5px"><i class="fa fa-wrench"></i> HARDWARE SENTINEL</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div style="background:var(--bg-2);border-radius:4px;padding:10px">
+          <div style="font-size:10px;color:var(--text-muted);font-family:var(--font-mono)">ASSETS</div>
+          <div style="font-size:22px;font-weight:800;color:#60a5fa">${snap.totalAssets}</div>
+        </div>
+        <div style="background:var(--bg-2);border-radius:4px;padding:10px">
+          <div style="font-size:10px;color:var(--text-muted);font-family:var(--font-mono)">BOOK VALUE</div>
+          <div style="font-size:16px;font-weight:700;color:var(--amber)">SAR ${snap.totalBookValueSar.toLocaleString()}</div>
+        </div>
+        <div style="background:var(--bg-2);border-radius:4px;padding:10px">
+          <div style="font-size:10px;color:var(--text-muted);font-family:var(--font-mono)">CRITICAL ALERTS</div>
+          <div style="font-size:22px;font-weight:800;color:${snap.criticalAssetAlerts > 0 ? 'var(--red)' : 'var(--green)'}">${snap.criticalAssetAlerts}</div>
+        </div>
+        <div style="background:var(--bg-2);border-radius:4px;padding:10px">
+          <div style="font-size:10px;color:var(--text-muted);font-family:var(--font-mono)">MONTHLY DEP.</div>
+          <div style="font-size:16px;font-weight:700;color:#60a5fa">SAR ${snap.monthlyDepreciationSar.toLocaleString()}</div>
+        </div>
+      </div>
+      <div style="margin-top:10px">
+        <a href="/operations/assets" style="font-size:10px;padding:4px 10px;background:rgba(96,165,250,0.1);border:1px solid rgba(96,165,250,0.3);color:#60a5fa;border-radius:3px;text-decoration:none;font-family:var(--font-mono)">Assets & Maintenance →</a>
+      </div>
+    </div>
+
+    <!-- WhatsApp Commerce Pillar -->
+    <div class="card" style="border-left:3px solid #25d366">
+      <div style="font-family:var(--font-mono);font-size:11px;color:#25d366;margin-bottom:14px;letter-spacing:.5px"><i class="fa-brands fa-whatsapp"></i> WA COMMERCE LAYER</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div style="background:var(--bg-2);border-radius:4px;padding:10px">
+          <div style="font-size:10px;color:var(--text-muted);font-family:var(--font-mono)">WA ORDERS</div>
+          <div style="font-size:22px;font-weight:800;color:#25d366">${snap.waOrdersTotal}</div>
+        </div>
+        <div style="background:var(--bg-2);border-radius:4px;padding:10px">
+          <div style="font-size:10px;color:var(--text-muted);font-family:var(--font-mono)">PENDING</div>
+          <div style="font-size:22px;font-weight:800;color:${snap.waOrdersPending > 0 ? 'var(--amber)' : 'var(--green)'}">${snap.waOrdersPending}</div>
+        </div>
+        <div style="background:var(--bg-2);border-radius:4px;padding:10px">
+          <div style="font-size:10px;color:var(--text-muted);font-family:var(--font-mono)">REVENUE (ex-VAT)</div>
+          <div style="font-size:16px;font-weight:700;color:var(--green)">SAR ${snap.waOrdersRevenueSar.toLocaleString()}</div>
+        </div>
+        <div style="background:var(--bg-2);border-radius:4px;padding:10px">
+          <div style="font-size:10px;color:var(--text-muted);font-family:var(--font-mono)">ZATCA INVOICES</div>
+          <div style="font-size:22px;font-weight:800;color:#60a5fa">${snap.zatcaInvoicesGenerated}</div>
+        </div>
+      </div>
+      <div style="margin-top:10px">
+        <a href="/admin/wa-orders" style="font-size:10px;padding:4px 10px;background:rgba(37,211,102,0.1);border:1px solid rgba(37,211,102,0.3);color:#25d366;border-radius:3px;text-decoration:none;font-family:var(--font-mono)">WhatsApp Inbox →</a>
+      </div>
+    </div>
+
+    <!-- Finance Pillar -->
+    <div class="card" style="border-left:3px solid var(--amber)">
+      <div style="font-family:var(--font-mono);font-size:11px;color:var(--amber);margin-bottom:14px;letter-spacing:.5px"><i class="fa fa-chart-line"></i> FINANCIAL INTELLIGENCE</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div style="background:var(--bg-2);border-radius:4px;padding:10px">
+          <div style="font-size:10px;color:var(--text-muted);font-family:var(--font-mono)">GROSS SALES</div>
+          <div style="font-size:16px;font-weight:700;color:var(--green)">SAR ${snap.grossSalesSar.toLocaleString()}</div>
+        </div>
+        <div style="background:var(--bg-2);border-radius:4px;padding:10px">
+          <div style="font-size:10px;color:var(--text-muted);font-family:var(--font-mono)">GROSS MARGIN</div>
+          <div style="font-size:22px;font-weight:800;color:var(--amber)">${snap.grossMarginPct.toFixed(1)}%</div>
+        </div>
+        <div style="background:var(--bg-2);border-radius:4px;padding:10px">
+          <div style="font-size:10px;color:var(--text-muted);font-family:var(--font-mono)">EBITDA</div>
+          <div style="font-size:16px;font-weight:700;color:${snap.ebitdaSar >= 0 ? 'var(--green)' : 'var(--red)'}">SAR ${snap.ebitdaSar.toLocaleString()}</div>
+        </div>
+        <div style="background:var(--bg-2);border-radius:4px;padding:10px">
+          <div style="font-size:10px;color:var(--text-muted);font-family:var(--font-mono)">NET PROFIT</div>
+          <div style="font-size:22px;font-weight:800;color:${snap.netProfitSar >= 0 ? 'var(--green)' : 'var(--red)'}">SAR ${snap.netProfitSar.toLocaleString()}</div>
+          <div style="font-size:10px;color:var(--text-muted)">${snap.netMarginPct.toFixed(1)}% margin</div>
+        </div>
+      </div>
+      <!-- True Operating Margin Formula -->
+      <div style="margin-top:12px;padding:10px;background:var(--bg-0);border-radius:4px;font-family:var(--font-mono);font-size:9px;color:#86efac;line-height:1.8">
+        Gross Sales (${snap.grossSalesSar.toLocaleString()})<br>
+        − COGS Sponge-adj. (${snap.adjustedCogsSar.toLocaleString()})<br>
+        − Labor + GOSI (${snap.totalLaborCostSar.toLocaleString()})<br>
+        − Maintenance + Dep. (${(snap.maintenanceCostMtd + snap.monthlyDepreciationSar).toLocaleString()})<br>
+        − Utilities + Rent (${utilRent.toLocaleString()})<br>
+        <strong style="color:${snap.netProfitSar >= 0 ? 'var(--green)' : 'var(--red)'}">= NET PROFIT: SAR ${snap.netProfitSar.toLocaleString()} (${snap.netMarginPct.toFixed(1)}%)</strong>
+      </div>
+      <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+        <a href="/admin/finance/enterprise" style="font-size:10px;padding:4px 10px;background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);color:var(--amber);border-radius:3px;text-decoration:none;font-family:var(--font-mono)">Enterprise P&L →</a>
+        <a href="/admin/finance/zatca-export" style="font-size:10px;padding:4px 10px;background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);color:var(--amber);border-radius:3px;text-decoration:none;font-family:var(--font-mono)">ZATCA Export →</a>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- True Operating Margin Formula Summary -->
+  <div class="card" style="margin-bottom:24px;background:linear-gradient(135deg,rgba(245,158,11,0.06),var(--bg-1))">
+    <div style="font-family:var(--font-mono);font-size:12px;color:var(--amber);margin-bottom:16px;letter-spacing:.5px">
+      TRUE OPERATING MARGIN — CONSOLIDATED FORMULA (QFI ENGINE v6.0)
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-family:var(--font-mono);font-size:11px">
+      <span style="color:var(--green);padding:6px 12px;background:rgba(52,211,153,0.08);border:1px solid rgba(52,211,153,0.2);border-radius:4px">Gross Sales<br>SAR ${snap.grossSalesSar.toLocaleString()}</span>
+      <span style="color:var(--text-muted);font-size:16px">−</span>
+      <span style="color:var(--red);padding:6px 12px;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);border-radius:4px">COGS (Sponge)<br>SAR ${snap.adjustedCogsSar.toLocaleString()}</span>
+      <span style="color:var(--text-muted);font-size:16px">−</span>
+      <span style="color:#f472b6;padding:6px 12px;background:rgba(244,114,182,0.08);border:1px solid rgba(244,114,182,0.2);border-radius:4px">Labor (WPS)<br>SAR ${snap.totalLaborCostSar.toLocaleString()}</span>
+      <span style="color:var(--text-muted);font-size:16px">−</span>
+      <span style="color:#f59e0b;padding:6px 12px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2);border-radius:4px">Maintenance<br>SAR ${snap.maintenanceCostMtd.toLocaleString()}</span>
+      <span style="color:var(--text-muted);font-size:16px">−</span>
+      <span style="color:#60a5fa;padding:6px 12px;background:rgba(96,165,250,0.08);border:1px solid rgba(96,165,250,0.2);border-radius:4px">Depreciation<br>SAR ${snap.monthlyDepreciationSar.toLocaleString()}</span>
+      <span style="color:var(--text-muted);font-size:16px">−</span>
+      <span style="color:#a78bfa;padding:6px 12px;background:rgba(167,139,250,0.08);border:1px solid rgba(167,139,250,0.2);border-radius:4px">Utils/Rent<br>SAR ${utilRent.toLocaleString()}</span>
+      <span style="color:var(--text-muted);font-size:16px">=</span>
+      <span style="color:${snap.netProfitSar >= 0 ? 'var(--green)' : 'var(--red)'};padding:8px 16px;background:${snap.netProfitSar >= 0 ? 'rgba(52,211,153,0.12)' : 'rgba(239,68,68,0.12)'};border:2px solid ${snap.netProfitSar >= 0 ? 'rgba(52,211,153,0.4)' : 'rgba(239,68,68,0.4)'};border-radius:4px;font-size:14px;font-weight:800">NET PROFIT<br>SAR ${snap.netProfitSar.toLocaleString()} (${snap.netMarginPct.toFixed(1)}%)</span>
+    </div>
+  </div>
+
+  <!-- Quick Navigation Panel -->
+  <div class="card">
+    <div style="font-family:var(--font-mono);font-size:12px;color:var(--amber);margin-bottom:16px">ENTERPRISE ERP — MODULE NAVIGATOR</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px">
+      ${[
+        { href:'/people',                   icon:'fa-users',           label:'Staff Directory',       labelAr:'دليل الموظفين',     color:'#f472b6' },
+        { href:'/people/payroll',            icon:'fa-money-check-alt', label:'Payroll & WPS',         labelAr:'الرواتب WPS',       color:'#f472b6' },
+        { href:'/people/gosi',              icon:'fa-shield-alt',      label:'GOSI Reports',          labelAr:'تقارير التأمينات', color:'#f472b6' },
+        { href:'/people/eosb',              icon:'fa-coins',           label:'EOSB Ledger',           labelAr:'مستحقات نهاية الخدمة',color:'#f472b6' },
+        { href:'/people/certifications',    icon:'fa-certificate',     label:'SCA Cert Vault',        labelAr:'خزنة شهادات SCA',   color:'#f59e0b' },
+        { href:'/operations/assets',        icon:'fa-wrench',          label:'Assets & Maintenance',  labelAr:'الأصول والصيانة',   color:'#60a5fa' },
+        { href:'/admin/wa-orders',          icon:'fa-brands fa-whatsapp', label:'WhatsApp Orders',   labelAr:'طلبات واتساب',     color:'#25d366' },
+        { href:'/admin/finance/enterprise', icon:'fa-chart-mixed',     label:'Enterprise P&L',        labelAr:'قائمة الدخل',       color:'var(--amber)' },
+        { href:'/admin/finance/zatca-export',icon:'fa-file-export',   label:'ZATCA Export',          labelAr:'تصدير زاتكا',       color:'var(--amber)' },
+        { href:'/exchange',                 icon:'fa-globe',           label:'Global Exchange',       labelAr:'البورصة العالمية',  color:'var(--green)' },
+        { href:'/admin/watchdog',           icon:'fa-shield-virus',    label:'Risk Watchdog',         labelAr:'مراقب المخاطر',    color:'var(--red)' },
+        { href:'/admin/finance',            icon:'fa-chart-line',      label:'QFI Finance',           labelAr:'الذكاء المالي',     color:'var(--amber)' },
+      ].map(m => `
+      <a href="${m.href}" style="display:block;padding:12px;background:var(--bg-2);border-radius:6px;border:1px solid rgba(255,255,255,0.06);text-decoration:none;transition:border-color .2s"
+         onmouseover="this.style.borderColor='${m.color}44'" onmouseout="this.style.borderColor='rgba(255,255,255,0.06)'">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <i class="fa ${m.icon}" style="color:${m.color};font-size:14px;width:18px;text-align:center"></i>
+          <span style="font-weight:600;font-size:12px">${m.label}</span>
+        </div>
+        <div style="font-size:10px;color:var(--text-muted);text-align:right;direction:rtl;font-family:var(--font-mono)">${m.labelAr}</div>
+      </a>`).join('')}
+    </div>
+  </div>
+  `
+  return c.html(adminLayout('Executive Overview', 'executive', content, pendingCount, watchdogCount))
+})
+
+// ── GET /api/enterprise/health — JSON health snapshot ─────────────
+app.get('/api/enterprise/health', (c) => {
+  const _bal      = calcLiveBalance(coffeeLots, beanRequests)
+  const pf        = calcPortfolioFinancials(coffeeLots, _bal)
+  const snap      = buildEnterpriseHealthSnapshot(
+    staffDirectory, assetRegistry, maintenanceLogs, waInboundOrders,
+    scaCertVault, 142000, 68000, pf.totalEnvironmentalPnL, 22200
+  )
+  return c.json(snap)
+})
+
+// ── POST /api/assets/:id/send-wa-alert — send maintenance WA alert
+app.post('/api/assets/:id/send-wa-alert', (c) => {
+  const { id } = c.req.param()
+  const asset   = assetRegistry.find(a => a.id === id)
+  if (!asset) return c.json({ error: 'Asset not found' }, 404)
+  const alerts  = runMaintenanceWatchdog([asset])
+  if (alerts.length === 0) return c.json({ ok: true, message: 'No active alerts for this asset' })
+  const alert   = alerts[0]
+  const msgs    = buildWaMaintenanceAlert(alert)
+  console.log(`[HARDWARE-SENTINEL] 📱 WhatsApp alert → branch ${asset.branchId}\n${msgs.en}`)
+  return c.json({ ok: true, alert, message: msgs })
 })
 
 // ── Scheduled handler — Cloudflare Cron  "0 */6 * * *" ───────────────────────

@@ -68,6 +68,22 @@ export type Permission =
   | 'assets.maintenance_log'  // log maintenance events
   | 'assets.watchdog'         // receive maintenance alerts
   | 'assets.depreciation'     // view Depreciation Ledger
+  | 'assets.wa_alert'         // send WhatsApp maintenance alert
+
+  // WhatsApp Commerce (B2B Ordering)
+  | 'wa.view_orders'          // see WhatsApp order inbox
+  | 'wa.confirm_order'        // confirm WA orders & issue ZATCA invoice
+  | 'wa.webhook'              // receive WhatsApp webhook events
+  | 'wa.send_invoice'         // dispatch ZATCA invoice via WhatsApp
+
+  // SCA Certification Vault
+  | 'sca.view'                // browse SCA certificates
+  | 'sca.edit'                // add / update cert records
+  | 'sca.send_reminder'       // send renewal WhatsApp reminders
+
+  // Executive Intelligence
+  | 'intelligence.executive'  // access Executive Overview dashboard
+  | 'intelligence.erp_health' // view ERP Health Score & signals
 
   // HQ
   | 'hq.god_view'             // ManagementHQ access
@@ -97,7 +113,14 @@ export const ROLE_PERMISSIONS: Record<QabbanRole, Permission[]> = {
     'people.view', 'people.edit', 'people.payroll', 'people.wps_export',
     'people.gosi', 'people.eosb',
     // Assets
-    'assets.view', 'assets.edit', 'assets.maintenance_log', 'assets.watchdog', 'assets.depreciation',
+    'assets.view', 'assets.edit', 'assets.maintenance_log', 'assets.watchdog',
+    'assets.depreciation', 'assets.wa_alert',
+    // WhatsApp Commerce
+    'wa.view_orders', 'wa.confirm_order', 'wa.webhook', 'wa.send_invoice',
+    // SCA Certification Vault
+    'sca.view', 'sca.edit', 'sca.send_reminder',
+    // Executive Intelligence
+    'intelligence.executive', 'intelligence.erp_health',
     // HQ
     'hq.god_view', 'hq.set_plan',
   ],
@@ -120,7 +143,14 @@ export const ROLE_PERMISSIONS: Record<QabbanRole, Permission[]> = {
     'people.view', 'people.edit', 'people.payroll', 'people.wps_export',
     'people.gosi', 'people.eosb',
     // Assets — full asset access
-    'assets.view', 'assets.edit', 'assets.maintenance_log', 'assets.watchdog', 'assets.depreciation',
+    'assets.view', 'assets.edit', 'assets.maintenance_log', 'assets.watchdog',
+    'assets.depreciation', 'assets.wa_alert',
+    // WhatsApp Commerce — full ordering capability
+    'wa.view_orders', 'wa.confirm_order', 'wa.webhook', 'wa.send_invoice',
+    // SCA Certification Vault — full access
+    'sca.view', 'sca.edit', 'sca.send_reminder',
+    // Executive Intelligence
+    'intelligence.executive', 'intelligence.erp_health',
   ],
 
   cafe_client: [
@@ -129,6 +159,8 @@ export const ROLE_PERMISSIONS: Record<QabbanRole, Permission[]> = {
     'cafe.iot_reconciliation', 'cafe.request_beans',
     // Exchange (read + buy)
     'exchange.view', 'exchange.buy_green', 'exchange.climate_passport',
+    // WhatsApp — can submit orders via webhook
+    'wa.webhook',
   ],
 
   hybrid_node: [
@@ -149,8 +181,14 @@ export const ROLE_PERMISSIONS: Record<QabbanRole, Permission[]> = {
     'watchdog.view',
     // Human Capital — limited (view + payroll of own staff)
     'people.view', 'people.payroll',
-    // Assets — view + maintenance logging
-    'assets.view', 'assets.maintenance_log', 'assets.watchdog',
+    // Assets — view + maintenance logging + WA alerts
+    'assets.view', 'assets.maintenance_log', 'assets.watchdog', 'assets.wa_alert',
+    // WhatsApp Commerce — view and confirm
+    'wa.view_orders', 'wa.confirm_order', 'wa.webhook',
+    // SCA Vault — view only
+    'sca.view', 'sca.send_reminder',
+    // Executive (limited)
+    'intelligence.erp_health',
   ],
 }
 
@@ -205,7 +243,8 @@ export const SIDEBAR_GROUPS = {
     labelAr: 'إدارة عملاء الجملة',
     icon   : 'fa-handshake',
     links  : [
-      { href: '/admin/b2b',          icon: 'fa-handshake',     label: 'B2B Clients',      id: 'b2b',       permission: 'b2b.view_clients' },
+      { href: '/admin/b2b',          icon: 'fa-handshake',     label: 'B2B Clients',      id: 'b2b',         permission: 'b2b.view_clients' },
+      { href: '/admin/wa-orders',    icon: 'fa-brands fa-whatsapp', label: 'WA Orders',   id: 'wa-orders',   permission: 'wa.view_orders'   },
     ],
   },
   HUMAN_CAPITAL: {
@@ -213,10 +252,11 @@ export const SIDEBAR_GROUPS = {
     labelAr: 'رأس المال البشري',
     icon   : 'fa-users',
     links  : [
-      { href: '/people',             icon: 'fa-id-badge',      label: 'Staff Directory',  id: 'people',    permission: 'people.view'    },
-      { href: '/people/payroll',     icon: 'fa-money-check',   label: 'Payroll & WPS',    id: 'payroll',   permission: 'people.payroll' },
-      { href: '/people/gosi',        icon: 'fa-shield-alt',    label: 'GOSI Reports',     id: 'gosi',      permission: 'people.gosi'    },
-      { href: '/people/eosb',        icon: 'fa-hand-holding-usd', label: 'EOSB Ledger',   id: 'eosb',      permission: 'people.eosb'    },
+      { href: '/people',               icon: 'fa-id-badge',       label: 'Staff Directory',  id: 'people',          permission: 'people.view'      },
+      { href: '/people/payroll',       icon: 'fa-money-check',    label: 'Payroll & WPS',    id: 'payroll',         permission: 'people.payroll'   },
+      { href: '/people/gosi',          icon: 'fa-shield-alt',     label: 'GOSI Reports',     id: 'gosi',            permission: 'people.gosi'      },
+      { href: '/people/eosb',          icon: 'fa-hand-holding-usd', label: 'EOSB Ledger',   id: 'eosb',            permission: 'people.eosb'      },
+      { href: '/people/certifications',icon: 'fa-certificate',    label: 'SCA Cert Vault',   id: 'certifications',  permission: 'sca.view'         },
     ],
   },
   INTELLIGENCE: {
@@ -224,8 +264,9 @@ export const SIDEBAR_GROUPS = {
     labelAr: 'الذكاء المالي',
     icon   : 'fa-chart-line',
     links  : [
-      { href: '/admin/finance',      icon: 'fa-chart-line',    label: 'Finance',          id: 'finance',   permission: 'finance.view'   },
-      { href: '/admin/finance/enterprise', icon: 'fa-chart-mixed', label: 'Enterprise P&L', id: 'enterprise-pnl', permission: 'finance.consolidated_pnl' },
+      { href: '/admin/executive',          icon: 'fa-rocket',        label: 'Executive Overview', id: 'executive',      permission: 'intelligence.executive'  },
+      { href: '/admin/finance',            icon: 'fa-chart-line',    label: 'QFI Finance',        id: 'finance',        permission: 'finance.view'             },
+      { href: '/admin/finance/enterprise', icon: 'fa-chart-mixed',   label: 'Enterprise P&L',    id: 'enterprise-pnl', permission: 'finance.consolidated_pnl' },
     ],
   },
 } as const
